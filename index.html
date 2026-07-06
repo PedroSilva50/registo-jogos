@@ -258,6 +258,8 @@ let pending = null; // {kind:'scored'|'conceded', half:null, scorerId:null}
 let expandedMatch = null;
 let newMatchType = 'amigavel';
 let statsFilter = 'todos'; // 'todos' | 'amigavel' | 'campeonato'
+let seasonFilter = 'todas';
+let matchSearchQuery = '';
 let modalConfig = null; // {message, onConfirm}
 
 const STORAGE_KEY = 'coach-app-data-v1';
@@ -326,16 +328,44 @@ function playerName(id){
   return p ? p.name : '—';
 }
 
+function defaultSeason(){
+  const d = new Date();
+  const y = d.getFullYear();
+  // época desportiva: julho a junho
+  return d.getMonth() >= 6 ? `${y}/${y+1}` : `${y-1}/${y}`;
+}
+
+function getSeasonsList(){
+  const set = new Set(state.matches.map(m => m.season || 'Sem época'));
+  return Array.from(set).sort().reverse();
+}
+
 /* ---------- ACTIONS ---------- */
-function startMatch(opponent, date, type, phase){
+function startMatch(opponent, date, type, phase, season){
   if(!opponent.trim()) return;
   state.matches.unshift({
     id: uid(), opponent: opponent.trim(), date: date || new Date().toISOString().slice(0,10),
     type: type || 'amigavel', phase: (type==='campeonato' ? (phase||'').trim() : ''),
+    season: (season||'').trim() || defaultSeason(),
     finished:false, goals: []
   });
   newMatchType = 'amigavel';
   saveState(); render();
+}
+
+function updateGoal(matchId, goalId, half, scorerId, assistId){
+  const m = state.matches.find(m=>m.id===matchId);
+  if(!m) return;
+  const g = m.goals.find(g=>g.id===goalId);
+  if(!g) return;
+  g.half = half;
+  if(g.type==='scored'){
+    g.scorerId = scorerId;
+    g.assistId = assistId || 'none';
+  }
+  pending = null;
+  saveState(); render();
+  showToast('Golo atualizado ✓');
 }
 
 function finishMatch(id, notes){
@@ -386,12 +416,16 @@ function removePlayer(id){
 }
 
 /* ---------- STATS ---------- */
-function computeStats(filter){
+function computeStats(typeFilterVal, seasonFilterVal){
   let scored=0, conceded=0;
   let scoredHalf={1:0,2:0}, concededHalf={1:0,2:0};
   let scorerCount = {};
   let assistCount = {};
-  const matches = state.matches.filter(m => !filter || filter==='todos' || m.type===filter);
+  const matches = state.matches.filter(m => {
+    const typeOk = !typeFilterVal || typeFilterVal==='todos' || m.type===typeFilterVal;
+    const seasonOk = !seasonFilterVal || seasonFilterVal==='todas' || (m.season || 'Sem época')===seasonFilterVal;
+    return typeOk && seasonOk;
+  });
   matches.forEach(m=>{
     m.goals.forEach(g=>{
       if(g.type==='scored'){
@@ -480,7 +514,7 @@ function exportReportTxt(){
     const scored = m.goals.filter(g=>g.type==='scored').length;
     const conceded = m.goals.filter(g=>g.type==='conceded').length;
     const typeLabel = m.type === 'campeonato' ? `Campeonato${m.phase ? ' - '+m.phase : ''}` : 'Amigável';
-    lines.push(`${m.date}  vs ${m.opponent}  [${typeLabel}]  ${scored}-${conceded}${!m.finished ? '  (em curso)' : ''}`);
+    lines.push(`${m.date}  vs ${m.opponent}  [${typeLabel}]  [${m.season || 'Sem época'}]  ${scored}-${conceded}${!m.finished ? '  (em curso)' : ''}`);
     m.goals.forEach(g=>{
       if(g.type==='scored'){
         const assist = g.assistId && g.assistId!=='none' ? `, assist. ${playerName(g.assistId)}` : '';
@@ -564,6 +598,10 @@ function renderJogo(){
             <input id="phase-input" type="text" placeholder="Ex: Jornada 5, Fase de Grupos, Final">
           </div>
         ` : ''}
+        <div class="field">
+          <label>Época</label>
+          <input id="season-input" type="text" value="${defaultSeason()}" placeholder="Ex: 2025/2026">
+        </div>
         <button class="btn btn-gold" style="width:100%" id="start-match-btn">Iniciar Jogo</button>
       </div>
     `;
@@ -574,10 +612,11 @@ function renderJogo(){
 
   let panelHtml = '';
   if(pending){
+    const isEdit = !!pending.editing;
     if(!pending.half){
       panelHtml = `
         <div class="panel">
-          <div class="panel-title">${pending.kind==='scored' ? 'Golo marcado — qual parte?' : 'Golo sofrido — qual parte?'}</div>
+          <div class="panel-title">${isEdit ? 'A editar golo — qual parte?' : (pending.kind==='scored' ? 'Golo marcado — qual parte?' : 'Golo sofrido — qual parte?')}</div>
           <div class="grid-btns">
             <div class="chip" data-half="1">1ª Parte</div>
             <div class="chip" data-half="2">2ª Parte</div>
@@ -589,7 +628,7 @@ function renderJogo(){
       const chips = state.roster.map(p=>`<div class="chip" data-scorer="${p.id}">${p.name}</div>`).join('');
       panelHtml = `
         <div class="panel">
-          <div class="panel-title">Quem marcou? (${pending.half}ª parte)</div>
+          <div class="panel-title">${isEdit ? 'A editar — quem marcou?' : 'Quem marcou?'} (${pending.half}ª parte)</div>
           <div class="grid-btns cols-3">
             ${chips}
             <div class="chip" data-scorer="unknown">Desconhecido</div>
@@ -601,7 +640,7 @@ function renderJogo(){
       const chips = state.roster.map(p=>`<div class="chip" data-assist="${p.id}">${p.name}</div>`).join('');
       panelHtml = `
         <div class="panel">
-          <div class="panel-title">Quem assistiu?</div>
+          <div class="panel-title">${isEdit ? 'A editar — quem assistiu?' : 'Quem assistiu?'}</div>
           <div class="grid-btns cols-3">
             ${chips}
             <div class="chip" data-assist="none">Sem assistência</div>
@@ -616,12 +655,13 @@ function renderJogo(){
   const goalListHtml = m.goals.length ? `
     <div class="goal-list">
       ${m.goals.map(g=>`
-        <div class="goal-row">
+        <div class="goal-row" data-edit-goal="${m.id}|${g.id}" style="cursor:pointer;">
           <span>${g.type==='scored' ? '⚽ '+playerName(g.scorerId)+(g.assistId && g.assistId!=='none' ? ' <span style="color:var(--muted)">(assist. '+playerName(g.assistId)+')</span>' : '') : '🥅 Sofrido'} <span style="color:var(--muted)">— ${g.half}ª parte</span></span>
           <button class="del" data-del-goal="${g.id}">✕</button>
         </div>
       `).join('')}
     </div>
+    <div style="font-size:11px; color:var(--muted); padding:6px 2px 0;">Toca num golo para corrigir a parte, o marcador ou a assistência.</div>
   ` : '';
 
   const typeLabel = m.type === 'campeonato' ? `Campeonato${m.phase ? ' · '+m.phase : ''}` : 'Amigável';
@@ -631,7 +671,7 @@ function renderJogo(){
       <h1>Jogo em curso</h1>
     </div>
     <div class="scoreboard">
-      <div class="opponent"><span>vs ${m.opponent} <span class="badge-type">${typeLabel}</span></span><span>${m.date}</span></div>
+      <div class="opponent"><span>vs ${m.opponent} <span class="badge-type">${typeLabel}</span> <span class="badge-type">${m.season || 'Sem época'}</span></span><span>${m.date}</span></div>
       <div class="score-row">
         <div class="score-block scored"><div class="score-num mono">${scored}</div><div class="score-label">Marcados</div></div>
         <div class="score-sep">–</div>
@@ -658,9 +698,47 @@ function renderJogos(){
   if(!state.matches.length){
     return `<div class="topbar"><h1>Jogos</h1></div><div class="empty">Ainda não há jogos registados.</div>`;
   }
+
+  const seasons = getSeasonsList();
+  const query = matchSearchQuery.trim().toLowerCase();
+  const filtered = state.matches.filter(m=>{
+    const seasonOk = seasonFilter==='todas' || (m.season || 'Sem época')===seasonFilter;
+    const searchOk = !query || m.opponent.toLowerCase().includes(query);
+    return seasonOk && searchOk;
+  });
+
+  let summaryHtml = '';
+  if(query && filtered.length){
+    let sc=0, co=0;
+    filtered.forEach(m=>{
+      sc += m.goals.filter(g=>g.type==='scored').length;
+      co += m.goals.filter(g=>g.type==='conceded').length;
+    });
+    summaryHtml = `
+      <div class="card" style="margin-bottom:14px;">
+        <div class="panel-title" style="margin-bottom:8px;">Confronto direto — ${filtered.length} jogo${filtered.length>1?'s':''}</div>
+        <div class="score-row">
+          <div class="score-block scored"><div class="score-num mono" style="font-size:28px;">${sc}</div><div class="score-label">Marcados</div></div>
+          <div class="score-sep">–</div>
+          <div class="score-block conceded"><div class="score-num mono" style="font-size:28px;">${co}</div><div class="score-label">Sofridos</div></div>
+        </div>
+      </div>
+    `;
+  }
+
   return `
     <div class="topbar"><h1>Jogos</h1></div>
-    ${state.matches.map(m=>{
+    <div class="field">
+      <input id="match-search-input" type="text" placeholder="Pesquisar por adversário..." value="${matchSearchQuery}">
+    </div>
+    ${seasons.length > 1 ? `
+      <div class="seg" style="margin-bottom:14px; flex-wrap:wrap;">
+        <div class="seg-btn ${seasonFilter==='todas'?'active':''}" data-seasonfilter="todas">Todas</div>
+        ${seasons.map(s=>`<div class="seg-btn ${seasonFilter===s?'active':''}" data-seasonfilter="${s}">${s}</div>`).join('')}
+      </div>
+    ` : ''}
+    ${summaryHtml}
+    ${filtered.length ? filtered.map(m=>{
       const scored = m.goals.filter(g=>g.type==='scored').length;
       const conceded = m.goals.filter(g=>g.type==='conceded').length;
       const open = expandedMatch === m.id;
@@ -670,7 +748,7 @@ function renderJogos(){
           <div class="match-head-row">
             <div class="match-head" style="flex:1;">
               <div>
-                <div class="opp">${m.opponent} ${!m.finished ? '<span class="badge-open">Em curso</span>' : ''}<span class="badge-type">${typeLabel}</span></div>
+                <div class="opp">${m.opponent} ${!m.finished ? '<span class="badge-open">Em curso</span>' : ''}<span class="badge-type">${typeLabel}</span> <span class="badge-type">${m.season || 'Sem época'}</span></div>
                 <div class="date">${m.date}</div>
               </div>
               <div class="match-score"><span class="s">${scored}</span> – <span class="c">${conceded}</span></div>
@@ -696,12 +774,13 @@ function renderJogos(){
           ` : ''}
         </div>
       `;
-    }).join('')}
+    }).join('') : '<div class="empty">Nenhum jogo corresponde à pesquisa.</div>'}
   `;
 }
 
 function renderStats(){
-  const s = computeStats(statsFilter);
+  const s = computeStats(statsFilter, seasonFilter);
+  const seasons = getSeasonsList();
   const maxHalf = Math.max(s.scoredHalf[1], s.scoredHalf[2], s.concededHalf[1], s.concededHalf[2], 1);
   return `
     <div class="topbar"><h1>Estatísticas</h1></div>
@@ -710,6 +789,12 @@ function renderStats(){
       <div class="seg-btn ${statsFilter==='amigavel'?'active':''}" data-statsfilter="amigavel">Amigáveis</div>
       <div class="seg-btn ${statsFilter==='campeonato'?'active':''}" data-statsfilter="campeonato">Campeonato</div>
     </div>
+    ${seasons.length > 1 ? `
+      <div class="seg" style="margin-top:8px; flex-wrap:wrap;">
+        <div class="seg-btn ${seasonFilter==='todas'?'active':''}" data-seasonfilter-stats="todas">Todas épocas</div>
+        ${seasons.map(sn=>`<div class="seg-btn ${seasonFilter===sn?'active':''}" data-seasonfilter-stats="${sn}">${sn}</div>`).join('')}
+      </div>
+    ` : ''}
     <div class="stat-grid" style="margin-top:14px;">
       <div class="stat-box"><div class="num" style="color:var(--gold)">${s.scored}</div><div class="lbl">Golos Marcados</div></div>
       <div class="stat-box"><div class="num" style="color:var(--red)">${s.conceded}</div><div class="lbl">Golos Sofridos</div></div>
@@ -790,7 +875,8 @@ function attachHandlers(){
     const opp = document.getElementById('opp-input').value;
     const date = document.getElementById('date-input').value;
     const phaseEl = document.getElementById('phase-input');
-    startMatch(opp, date, newMatchType, phaseEl ? phaseEl.value : '');
+    const seasonEl = document.getElementById('season-input');
+    startMatch(opp, date, newMatchType, phaseEl ? phaseEl.value : '', seasonEl ? seasonEl.value : '');
   };
 
   document.querySelectorAll('[data-newtype]').forEach(el=>{
@@ -809,8 +895,12 @@ function attachHandlers(){
     el.onclick = ()=>{
       pending.half = parseInt(el.dataset.half);
       if(pending.kind === 'conceded'){
-        const m = getActiveMatch();
-        addGoal(m.id, 'conceded', pending.half, null, null);
+        if(pending.editing){
+          updateGoal(pending.editing.matchId, pending.editing.goalId, pending.half, null, null);
+        } else {
+          const m = getActiveMatch();
+          addGoal(m.id, 'conceded', pending.half, null, null);
+        }
       } else {
         render();
       }
@@ -826,8 +916,23 @@ function attachHandlers(){
 
   document.querySelectorAll('[data-assist]').forEach(el=>{
     el.onclick = ()=>{
-      const m = getActiveMatch();
-      addGoal(m.id, 'scored', pending.half, pending.scorerId, el.dataset.assist);
+      if(pending.editing){
+        updateGoal(pending.editing.matchId, pending.editing.goalId, pending.half, pending.scorerId, el.dataset.assist);
+      } else {
+        const m = getActiveMatch();
+        addGoal(m.id, 'scored', pending.half, pending.scorerId, el.dataset.assist);
+      }
+    };
+  });
+
+  document.querySelectorAll('[data-edit-goal]').forEach(el=>{
+    el.onclick = (e)=>{
+      if(e.target.closest('button')) return;
+      const [matchId, goalId] = el.dataset.editGoal.split('|');
+      const m = state.matches.find(m=>m.id===matchId);
+      const g = m.goals.find(g=>g.id===goalId);
+      pending = { kind: g.type, half: null, scorerId: null, editing: { matchId, goalId } };
+      render();
     };
   });
 
@@ -901,6 +1006,22 @@ function attachHandlers(){
 
   document.querySelectorAll('[data-statsfilter]').forEach(el=>{
     el.onclick = ()=>{ statsFilter = el.dataset.statsfilter; render(); };
+  });
+
+  const matchSearchInput = document.getElementById('match-search-input');
+  if(matchSearchInput){
+    matchSearchInput.oninput = ()=>{ matchSearchQuery = matchSearchInput.value; render(); };
+    if(matchSearchQuery){
+      matchSearchInput.focus();
+      matchSearchInput.setSelectionRange(matchSearchInput.value.length, matchSearchInput.value.length);
+    }
+  }
+
+  document.querySelectorAll('[data-seasonfilter]').forEach(el=>{
+    el.onclick = ()=>{ seasonFilter = el.dataset.seasonfilter; render(); };
+  });
+  document.querySelectorAll('[data-seasonfilter-stats]').forEach(el=>{
+    el.onclick = ()=>{ seasonFilter = el.dataset.seasonfilterStats; render(); };
   });
 
   document.querySelectorAll('[data-rm-player]').forEach(el=>{

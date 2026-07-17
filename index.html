@@ -191,7 +191,7 @@
   .scorer-row .n{font-family:'Roboto Mono'; font-weight:700; color:var(--gold);}
 
   /* ROSTER */
-  .player-row{display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--line);}
+  .player-row{display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--line); gap:10px;}
   .player-row:last-child{border-bottom:none;}
   .player-row .rm{background:none; border:none; color:var(--red); font-size:13px; cursor:pointer;}
   .add-row{display:flex; gap:8px; margin-top:10px;}
@@ -265,7 +265,6 @@ let statsFilter = 'todos'; // 'todos' | 'amigavel' | 'campeonato'
 let seasonFilter = 'todas';
 let matchSearchQuery = '';
 let modalConfig = null; // {message, onConfirm}
-let editingPlayerId = null;
 
 const STORAGE_KEY = 'coach-app-data-v1';
 
@@ -864,20 +863,13 @@ function renderPlantel(){
   return `
     <div class="topbar"><h1>Plantel</h1></div>
     <div class="card">
-      ${state.roster.length ? state.roster.map(p=>{
-        const age = p.birthDate ? computeAge(p.birthDate) : null;
-        const isEditing = editingPlayerId === p.id;
-        return `
-          <div class="player-row">
-            <div style="display:flex; flex-direction:column; flex:1; gap:6px;">
-              <span>${p.name}${age!==null ? ` <span style="color:var(--muted); font-size:12px;">(${age} anos)</span>` : ''}</span>
-              ${isEditing ? `<input type="date" class="birthdate-input" data-birthdate-for="${p.id}" value="${p.birthDate||''}">` : ''}
-            </div>
-            <button class="rm" data-toggle-birthdate="${p.id}" style="margin-right:10px;">${p.birthDate ? 'Editar nasc.' : '+ Nascimento'}</button>
-            <button class="rm" data-rm-player="${p.id}">Remover</button>
-          </div>
-        `;
-      }).join('') : '<div class="empty">Ainda sem jogadores. Adiciona abaixo.</div>'}
+      ${state.roster.length ? state.roster.map(p=>`
+        <div class="player-row">
+          <span style="flex:1;">${p.name}</span>
+          <input type="date" class="birthdate-input" data-birthdate-for="${p.id}" value="${p.birthDate||''}">
+          <button class="rm" data-rm-player="${p.id}">Remover</button>
+        </div>
+      `).join('') : '<div class="empty">Ainda sem jogadores. Adiciona abaixo.</div>'}
       <div class="add-row">
         <input id="new-player-input" type="text" placeholder="Nome do jogador">
         <button id="add-player-btn">+</button>
@@ -1059,17 +1051,9 @@ function attachHandlers(){
     el.onclick = ()=>removePlayer(el.dataset.rmPlayer);
   });
 
-  document.querySelectorAll('[data-toggle-birthdate]').forEach(el=>{
-    el.onclick = ()=>{
-      editingPlayerId = editingPlayerId === el.dataset.toggleBirthdate ? null : el.dataset.toggleBirthdate;
-      render();
-    };
-  });
   document.querySelectorAll('[data-birthdate-for]').forEach(el=>{
     el.onchange = ()=>{
       updatePlayerBirthDate(el.dataset.birthdateFor, el.value);
-      editingPlayerId = null;
-      render();
     };
   });
   const addPlayerBtn = document.getElementById('add-player-btn');

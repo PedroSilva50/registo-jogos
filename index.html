@@ -1086,7 +1086,7 @@ function attachHandlers(){
 
   document.querySelectorAll('[data-match-toggle]').forEach(el=>{
     el.onclick = (e)=>{
-      if(e.target.closest('button')) return;
+      if(e.target.closest('button') || e.target.closest('input') || e.target.closest('textarea')) return;
       const id = el.dataset.matchToggle;
       expandedMatch = expandedMatch === id ? null : id;
       render();

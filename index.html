@@ -851,7 +851,10 @@ function renderJogos(){
                   <button class="del" data-del-goal-in="${m.id}|${g.id}">✕</button>
                 </div>
               `).join('') : '<div class="empty">Sem golos registados.</div>'}
-              ${m.notes ? `<div class="notes-readonly">📝 ${m.notes}</div>` : ''}
+              <div class="field" style="margin-top:12px; margin-bottom:0;">
+                <label>Notas finais do jogo</label>
+                <textarea data-notes-for="${m.id}" placeholder="Ex: equipa cansada na 2ª parte, marcação alta funcionou bem...">${m.notes || ''}</textarea>
+              </div>
               <div class="btn-row" style="margin-top:12px;">
                 ${m.finished
                   ? `<button class="btn btn-outline" data-reopen="${m.id}">Reabrir</button>`
@@ -1069,6 +1072,10 @@ function attachHandlers(){
     const m = getActiveMatch();
     if(m) updateNotes(m.id, notesInput.value);
   };
+
+  document.querySelectorAll('[data-notes-for]').forEach(el=>{
+    el.onblur = ()=>{ updateNotes(el.dataset.notesFor, el.value); };
+  });
 
   document.querySelectorAll('[data-del-goal]').forEach(el=>{
     el.onclick = ()=>{

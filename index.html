@@ -192,6 +192,9 @@
 
   /* ROSTER */
   .player-row{display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--line); gap:10px;}
+  .player-item{border-bottom:1px solid var(--line); cursor:pointer;}
+  .player-item:last-child{border-bottom:none;}
+  .player-item .player-row{border-bottom:none;}
   .player-row:last-child{border-bottom:none;}
   .player-row .rm{background:none; border:none; color:var(--red); font-size:13px; cursor:pointer;}
   .add-row{display:flex; gap:8px; margin-top:10px;}
@@ -265,6 +268,8 @@ let statsFilter = 'todos'; // 'todos' | 'amigavel' | 'campeonato'
 let seasonFilter = 'todas';
 let matchSearchQuery = '';
 let modalConfig = null; // {message, onConfirm}
+let expandedPlayer = null;
+let editingMatchId = null;
 
 const STORAGE_KEY = 'coach-app-data-v1';
 
@@ -372,6 +377,31 @@ function updateGoal(matchId, goalId, half, scorerId, assistId){
   showToast('Golo atualizado ✓');
 }
 
+function setMatchType(matchId, type){
+  const m = state.matches.find(m=>m.id===matchId);
+  if(!m) return;
+  m.type = type;
+  if(type !== 'campeonato') m.phase = '';
+  saveState(); render();
+}
+
+function saveMatchEdits(matchId){
+  const m = state.matches.find(m=>m.id===matchId);
+  if(!m) return;
+  const oppEl = document.querySelector(`[data-edit-opponent="${matchId}"]`);
+  const dateEl = document.querySelector(`[data-edit-date="${matchId}"]`);
+  const phaseEl = document.querySelector(`[data-edit-phase="${matchId}"]`);
+  const seasonEl = document.querySelector(`[data-edit-season="${matchId}"]`);
+  if(!oppEl || !oppEl.value.trim()) return;
+  m.opponent = oppEl.value.trim();
+  if(dateEl && dateEl.value) m.date = dateEl.value;
+  if(phaseEl) m.phase = phaseEl.value.trim();
+  if(seasonEl) m.season = seasonEl.value.trim() || defaultSeason();
+  editingMatchId = null;
+  saveState(); render();
+  showToast('Jogo atualizado ✓');
+}
+
 function finishMatch(id, notes){
   const m = state.matches.find(m=>m.id===id);
   if(m){ m.finished = true; if(notes !== undefined) m.notes = notes; saveState(); render(); }
@@ -410,8 +440,13 @@ function deleteGoal(matchId, goalId){
 
 function addPlayer(name){
   if(!name.trim()) return;
-  state.roster.push({ id: uid(), name: name.trim(), birthDate: null });
+  state.roster.push({ id: uid(), name: name.trim(), birthDate: null, number: null });
   saveState(); render();
+}
+
+function updatePlayerNumber(id, number){
+  const p = state.roster.find(p=>p.id===id);
+  if(p){ p.number = number ? parseInt(number) : null; saveState(); }
 }
 
 function removePlayer(id){
@@ -440,12 +475,20 @@ function computeStats(typeFilterVal, seasonFilterVal){
   let scoredHalf={1:0,2:0}, concededHalf={1:0,2:0};
   let scorerCount = {};
   let assistCount = {};
+  let wins=0, draws=0, losses=0;
   const matches = state.matches.filter(m => {
     const typeOk = !typeFilterVal || typeFilterVal==='todos' || m.type===typeFilterVal;
     const seasonOk = !seasonFilterVal || seasonFilterVal==='todas' || (m.season || 'Sem época')===seasonFilterVal;
     return typeOk && seasonOk;
   });
   matches.forEach(m=>{
+    const mScored = m.goals.filter(g=>g.type==='scored').length;
+    const mConceded = m.goals.filter(g=>g.type==='conceded').length;
+    if(m.finished){
+      if(mScored > mConceded) wins++;
+      else if(mScored === mConceded) draws++;
+      else losses++;
+    }
     m.goals.forEach(g=>{
       if(g.type==='scored'){
         scored++; scoredHalf[g.half]++;
@@ -465,7 +508,7 @@ function computeStats(typeFilterVal, seasonFilterVal){
   const assisters = Object.entries(assistCount)
     .map(([id,count])=>({id, name: playerName(id), count}))
     .sort((a,b)=>b.count-a.count);
-  return { scored, conceded, scoredHalf, concededHalf, scorers, assisters };
+  return { scored, conceded, scoredHalf, concededHalf, scorers, assisters, wins, draws, losses };
 }
 
 /* ---------- MODAL DE CONFIRMAÇÃO (substitui confirm() nativo, que fica bloqueado em sandboxes) ---------- */
@@ -772,8 +815,25 @@ function renderJogos(){
               </div>
               <div class="match-score"><span class="s">${scored}</span> – <span class="c">${conceded}</span></div>
             </div>
+            <button class="quick-del" data-edit-match-toggle="${m.id}">✎</button>
             <button class="quick-del" data-quick-delete="${m.id}">🗑</button>
           </div>
+          ${editingMatchId === m.id ? `
+            <div class="panel">
+              <div class="field"><label>Adversário</label><input type="text" data-edit-opponent="${m.id}" value="${m.opponent}"></div>
+              <div class="field"><label>Data</label><input type="date" data-edit-date="${m.id}" value="${m.date}"></div>
+              <div class="field">
+                <label>Tipo de jogo</label>
+                <div class="seg">
+                  <div class="seg-btn ${m.type==='amigavel'?'active':''}" data-edit-type="${m.id}|amigavel">Amigável</div>
+                  <div class="seg-btn ${m.type==='campeonato'?'active':''}" data-edit-type="${m.id}|campeonato">Campeonato</div>
+                </div>
+              </div>
+              ${m.type==='campeonato' ? `<div class="field"><label>Fase / Jornada</label><input type="text" data-edit-phase="${m.id}" value="${m.phase||''}"></div>` : ''}
+              <div class="field" style="margin-bottom:0;"><label>Época</label><input type="text" data-edit-season="${m.id}" value="${m.season||''}"></div>
+              <button class="btn btn-gold" style="width:100%; margin-top:12px;" data-save-match-edit="${m.id}">Guardar Alterações</button>
+            </div>
+          ` : ''}
           ${open ? `
             <div class="goal-list">
               ${m.goals.length ? m.goals.map(g=>`
@@ -814,7 +874,15 @@ function renderStats(){
         ${seasons.map(sn=>`<div class="seg-btn ${seasonFilter===sn?'active':''}" data-seasonfilter-stats="${sn}">${sn}</div>`).join('')}
       </div>
     ` : ''}
-    <div class="stat-grid" style="margin-top:14px;">
+    <div class="section-title" style="margin-top:16px;">Resultados</div>
+    <div class="stat-grid" style="grid-template-columns:1fr 1fr 1fr;">
+      <div class="stat-box"><div class="num" style="color:var(--gold)">${s.wins}</div><div class="lbl">Vitórias</div></div>
+      <div class="stat-box"><div class="num" style="color:var(--chalk)">${s.draws}</div><div class="lbl">Empates</div></div>
+      <div class="stat-box"><div class="num" style="color:var(--red)">${s.losses}</div><div class="lbl">Derrotas</div></div>
+    </div>
+
+    <div class="section-title">Golos</div>
+    <div class="stat-grid">
       <div class="stat-box"><div class="num" style="color:var(--gold)">${s.scored}</div><div class="lbl">Golos Marcados</div></div>
       <div class="stat-box"><div class="num" style="color:var(--red)">${s.conceded}</div><div class="lbl">Golos Sofridos</div></div>
     </div>
@@ -863,13 +931,29 @@ function renderPlantel(){
   return `
     <div class="topbar"><h1>Plantel</h1></div>
     <div class="card">
-      ${state.roster.length ? state.roster.map(p=>`
-        <div class="player-row">
-          <span style="flex:1;">${p.name}</span>
-          <input type="date" class="birthdate-input" data-birthdate-for="${p.id}" value="${p.birthDate||''}">
-          <button class="rm" data-rm-player="${p.id}">Remover</button>
-        </div>
-      `).join('') : '<div class="empty">Ainda sem jogadores. Adiciona abaixo.</div>'}
+      ${state.roster.length ? state.roster.map(p=>{
+        const open = expandedPlayer === p.id;
+        return `
+          <div class="player-item" data-player-toggle="${p.id}">
+            <div class="player-row" style="border-bottom:none; padding-bottom:${open?'4px':'10px'};">
+              <span style="flex:1;">${p.number ? `<span class="mono" style="color:var(--gold);">#${p.number}</span> ` : ''}${p.name}</span>
+            </div>
+            ${open ? `
+              <div style="padding-bottom:12px; display:flex; flex-direction:column; gap:10px;">
+                <div class="field" style="margin-bottom:0;">
+                  <label>Número</label>
+                  <input type="number" min="1" max="99" class="birthdate-input" style="max-width:100px;" data-number-for="${p.id}" value="${p.number||''}">
+                </div>
+                <div class="field" style="margin-bottom:0;">
+                  <label>Data de nascimento</label>
+                  <input type="date" class="birthdate-input" data-birthdate-for="${p.id}" value="${p.birthDate||''}">
+                </div>
+                <button class="btn btn-outline" style="color:var(--red);" data-rm-player="${p.id}">Remover do Plantel</button>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('') : '<div class="empty">Ainda sem jogadores. Adiciona abaixo.</div>'}
       <div class="add-row">
         <input id="new-player-input" type="text" placeholder="Nome do jogador">
         <button id="add-player-btn">+</button>
@@ -1047,13 +1131,53 @@ function attachHandlers(){
     el.onclick = ()=>{ seasonFilter = el.dataset.seasonfilterStats; render(); };
   });
 
+  document.querySelectorAll('[data-edit-match-toggle]').forEach(el=>{
+    el.onclick = (e)=>{
+      e.stopPropagation();
+      editingMatchId = editingMatchId === el.dataset.editMatchToggle ? null : el.dataset.editMatchToggle;
+      render();
+    };
+  });
+  document.querySelectorAll('[data-edit-type]').forEach(el=>{
+    el.onclick = (e)=>{
+      e.stopPropagation();
+      const [id, type] = el.dataset.editType.split('|');
+      setMatchType(id, type);
+    };
+  });
+  document.querySelectorAll('[data-save-match-edit]').forEach(el=>{
+    el.onclick = (e)=>{
+      e.stopPropagation();
+      saveMatchEdits(el.dataset.saveMatchEdit);
+    };
+  });
+
+  document.querySelectorAll('[data-player-toggle]').forEach(el=>{
+    el.onclick = (e)=>{
+      if(e.target.closest('button') || e.target.closest('input')) return;
+      const id = el.dataset.playerToggle;
+      expandedPlayer = expandedPlayer === id ? null : id;
+      render();
+    };
+  });
+
   document.querySelectorAll('[data-rm-player]').forEach(el=>{
-    el.onclick = ()=>removePlayer(el.dataset.rmPlayer);
+    el.onclick = (e)=>{
+      e.stopPropagation();
+      const id = el.dataset.rmPlayer;
+      const p = state.roster.find(p=>p.id===id);
+      askConfirm(`Remover ${p ? p.name : 'este jogador'} do plantel?`, ()=>removePlayer(id));
+    };
   });
 
   document.querySelectorAll('[data-birthdate-for]').forEach(el=>{
     el.onchange = ()=>{
       updatePlayerBirthDate(el.dataset.birthdateFor, el.value);
+    };
+  });
+  document.querySelectorAll('[data-number-for]').forEach(el=>{
+    el.onchange = ()=>{
+      updatePlayerNumber(el.dataset.numberFor, el.value);
     };
   });
   const addPlayerBtn = document.getElementById('add-player-btn');

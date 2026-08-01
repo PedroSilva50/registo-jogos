@@ -38,7 +38,7 @@
   .mono{font-family:'Roboto Mono',monospace;}
   .app{max-width:520px; margin:0 auto; padding:20px 16px 8px;}
 
-  .topbar{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:18px;}
+  .topbar{display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;}
   .topbar h1{font-size:20px; margin:0; color:var(--chalk); font-weight:600;}
   .topbar .sub{color:var(--muted); font-size:12px; font-family:'Inter'; text-transform:none; letter-spacing:0;}
 
@@ -193,7 +193,7 @@
   .scorer-row .n{font-family:'Roboto Mono'; font-weight:700; color:var(--gold);}
 
   /* ROSTER */
-  .player-row{display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--line); gap:10px;}
+  .player-row{display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--line);}
   .player-item{border-bottom:1px solid var(--line); cursor:pointer;}
   .player-item:last-child{border-bottom:none;}
   .player-item .player-row{border-bottom:none;}
@@ -234,6 +234,27 @@
 
   .section-title{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; font-family:'Oswald'; margin:18px 0 8px;}
   .loading{text-align:center; color:var(--muted); padding:60px 20px; font-family:'Oswald'; text-transform:uppercase; letter-spacing:0.08em; font-size:12px;}
+
+  .home-screen{position:relative; min-height:calc(100vh - 28px); display:flex; align-items:center; justify-content:center; padding:12px 4px;}
+  .home-pitch-bg{position:absolute; inset:-20px 0px; z-index:0; opacity:1;}
+  .home-content{position:relative; z-index:1; width:100%; text-align:center;}
+  .home-ball{width:64px; height:64px; margin:0 auto 14px;}
+  .home-content h1{font-size:26px; margin:0 0 4px; color:var(--chalk); line-height:1.15;}
+  .home-content .home-sub{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:0.12em; font-family:'Oswald'; margin-bottom:34px;}
+  .home-menu{display:flex; flex-direction:column; gap:12px;}
+  .home-btn{
+    display:flex; align-items:center; gap:14px;
+    background:rgba(21,51,40,0.88);
+    border:1px solid var(--line); border-radius:14px;
+    padding:16px 18px;
+    color:var(--chalk); font-family:'Oswald'; font-size:15px; text-transform:uppercase; letter-spacing:0.04em; font-weight:600;
+    cursor:pointer; text-align:left;
+  }
+  .home-btn:active{background:var(--gold-dim); border-color:var(--gold);}
+  .home-btn-icon{width:22px; height:22px; flex-shrink:0; color:var(--gold);}
+  .home-btn-icon svg{width:100%; height:100%;}
+  .topbar-home{width:26px; height:26px; margin-right:10px; cursor:pointer; color:var(--gold); flex-shrink:0;}
+  .topbar-home svg{width:100%; height:100%;}
 </style>
 </head>
 <body>
@@ -246,7 +267,7 @@
   </button>
   <button class="navbtn" data-tab="jogos">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>
-    Jogos
+    Resultados
   </button>
   <button class="navbtn" data-tab="stats">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
@@ -262,7 +283,7 @@
 
 <script>
 let state = { roster: [], matches: [] };
-let currentTab = 'jogo';
+let currentTab = 'home';
 let pending = null; // {kind:'scored'|'conceded', half:null, scorerId:null}
 let expandedMatch = null;
 let newMatchType = 'amigavel';
@@ -306,7 +327,6 @@ async function loadState(){
   }catch(e){
     // chave ainda não existe, mantém valores por omissão
   }
-  document.getElementById('navbar').style.display = 'flex';
   render();
 }
 
@@ -456,13 +476,6 @@ function updatePlayerName(id, name){
   if(p && name.trim()){ p.name = name.trim(); saveState(); }
 }
 
-function removePlayer(id){
-  // remoção "suave": sai da lista ativa e das opções de novo golo,
-  // mas o nome mantém-se nos golos/assistências já registados no histórico.
-  const p = state.roster.find(p=>p.id===id);
-  if(p){ p.active = false; saveState(); render(); }
-}
-
 function updatePlayerBirthDate(id, birthDate){
   const p = state.roster.find(p=>p.id===id);
   if(p){ p.birthDate = birthDate || null; saveState(); }
@@ -476,6 +489,13 @@ function computeAge(birthDateStr){
   const mDiff = t.getMonth() - b.getMonth();
   if(mDiff < 0 || (mDiff === 0 && t.getDate() < b.getDate())) age--;
   return age;
+}
+
+function removePlayer(id){
+  // remoção "suave": sai da lista ativa e das opções de novo golo,
+  // mas o nome mantém-se nos golos/assistências já registados no histórico.
+  const p = state.roster.find(p=>p.id===id);
+  if(p){ p.active = false; saveState(); render(); }
 }
 
 /* ---------- STATS ---------- */
@@ -629,15 +649,91 @@ function importData(file){
 }
 
 /* ---------- RENDER ---------- */
+function pitchSvg(){
+  return `<svg viewBox="0 0 400 600" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" style="width:100%; height:100%;">
+    <rect x="20" y="20" width="360" height="560" fill="none" stroke="rgba(243,239,230,0.10)" stroke-width="2"/>
+    <line x1="20" y1="300" x2="380" y2="300" stroke="rgba(243,239,230,0.10)" stroke-width="2"/>
+    <circle cx="200" cy="300" r="62" fill="none" stroke="rgba(243,239,230,0.10)" stroke-width="2"/>
+    <circle cx="200" cy="300" r="3" fill="rgba(243,239,230,0.10)"/>
+    <rect x="85" y="20" width="230" height="95" fill="none" stroke="rgba(243,239,230,0.10)" stroke-width="2"/>
+    <rect x="140" y="20" width="120" height="38" fill="none" stroke="rgba(243,239,230,0.10)" stroke-width="2"/>
+    <rect x="85" y="485" width="230" height="95" fill="none" stroke="rgba(243,239,230,0.10)" stroke-width="2"/>
+    <rect x="140" y="542" width="120" height="38" fill="none" stroke="rgba(243,239,230,0.10)" stroke-width="2"/>
+  </svg>`;
+}
+
+function ballIconSvg(){
+  return `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="50" cy="50" r="45" fill="none" stroke="var(--gold)" stroke-width="4"/>
+    <polygon points="50,29 63,39 58,55 42,55 37,39" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M50 29 L50 9 M63 39 L81 30 M58 55 L71 71 M42 55 L29 71 M37 39 L19 30" stroke="var(--gold)" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </svg>`;
+}
+
+const NAV_ICONS = {
+  jogo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
+  jogos: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>',
+  stats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>',
+  plantel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.3 3-5 7-5s7 1.7 7 5"/><circle cx="17" cy="8" r="2.5"/><path d="M17.5 12.2c2.6.5 4.5 2 4.5 4.8"/></svg>'
+};
+
+function topbarHtml(title){
+  return `<div class="topbar"><span class="topbar-home" data-go-home="1" title="Início">${ballIconSvg()}</span><h1>${title}</h1></div>`;
+}
+
+function renderHome(){
+  const active = getActiveMatch();
+  const jogoLabel = active ? 'Continuar Jogo' : 'Iniciar Jogo';
+  return `
+    <div class="home-screen">
+      <div class="home-pitch-bg">${pitchSvg()}</div>
+      <div class="home-content">
+        <div class="home-ball">${ballIconSvg()}</div>
+        <h1>Registo de Jogos</h1>
+        <div class="home-sub">Painel do Treinador</div>
+        <div class="home-menu">
+          <button class="home-btn" data-home-nav="jogo"><span class="home-btn-icon">${NAV_ICONS.jogo}</span>${jogoLabel}</button>
+          <button class="home-btn" data-home-nav="jogos"><span class="home-btn-icon">${NAV_ICONS.jogos}</span>Resultados</button>
+          <button class="home-btn" data-home-nav="stats"><span class="home-btn-icon">${NAV_ICONS.stats}</span>Estatísticas</button>
+          <button class="home-btn" data-home-nav="plantel"><span class="home-btn-icon">${NAV_ICONS.plantel}</span>Plantel</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function navigateTo(tab){
+  if(tab === currentTab) return;
+  if(hasUnsavedWork()){
+    askConfirm('Tens uma alteração por guardar (golo, jogo ou jogador por criar). Sair sem guardar?', ()=>{
+      pending = null;
+      editingMatchId = null;
+      currentTab = tab;
+      render();
+    });
+    return;
+  }
+  currentTab = tab;
+  pending = null;
+  render();
+}
+
 function render(){
   document.querySelectorAll('.navbtn').forEach(b=>{
     b.classList.toggle('active', b.dataset.tab===currentTab);
   });
   const app = document.getElementById('app');
-  if(currentTab==='jogo') app.innerHTML = renderJogo();
-  else if(currentTab==='jogos') app.innerHTML = renderJogos();
-  else if(currentTab==='stats') app.innerHTML = renderStats();
-  else if(currentTab==='plantel') app.innerHTML = renderPlantel();
+  const navbarEl = document.getElementById('navbar');
+  if(currentTab === 'home'){
+    navbarEl.style.display = 'none';
+    app.innerHTML = renderHome();
+  } else {
+    navbarEl.style.display = 'flex';
+    if(currentTab==='jogo') app.innerHTML = renderJogo();
+    else if(currentTab==='jogos') app.innerHTML = renderJogos();
+    else if(currentTab==='stats') app.innerHTML = renderStats();
+    else if(currentTab==='plantel') app.innerHTML = renderPlantel();
+  }
   app.innerHTML += renderModal();
   attachHandlers();
 }
@@ -646,7 +742,7 @@ function renderJogo(){
   const m = getActiveMatch();
   if(!m){
     return `
-      <div class="topbar"><h1>Novo Jogo</h1></div>
+      ${topbarHtml('Novo Jogo')}
       <div class="card">
         <div class="field">
           <label>Adversário</label>
@@ -738,9 +834,7 @@ function renderJogo(){
   const typeLabel = m.type === 'campeonato' ? `Campeonato${m.phase ? ' · '+m.phase : ''}` : 'Amigável';
 
   return `
-    <div class="topbar">
-      <h1>Jogo em curso</h1>
-    </div>
+    ${topbarHtml('Jogo em curso')}
     <div class="scoreboard">
       <div class="opponent"><span>vs ${m.opponent} <span class="badge-type">${typeLabel}</span> <span class="badge-type">${m.season || 'Sem época'}</span></span><span>${m.date}</span></div>
       <div class="score-row">
@@ -767,7 +861,7 @@ function renderJogo(){
 
 function renderJogos(){
   if(!state.matches.length){
-    return `<div class="topbar"><h1>Jogos</h1></div><div class="empty">Ainda não há jogos registados.</div>`;
+    return `${topbarHtml('Resultados')}<div class="empty">Ainda não há jogos registados.</div>`;
   }
 
   const seasons = getSeasonsList();
@@ -798,7 +892,7 @@ function renderJogos(){
   }
 
   return `
-    <div class="topbar"><h1>Jogos</h1></div>
+    ${topbarHtml('Resultados')}
     <div class="field">
       <input id="match-search-input" type="text" placeholder="Pesquisar por adversário..." value="${matchSearchQuery}">
     </div>
@@ -874,7 +968,7 @@ function renderStats(){
   const seasons = getSeasonsList();
   const maxHalf = Math.max(s.scoredHalf[1], s.scoredHalf[2], s.concededHalf[1], s.concededHalf[2], 1);
   return `
-    <div class="topbar"><h1>Estatísticas</h1></div>
+    ${topbarHtml('Estatísticas')}
     <div class="seg">
       <div class="seg-btn ${statsFilter==='todos'?'active':''}" data-statsfilter="todos">Todos</div>
       <div class="seg-btn ${statsFilter==='amigavel'?'active':''}" data-statsfilter="amigavel">Amigáveis</div>
@@ -942,7 +1036,7 @@ function renderStats(){
 function renderPlantel(){
   const activeRoster = state.roster.filter(p => p.active !== false);
   return `
-    <div class="topbar"><h1>Plantel</h1></div>
+    ${topbarHtml('Plantel')}
     <div class="card">
       ${activeRoster.length ? activeRoster.map(p=>{
         const open = expandedPlayer === p.id;
@@ -994,6 +1088,14 @@ function renderPlantel(){
 
 /* ---------- EVENT WIRING ---------- */
 function attachHandlers(){
+  document.querySelectorAll('[data-home-nav]').forEach(el=>{
+    el.onclick = ()=> navigateTo(el.dataset.homeNav);
+  });
+  document.querySelectorAll('[data-go-home]').forEach(el=>{
+    el.onclick = ()=> navigateTo('home');
+  });
+
+
   const start = document.getElementById('start-match-btn');
   if(start) start.onclick = ()=>{
     const opp = document.getElementById('opp-input').value;
@@ -1073,10 +1175,6 @@ function attachHandlers(){
     if(m) updateNotes(m.id, notesInput.value);
   };
 
-  document.querySelectorAll('[data-notes-for]').forEach(el=>{
-    el.onblur = ()=>{ updateNotes(el.dataset.notesFor, el.value); };
-  });
-
   document.querySelectorAll('[data-del-goal]').forEach(el=>{
     el.onclick = ()=>{
       const m = getActiveMatch();
@@ -1091,6 +1189,31 @@ function attachHandlers(){
       expandedMatch = expandedMatch === id ? null : id;
       render();
     };
+  });
+
+  document.querySelectorAll('[data-edit-match-toggle]').forEach(el=>{
+    el.onclick = (e)=>{
+      e.stopPropagation();
+      editingMatchId = editingMatchId === el.dataset.editMatchToggle ? null : el.dataset.editMatchToggle;
+      render();
+    };
+  });
+  document.querySelectorAll('[data-edit-type]').forEach(el=>{
+    el.onclick = (e)=>{
+      e.stopPropagation();
+      const [id, type] = el.dataset.editType.split('|');
+      setMatchType(id, type);
+    };
+  });
+  document.querySelectorAll('[data-save-match-edit]').forEach(el=>{
+    el.onclick = (e)=>{
+      e.stopPropagation();
+      saveMatchEdits(el.dataset.saveMatchEdit);
+    };
+  });
+
+  document.querySelectorAll('[data-notes-for]').forEach(el=>{
+    el.onblur = ()=>{ updateNotes(el.dataset.notesFor, el.value); };
   });
 
   document.querySelectorAll('[data-quick-delete]').forEach(el=>{
@@ -1152,27 +1275,6 @@ function attachHandlers(){
     el.onclick = ()=>{ seasonFilter = el.dataset.seasonfilterStats; render(); };
   });
 
-  document.querySelectorAll('[data-edit-match-toggle]').forEach(el=>{
-    el.onclick = (e)=>{
-      e.stopPropagation();
-      editingMatchId = editingMatchId === el.dataset.editMatchToggle ? null : el.dataset.editMatchToggle;
-      render();
-    };
-  });
-  document.querySelectorAll('[data-edit-type]').forEach(el=>{
-    el.onclick = (e)=>{
-      e.stopPropagation();
-      const [id, type] = el.dataset.editType.split('|');
-      setMatchType(id, type);
-    };
-  });
-  document.querySelectorAll('[data-save-match-edit]').forEach(el=>{
-    el.onclick = (e)=>{
-      e.stopPropagation();
-      saveMatchEdits(el.dataset.saveMatchEdit);
-    };
-  });
-
   document.querySelectorAll('[data-player-toggle]').forEach(el=>{
     el.onclick = (e)=>{
       if(e.target.closest('button') || e.target.closest('input')) return;
@@ -1205,6 +1307,7 @@ function attachHandlers(){
     el.onblur = ()=>{ updatePlayerName(el.dataset.nameFor, el.value); render(); };
     el.onkeydown = (e)=>{ if(e.key === 'Enter'){ el.blur(); } };
   });
+
   const addPlayerBtn = document.getElementById('add-player-btn');
   if(addPlayerBtn) addPlayerBtn.onclick = ()=>{
     const input = document.getElementById('new-player-input');
@@ -1228,12 +1331,20 @@ function attachHandlers(){
   };
 }
 
+function hasUnsavedWork(){
+  if(pending) return true;
+  if(editingMatchId) return true;
+  const oppInput = document.getElementById('opp-input');
+  if(oppInput && oppInput.value.trim()) return true;
+  const newPlayerInput = document.getElementById('new-player-input');
+  if(newPlayerInput && newPlayerInput.value.trim()) return true;
+  return false;
+}
+
 document.getElementById('navbar').addEventListener('click', (e)=>{
   const btn = e.target.closest('.navbtn');
   if(!btn) return;
-  currentTab = btn.dataset.tab;
-  pending = null;
-  render();
+  navigateTo(btn.dataset.tab);
 });
 
 loadState();

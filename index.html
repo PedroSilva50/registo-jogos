@@ -24,7 +24,7 @@
     --line:rgba(243,239,230,0.10);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{height:100%;}
+  html{min-height:100%;}
   body{
     margin:0;
     background:var(--bg);
@@ -456,6 +456,13 @@ function updateNotes(id, notes){
 function nowHHMM(){
   const now = new Date();
   return String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+}
+
+function currentHalfFromTimeline(m){
+  const t = m.timeline;
+  if(!t || !t.kickoff) return null; // cronologia não iniciada, sem forma de deduzir
+  if(t.secondHalfStart && nowHHMM() >= t.secondHalfStart) return 2;
+  return 1;
 }
 
 function setMatchTimeMark(matchId, key){
@@ -944,6 +951,35 @@ function renderJogo(){
   `;
 }
 
+function matchNarrativeHtml(m){
+  const t = m.timeline || {};
+  const g1 = m.goals.filter(g=>g.half===1);
+  const g2 = m.goals.filter(g=>g.half===2);
+  const goalRow = (g) => `
+    <div class="goal-row">
+      <span>${g.type==='scored' ? '⚽ '+playerName(g.scorerId)+(g.assistId && g.assistId!=='none' ? ' <span style="color:var(--muted)">(assist. '+playerName(g.assistId)+')</span>' : '') : '🥅 Sofrido'}</span>
+      <button class="del" data-del-goal-in="${m.id}|${g.id}">✕</button>
+    </div>
+  `;
+  const markRow = (label, time) => `
+    <div class="goal-row" style="opacity:0.8;">
+      <span><b>${label}</b></span>
+      <span class="mono" style="color:var(--gold);">${time}</span>
+    </div>
+  `;
+
+  let rows = '';
+  if(t.kickoff) rows += markRow('Início do Jogo', t.kickoff);
+  rows += g1.map(goalRow).join('');
+  if(t.halftime) rows += markRow('Intervalo', t.halftime);
+  if(t.secondHalfStart) rows += markRow('Início 2ª Parte', t.secondHalfStart);
+  rows += g2.map(goalRow).join('');
+  if(t.fullTime) rows += markRow('Fim do Jogo', t.fullTime);
+
+  if(!rows) return '<div class="empty">Sem cronologia nem golos registados.</div>';
+  return rows;
+}
+
 function renderJogos(){
   if(!state.matches.length){
     return `${topbarHtml('Resultados')}<div class="empty">Ainda não há jogos registados.</div>`;
@@ -1024,12 +1060,7 @@ function renderJogos(){
           ` : ''}
           ${open ? `
             <div class="goal-list">
-              ${m.goals.length ? m.goals.map(g=>`
-                <div class="goal-row">
-                  <span>${g.type==='scored' ? '⚽ '+playerName(g.scorerId)+(g.assistId && g.assistId!=='none' ? ' <span style="color:var(--muted)">(assist. '+playerName(g.assistId)+')</span>' : '') : '🥅 Sofrido'} <span style="color:var(--muted)">— ${g.half}ª parte</span></span>
-                  <button class="del" data-del-goal-in="${m.id}|${g.id}">✕</button>
-                </div>
-              `).join('') : '<div class="empty">Sem golos registados.</div>'}
+              ${matchNarrativeHtml(m)}
               <div class="field" style="margin-top:12px; margin-bottom:0;">
                 <label>Notas finais do jogo</label>
                 <textarea data-notes-for="${m.id}" placeholder="Ex: equipa cansada na 2ª parte, marcação alta funcionou bem...">${m.notes || ''}</textarea>
@@ -1195,9 +1226,23 @@ function attachHandlers(){
   });
 
   const btnScored = document.getElementById('btn-scored');
-  if(btnScored) btnScored.onclick = ()=>{ pending = {kind:'scored', half:null, scorerId:null}; render(); };
+  if(btnScored) btnScored.onclick = ()=>{
+    const activeM = getActiveMatch();
+    const autoHalf = activeM ? currentHalfFromTimeline(activeM) : null;
+    pending = {kind:'scored', half:autoHalf, scorerId:null};
+    render();
+  };
   const btnConceded = document.getElementById('btn-conceded');
-  if(btnConceded) btnConceded.onclick = ()=>{ pending = {kind:'conceded', half:null, scorerId:null}; render(); };
+  if(btnConceded) btnConceded.onclick = ()=>{
+    const activeM = getActiveMatch();
+    const autoHalf = activeM ? currentHalfFromTimeline(activeM) : null;
+    if(autoHalf && activeM){
+      addGoal(activeM.id, 'conceded', autoHalf, null, null);
+    } else {
+      pending = {kind:'conceded', half:null, scorerId:null};
+      render();
+    }
+  };
 
   const cancelPending = document.getElementById('cancel-pending');
   if(cancelPending) cancelPending.onclick = ()=>{ pending = null; render(); };

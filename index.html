@@ -822,7 +822,7 @@ function timelineHtml(m){
         <div class="timeline-row"><span>${s.label}</span><span class="mono" style="color:var(--gold);">${t[s.key]}</span></div>
       `).join('')}
       ${next
-        ? `<button class="btn btn-gold" style="width:100%; ${done.length ? 'margin-top:10px;' : ''}" data-time-mark="${m.id}|${next.key}">Marcar: ${next.label}</button>`
+        ? `<button class="btn btn-gold" style="width:100%; ${done.length ? 'margin-top:10px;' : ''}" data-time-mark="${m.id}|${next.key}" data-time-mark-label="${next.label}">Marcar: ${next.label}</button>`
         : `<div style="font-size:12px; color:var(--muted); text-align:center; ${done.length ? 'margin-top:6px;' : ''}">Cronologia completa ✓</div>`
       }
     </div>
@@ -926,6 +926,7 @@ function renderJogo(){
 
   return `
     ${topbarHtml('Jogo em curso')}
+    ${timelineHtml(m)}
     <div class="scoreboard">
       <div class="opponent"><span>vs ${m.opponent} <span class="badge-type">${typeLabel}</span> <span class="badge-type">${m.season || 'Sem época'}</span></span><span>${m.date}</span></div>
       <div class="score-row">
@@ -939,7 +940,6 @@ function renderJogo(){
       </div>
       ${panelHtml}
     </div>
-    ${timelineHtml(m)}
     ${goalListHtml}
     <div class="card">
       <div class="field" style="margin-bottom:0;">
@@ -1349,7 +1349,10 @@ function attachHandlers(){
   document.querySelectorAll('[data-time-mark]').forEach(el=>{
     el.onclick = ()=>{
       const [matchId, key] = el.dataset.timeMark.split('|');
-      setMatchTimeMark(matchId, key);
+      const label = el.dataset.timeMarkLabel || 'este momento';
+      askConfirm(`Marcar "${label}" agora (${nowHHMM()})?`, ()=>{
+        setMatchTimeMark(matchId, key);
+      });
     };
   });
 

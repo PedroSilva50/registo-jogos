@@ -31,12 +31,13 @@
     color:var(--chalk);
     font-family:'Inter',sans-serif;
     padding-bottom:76px;
+    padding-top:env(safe-area-inset-top);
     min-height:100vh;
     -webkit-font-smoothing:antialiased;
   }
   h1,h2,h3,.disp{font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:0.03em;}
   .mono{font-family:'Roboto Mono',monospace;}
-  .app{max-width:520px; margin:0 auto; padding:20px 16px 8px;}
+  .app{max-width:520px; margin:0 auto; padding:24px 16px 8px;}
 
   .topbar{display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;}
   .topbar h1{font-size:20px; margin:0; color:var(--chalk); font-weight:600;}
@@ -111,6 +112,7 @@
   .field label{display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; font-family:'Oswald'; margin-bottom:6px;}
   .field input{
     width:100%;
+    box-sizing:border-box;
     background:var(--surface-2);
     border:1px solid var(--line);
     border-radius:8px;
@@ -118,6 +120,14 @@
     color:var(--chalk);
     font-family:'Inter';
     font-size:15px;
+  }
+  .field input[type="date"]{
+    -webkit-appearance:none;
+    appearance:none;
+    text-align:left;
+  }
+  .field input[type="date"]::-webkit-date-and-time-value{
+    text-align:left;
   }
   .field input:focus{outline:2px solid var(--gold); outline-offset:1px;}
   .field textarea{
@@ -255,6 +265,9 @@
   .home-btn-icon svg{width:100%; height:100%;}
   .topbar-home{width:26px; height:26px; margin-right:10px; cursor:pointer; color:var(--gold); flex-shrink:0;}
   .topbar-home svg{width:100%; height:100%;}
+  .home-credit{margin-top:28px; font-size:11px; color:var(--muted); letter-spacing:0.08em; text-transform:uppercase; font-family:'Oswald';}
+  .timeline-row{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px;}
+  .timeline-row:last-child{border-bottom:none;}
 </style>
 </head>
 <body>
@@ -426,12 +439,31 @@ function saveMatchEdits(matchId){
 
 function finishMatch(id, notes){
   const m = state.matches.find(m=>m.id===id);
-  if(m){ m.finished = true; if(notes !== undefined) m.notes = notes; saveState(); render(); }
+  if(m){
+    m.finished = true;
+    if(notes !== undefined) m.notes = notes;
+    if(!m.timeline) m.timeline = {};
+    if(!m.timeline.fullTime) m.timeline.fullTime = nowHHMM();
+    saveState(); render();
+  }
 }
 
 function updateNotes(id, notes){
   const m = state.matches.find(m=>m.id===id);
   if(m){ m.notes = notes; saveState(); }
+}
+
+function nowHHMM(){
+  const now = new Date();
+  return String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+}
+
+function setMatchTimeMark(matchId, key){
+  const m = state.matches.find(m=>m.id===matchId);
+  if(!m) return;
+  if(!m.timeline) m.timeline = {};
+  m.timeline[key] = nowHHMM();
+  saveState(); render();
 }
 
 function reopenMatch(id){
@@ -614,6 +646,10 @@ function exportReportTxt(){
         lines.push(`    🥅 ${g.half}ª parte — golo sofrido`);
       }
     });
+    if(m.timeline && (m.timeline.kickoff || m.timeline.halftime || m.timeline.secondHalfStart || m.timeline.fullTime)){
+      const t = m.timeline;
+      lines.push(`    Cronologia: início ${t.kickoff||'-'} | intervalo ${t.halftime||'-'} | 2ª parte ${t.secondHalfStart||'-'} | fim ${t.fullTime||'-'}`);
+    }
     if(m.notes) lines.push(`    Notas: ${m.notes}`);
     lines.push('');
   });
@@ -697,6 +733,7 @@ function renderHome(){
           <button class="home-btn" data-home-nav="stats"><span class="home-btn-icon">${NAV_ICONS.stats}</span>Estatísticas</button>
           <button class="home-btn" data-home-nav="plantel"><span class="home-btn-icon">${NAV_ICONS.plantel}</span>Plantel</button>
         </div>
+        <div class="home-credit">by Pedro Silva</div>
       </div>
     </div>
   `;
@@ -718,6 +755,29 @@ function navigateTo(tab){
   render();
 }
 
+function goHome(){
+  if(currentTab === 'home') return;
+  if(hasUnsavedWork()){
+    askConfirm('Tens uma alteração por guardar (golo, jogo ou jogador por criar). Sair sem guardar?', ()=>{
+      pending = null;
+      editingMatchId = null;
+      currentTab = 'home';
+      render();
+    });
+    return;
+  }
+  const active = getActiveMatch();
+  if(active && !active.finished){
+    askConfirm('Tens um jogo em curso. Ir para o início não apaga nada — continua disponível em "Continuar Jogo". Confirmas?', ()=>{
+      currentTab = 'home';
+      render();
+    });
+    return;
+  }
+  currentTab = 'home';
+  render();
+}
+
 function render(){
   document.querySelectorAll('.navbtn').forEach(b=>{
     b.classList.toggle('active', b.dataset.tab===currentTab);
@@ -736,6 +796,30 @@ function render(){
   }
   app.innerHTML += renderModal();
   attachHandlers();
+}
+
+function timelineHtml(m){
+  const t = m.timeline || {};
+  const steps = [
+    { key: 'kickoff', label: 'Início do Jogo' },
+    { key: 'halftime', label: 'Intervalo' },
+    { key: 'secondHalfStart', label: 'Início 2ª Parte' },
+    { key: 'fullTime', label: 'Fim do Jogo' }
+  ];
+  const done = steps.filter(s => t[s.key]);
+  const next = steps.find(s => !t[s.key]);
+  return `
+    <div class="card">
+      <div class="panel-title" style="margin-bottom:10px;">Cronologia do Jogo</div>
+      ${done.map(s => `
+        <div class="timeline-row"><span>${s.label}</span><span class="mono" style="color:var(--gold);">${t[s.key]}</span></div>
+      `).join('')}
+      ${next
+        ? `<button class="btn btn-gold" style="width:100%; ${done.length ? 'margin-top:10px;' : ''}" data-time-mark="${m.id}|${next.key}">Marcar: ${next.label}</button>`
+        : `<div style="font-size:12px; color:var(--muted); text-align:center; ${done.length ? 'margin-top:6px;' : ''}">Cronologia completa ✓</div>`
+      }
+    </div>
+  `;
 }
 
 function renderJogo(){
@@ -848,6 +932,7 @@ function renderJogo(){
       </div>
       ${panelHtml}
     </div>
+    ${timelineHtml(m)}
     ${goalListHtml}
     <div class="card">
       <div class="field" style="margin-bottom:0;">
@@ -1092,7 +1177,7 @@ function attachHandlers(){
     el.onclick = ()=> navigateTo(el.dataset.homeNav);
   });
   document.querySelectorAll('[data-go-home]').forEach(el=>{
-    el.onclick = ()=> navigateTo('home');
+    el.onclick = ()=> goHome();
   });
 
 
@@ -1214,6 +1299,13 @@ function attachHandlers(){
 
   document.querySelectorAll('[data-notes-for]').forEach(el=>{
     el.onblur = ()=>{ updateNotes(el.dataset.notesFor, el.value); };
+  });
+
+  document.querySelectorAll('[data-time-mark]').forEach(el=>{
+    el.onclick = ()=>{
+      const [matchId, key] = el.dataset.timeMark.split('|');
+      setMatchTimeMark(matchId, key);
+    };
   });
 
   document.querySelectorAll('[data-quick-delete]').forEach(el=>{

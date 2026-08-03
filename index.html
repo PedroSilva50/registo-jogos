@@ -187,6 +187,7 @@ let currentTab = 'home';
 let pending = null;
 let pendingCard = null;
 let pendingCaptain = false;
+let pendingRatings = false;
 let expandedMatch = null;
 let expandedSchedule = null;
 let statsFilter = 'todos';
@@ -194,11 +195,16 @@ let seasonFilter = 'todas';
 let matchSearchQuery = '';
 let modalConfig = null;
 let expandedPlayer = null;
-let trainingForm = null; // {absences: [], notes: ''}
+let trainingForm = null;
 let expandedTraining = null;
 
 let schedulingNew = false;
-let schForm = { opp: '', date: '', time: '09:00', type: 'amigavel', loc: 'casa', phase: '' };
+let schForm = { 
+  isTournament: false,
+  opp: '', date: '', time: '09:00', type: 'amigavel', loc: 'casa', phase: '',
+  tournamentName: '',
+  games: []
+};
 
 const STORAGE_KEY = 'coach-app-data-v1';
 const usingClaudeStorage = (typeof window.storage !== 'undefined');
@@ -234,8 +240,8 @@ function showToast(msg){
   showToast._t = setTimeout(()=>t.classList.remove('show'), 2000);
 }
 
-window.navigateTo = function(tab){ currentTab = tab; pending = null; pendingCard = null; pendingCaptain = false; render(); };
-window.goHome = function(){ currentTab = 'home'; pending = null; pendingCard = null; pendingCaptain = false; render(); };
+window.navigateTo = function(tab){ currentTab = tab; pending = null; pendingCard = null; pendingCaptain = false; pendingRatings = false; render(); };
+window.goHome = function(){ currentTab = 'home'; pending = null; pendingCard = null; pendingCaptain = false; pendingRatings = false; render(); };
 
 function getActiveMatch(){ return state.matches.find(m => !m.finished) || null; }
 function playerName(id){
@@ -272,21 +278,72 @@ function getMatchElapsedMs(m){
 function getMatchMinute(m){ return Math.floor(getMatchElapsedMs(m) / 60000); }
 
 /* ---------- MATCH LOGIC ---------- */
-window.uiSaveSchedule = function(){
-  if(!schForm.opp.trim()){ showToast("Insere um adversário!"); return; }
-  state.schedule.push({
-    id: uid(), opponent: schForm.opp.trim(), date: schForm.date || new Date().toISOString().slice(0,10), time: schForm.time || '09:00',
-    type: schForm.type || 'amigavel', phase: (schForm.type==='torneio' ? (schForm.phase||'').trim() : ''), season: defaultSeason(), location: schForm.loc || 'casa', callup: []
+window.uiAddTournamentGame = function(){
+  const last = schForm.games[schForm.games.length-1];
+  schForm.games.push({
+    id: uid(),
+    phase: last ? last.phase : 'Fase de Grupos',
+    opp: '',
+    date: last ? last.date : (schForm.date || new Date().toISOString().slice(0,10)),
+    time: '10:00'
   });
+  render();
+};
+window.uiRemoveTournamentGame = function(id){
+  schForm.games = schForm.games.filter(x=>x.id!==id);
+  render();
+};
+window.uiUpdateTournamentGame = function(id, field, val){
+  const g = schForm.games.find(x=>x.id===id);
+  if(g) g[field] = val;
+};
+
+window.uiSaveSchedule = function(){
+  if(schForm.isTournament){
+    if(!schForm.tournamentName.trim()){ showToast("Insere o nome do torneio!"); return; }
+    const validGames = schForm.games.filter(g => g.opp.trim() !== '');
+    if(validGames.length === 0){ showToast("Insere pelo menos um adversário!"); return; }
+    
+    validGames.forEach(g => {
+      state.schedule.push({
+        id: uid(),
+        opponent: g.opp.trim(),
+        date: g.date || new Date().toISOString().slice(0,10),
+        time: g.time || '09:00',
+        type: 'torneio',
+        phase: g.phase.trim(),
+        tournamentName: schForm.tournamentName.trim(),
+        season: defaultSeason(),
+        location: schForm.loc || 'fora',
+        callup: []
+      });
+    });
+    showToast("Torneio agendado!");
+  } else {
+    if(!schForm.opp.trim()){ showToast("Insere um adversário!"); return; }
+    state.schedule.push({
+      id: uid(),
+      opponent: schForm.opp.trim(),
+      date: schForm.date || new Date().toISOString().slice(0,10),
+      time: schForm.time || '09:00',
+      type: schForm.type || 'amigavel',
+      phase: (schForm.type==='campeonato' ? (schForm.phase||'').trim() : ''),
+      season: defaultSeason(),
+      location: schForm.loc || 'casa',
+      callup: []
+    });
+    showToast("Jogo agendado!");
+  }
+  
   state.schedule.sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time));
   schedulingNew = false;
-  saveState(); render(); showToast("Jogo agendado!");
+  saveState(); render();
 };
 
 window.duplicateSchedule = function(id){
   const s = state.schedule.find(x=>x.id===id);
   if(s){
-    schForm = { opp: '', date: s.date, time: s.time, type: s.type, phase: s.phase, loc: s.location };
+    schForm = { isTournament: false, opp: '', date: s.date, time: s.time, type: s.type, phase: s.phase, loc: s.location, tournamentName: s.tournamentName||'', games: [] };
     schedulingNew = true; render();
   }
 };
@@ -296,8 +353,8 @@ window.startScheduledMatch = function(schedId){
   if(!s) return;
   if(getActiveMatch()) { showToast("Já tens um jogo em curso!"); return; }
   state.matches.unshift({
-    id: uid(), opponent: s.opponent, date: s.date, type: s.type, phase: s.phase || '', season: s.season || defaultSeason(), location: s.location, originalSchedule: s,
-    finished:false, goals: [], cards: [], capitao: null, timer: { isRunning:false, elapsedMs:0, lastStartTs:null }
+    id: uid(), opponent: s.opponent, date: s.date, type: s.type, phase: s.phase || '', season: s.season || defaultSeason(), location: s.location, originalSchedule: s, tournamentName: s.tournamentName || '',
+    finished:false, goals: [], cards: [], ratings: {}, capitao: null, timer: { isRunning:false, elapsedMs:0, lastStartTs:null }
   });
   state.schedule = state.schedule.filter(x => x.id !== schedId);
   saveState(); navigateTo('jogo');
@@ -403,6 +460,18 @@ window.setCaptain = function(matchId, playerId){
   pendingCaptain = false; render();
 };
 
+window.setRating = function(matchId, playerId, rating){
+  const m = state.matches.find(m=>m.id===matchId);
+  if(!m) return;
+  if(!m.ratings) m.ratings = {};
+  if(m.ratings[playerId] === rating) {
+     delete m.ratings[playerId];
+  } else {
+     m.ratings[playerId] = rating;
+  }
+  saveState(); render();
+};
+
 /* ---------- MODAL ---------- */
 window.askConfirm = function(message, onConfirm){
   modalConfig = { message, onConfirm };
@@ -421,7 +490,7 @@ function renderModalHTML(){
         <p style="font-size:13px;">O cronómetro ainda não foi iniciado. Como pretendes fechar o jogo?</p>
         <div style="display:flex; flex-direction:column; gap:10px;">
           <button class="btn btn-gold" onclick="confirmFinishMatch('save')">Gravar Jogo (Terminar)</button>
-          <button class="btn btn-red" onclick="confirmFinishMatch('discard')">Sair Sem Gravar ${getActiveMatch()?.originalSchedule ? '<br><span style="font-size:10px;">(Devolver ao Calendário)</span>' : ''}</button>
+          <button class="btn btn-red" onclick="confirmFinishMatch('discard')">Sair Sem Gravar ${getActiveMatch()?.originalSchedule ? '<br><span style="font-size:10px; text-transform:none;">(Devolver ao Calendário)</span>' : ''}</button>
           <button class="btn btn-outline" onclick="confirmFinishMatch('cancel')">Cancelar (Ficar no Jogo)</button>
         </div>
       </div>
@@ -512,7 +581,26 @@ function renderJogo(){
   const locLabel = (m.location||'casa') === 'casa' ? 'Casa' : 'Fora';
 
   let dynamicPanel = '';
-  if(pendingCaptain){
+  if(pendingRatings){
+    dynamicPanel = `
+      <div class="panel" style="border-color:var(--gold);">
+        <div class="panel-title" style="color:var(--gold);">Avaliar Jogadores</div>
+        <div style="display:flex; flex-direction:column; gap:8px; max-height:260px; overflow-y:auto; padding-right:4px;">
+          ${eligiblePlayers().map(p => {
+             const r = (m.ratings && m.ratings[p.id]) || 0;
+             let starsHtml = '';
+             for(let i=1; i<=5; i++){
+               starsHtml += `<span style="font-size:24px; line-height:1; cursor:pointer; margin:0 2px; color:${i<=r ? 'var(--gold)' : 'var(--line)'};" onclick="setRating('${m.id}', '${p.id}', ${i})">★</span>`;
+             }
+             return `<div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:6px; border-bottom:1px solid var(--line);">
+               <span style="font-size:13px;">${p.number ? `${p.number} - ` : ''}${p.name}</span>
+               <div style="display:flex; align-items:center;">${starsHtml}</div>
+             </div>`;
+          }).join('')}
+        </div>
+        <button class="btn btn-outline" style="width:100%; margin-top:12px;" onclick="pendingRatings=false; render()">Fechar (Gravado)</button>
+      </div>`;
+  } else if(pendingCaptain){
     let captainChips = eligiblePlayers().length ? eligiblePlayers().map(p=>`<div class="chip chip-sm ${m.capitao===p.id?'active-green':''}" onclick="setCaptain('${m.id}','${p.id}')">${p.name}</div>`).join('') : '<div class="empty" style="grid-column:1/-1;">Sem jogadores.</div>';
     dynamicPanel = `
       <div class="panel" style="border-color:var(--gold);">
@@ -571,10 +659,13 @@ function renderJogo(){
       ${m.capitao ? 
         `<div style="font-size:11px; color:var(--muted); font-family:'Oswald'; margin-bottom:12px; text-transform:uppercase; display:flex; align-items:center; gap:8px;">
           <span>© Capitão: <span style="color:var(--green);">${playerName(m.capitao)}</span></span>
-          <button style="background:none; border:1px solid var(--line); color:var(--chalk); border-radius:4px; padding:2px 6px; font-size:9px; cursor:pointer;" onclick="pendingCaptain=true; render()">Alterar</button>
-        </div>` : 
-        `<div style="margin-bottom:12px;"><button class="card-mini-btn yellow" style="border-color:var(--gold); color:var(--gold);" onclick="pendingCaptain=true; render()">+ Definir Capitão</button></div>`
+        </div>` : ''
       }
+      
+      <div style="margin-bottom:12px; display:flex; gap:8px;">
+         <button class="card-mini-btn yellow" style="border-color:var(--gold); color:var(--gold); flex:1;" onclick="pendingCaptain=true; render()">Capitão</button>
+         <button class="card-mini-btn" style="border:1px solid var(--muted); color:var(--chalk); flex:1;" onclick="pendingRatings=true; render()">⭐ Avaliar</button>
+      </div>
       
       <div class="score-row">
         <div class="score-block scored"><div class="score-num mono">${scored}</div><div class="score-label">Marcados</div></div>
@@ -582,13 +673,13 @@ function renderJogo(){
         <div class="score-block conceded"><div class="score-num mono">${conceded}</div><div class="score-label">Sofridos</div></div>
       </div>
       <div class="btn-row">
-        <button class="btn btn-gold" onclick="pending={kind:'scored', half: window.currentHalfFromTimeline(getActiveMatch())}; render();" ${(!matchStarted||pending||pendingCard||pendingCaptain)?'disabled':''}>+ Marcado</button>
-        <button class="btn btn-red" onclick="addGoal('${m.id}', 'conceded', window.currentHalfFromTimeline(getActiveMatch())||1, null, null)" ${(!matchStarted||pending||pendingCard||pendingCaptain)?'disabled':''}>+ Sofrido</button>
+        <button class="btn btn-gold" onclick="pending={kind:'scored', half: window.currentHalfFromTimeline(getActiveMatch())}; render();" ${(!matchStarted||pending||pendingCard||pendingCaptain||pendingRatings)?'disabled':''}>+ Marcado</button>
+        <button class="btn btn-red" onclick="addGoal('${m.id}', 'conceded', window.currentHalfFromTimeline(getActiveMatch())||1, null, null)" ${(!matchStarted||pending||pendingCard||pendingCaptain||pendingRatings)?'disabled':''}>+ Sofrido</button>
       </div>
       ${matchStarted ? `
         <div style="display:flex; gap:8px; justify-content:center; margin-top:10px;">
-          <button class="card-mini-btn yellow" onclick="pendingCard={color:'Amarelo'}; render()" ${(pending||pendingCard||pendingCaptain)?'disabled':''}>🟨 Amarelo</button>
-          <button class="card-mini-btn red" onclick="pendingCard={color:'Vermelho'}; render()" ${(pending||pendingCard||pendingCaptain)?'disabled':''}>🟥 Vermelho</button>
+          <button class="card-mini-btn yellow" onclick="pendingCard={color:'Amarelo'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings)?'disabled':''}>🟨 Amarelo</button>
+          <button class="card-mini-btn red" onclick="pendingCard={color:'Vermelho'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings)?'disabled':''}>🟥 Vermelho</button>
         </div>
       ` : ''}
       ${dynamicPanel}
@@ -612,36 +703,65 @@ window.uiUpdateSearch = function(val){ matchSearchQuery = val; render(); const e
 function renderCalendario(){
   if(schedulingNew){
     if(!schForm.date) schForm.date = new Date().toISOString().slice(0,10);
+    if(!schForm.games || schForm.games.length===0) schForm.games = [{id: uid(), phase: 'Fase de Grupos', opp: '', date: schForm.date, time: '09:00'}];
+    
     return `
       ${topbarHtml('Agendar Jogo')}
-      <div class="card">
-        <div class="field"><label>Adversário</label><input id="sch-opp" type="text" placeholder="Nome da equipa" value="${schForm.opp}" oninput="schForm.opp=this.value"></div>
-        <div class="grid-btns">
-          <div class="field"><label>Data</label><input id="sch-date" type="date" value="${schForm.date}" oninput="schForm.date=this.value"></div>
-          <div class="field"><label>Hora</label><input id="sch-time" type="time" value="${schForm.time}" oninput="schForm.time=this.value"></div>
-        </div>
-        <div class="field">
-          <label>Local</label>
-          <div class="seg">
-            <div class="seg-btn ${schForm.loc==='casa'?'active':''}" onclick="schForm.loc='casa'; render()">Casa</div>
-            <div class="seg-btn ${schForm.loc==='fora'?'active':''}" onclick="schForm.loc='fora'; render()">Fora</div>
-          </div>
-        </div>
-        <div class="field">
-          <label>Tipo de jogo</label>
-          <div class="seg">
-            <div class="seg-btn ${schForm.type==='amigavel'?'active':''}" onclick="schForm.type='amigavel'; render()">Amigável</div>
-            <div class="seg-btn ${schForm.type==='campeonato'?'active':''}" onclick="schForm.type='campeonato'; render()">Campeonato</div>
-            <div class="seg-btn ${schForm.type==='torneio'?'active':''}" onclick="schForm.type='torneio'; render()">Torneio</div>
-          </div>
-        </div>
-        ${schForm.type === 'torneio' ? `
-        <div class="field" style="margin-top:12px;">
-           <label>Nome do Torneio / Fase</label>
-           <input id="sch-phase" type="text" placeholder="Ex: Torneio Páscoa - Meias" value="${schForm.phase||''}" oninput="schForm.phase=this.value">
-        </div>
-        ` : ''}
+      <div class="seg" style="margin-bottom:16px;">
+        <div class="seg-btn ${!schForm.isTournament?'active':''}" onclick="schForm.isTournament=false; render()">Jogo Único</div>
+        <div class="seg-btn ${schForm.isTournament?'active':''}" onclick="schForm.isTournament=true; render()">Torneio</div>
       </div>
+      
+      ${schForm.isTournament ? `
+        <div class="card">
+          <div class="field"><label>Nome do Torneio</label><input type="text" placeholder="Ex: Torneio de Verão" value="${schForm.tournamentName||''}" oninput="schForm.tournamentName=this.value"></div>
+          <div class="field">
+            <label>Equipamento / Local (Geral)</label>
+            <div class="seg">
+              <div class="seg-btn ${schForm.loc==='casa'?'active':''}" onclick="schForm.loc='casa'; render()">Principal (Casa)</div>
+              <div class="seg-btn ${schForm.loc==='fora'?'active':''}" onclick="schForm.loc='fora'; render()">Alternativo (Fora)</div>
+            </div>
+          </div>
+        </div>
+        <div class="section-title">Jogos do Torneio</div>
+        ${schForm.games.map((g, i) => `
+          <div class="card" style="background:var(--surface-2); border-color:var(--gold-dim); margin-bottom:8px; padding:12px;">
+             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <b style="font-size:13px; color:var(--gold);">Jogo ${i+1}</b>
+                <button class="quick-del" onclick="uiRemoveTournamentGame('${g.id}')">✕</button>
+             </div>
+             <div class="field" style="margin-bottom:8px;"><input type="text" placeholder="Fase (ex: Fase de Grupos)" value="${g.phase}" oninput="uiUpdateTournamentGame('${g.id}', 'phase', this.value)"></div>
+             <div class="field" style="margin-bottom:8px;"><input type="text" placeholder="Adversário" value="${g.opp}" oninput="uiUpdateTournamentGame('${g.id}', 'opp', this.value)"></div>
+             <div class="grid-btns">
+                <div class="field" style="margin-bottom:0;"><input type="date" value="${g.date}" oninput="uiUpdateTournamentGame('${g.id}', 'date', this.value)"></div>
+                <div class="field" style="margin-bottom:0;"><input type="time" value="${g.time}" oninput="uiUpdateTournamentGame('${g.id}', 'time', this.value)"></div>
+             </div>
+          </div>
+        `).join('')}
+        <button class="btn btn-outline" style="width:100%; margin-bottom:16px; border-style:dashed;" onclick="uiAddTournamentGame()">+ Adicionar Jogo ao Torneio</button>
+      ` : `
+        <div class="card">
+          <div class="field"><label>Adversário</label><input id="sch-opp" type="text" placeholder="Nome da equipa" value="${schForm.opp}" oninput="schForm.opp=this.value"></div>
+          <div class="grid-btns">
+            <div class="field"><label>Data</label><input id="sch-date" type="date" value="${schForm.date}" oninput="schForm.date=this.value"></div>
+            <div class="field"><label>Hora</label><input id="sch-time" type="time" value="${schForm.time}" oninput="schForm.time=this.value"></div>
+          </div>
+          <div class="field">
+            <label>Equipamento / Local</label>
+            <div class="seg">
+              <div class="seg-btn ${schForm.loc==='casa'?'active':''}" onclick="schForm.loc='casa'; render()">Principal (Casa)</div>
+              <div class="seg-btn ${schForm.loc==='fora'?'active':''}" onclick="schForm.loc='fora'; render()">Alternativo (Fora)</div>
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Tipo de jogo</label>
+            <div class="seg">
+              <div class="seg-btn ${schForm.type==='amigavel'?'active':''}" onclick="schForm.type='amigavel'; render()">Amigável</div>
+              <div class="seg-btn ${schForm.type==='campeonato'?'active':''}" onclick="schForm.type='campeonato'; render()">Campeonato</div>
+            </div>
+          </div>
+        </div>
+      `}
       <button class="btn btn-gold" style="width:100%; margin-bottom:10px;" onclick="uiSaveSchedule()">Guardar Agendamento</button>
       <button class="btn btn-outline" style="width:100%;" onclick="schedulingNew=false; render()">Cancelar</button>
     `;
@@ -649,7 +769,7 @@ function renderCalendario(){
 
   return `
     ${topbarHtml('Calendário')}
-    <button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="schForm={opp:'', date:'', time:'09:00', type:'amigavel', loc:'casa', phase:''}; schedulingNew=true; render()">+ Agendar Novo Jogo</button>
+    <button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="schForm={isTournament:false, opp:'', date:'', time:'09:00', type:'amigavel', loc:'casa', phase:'', tournamentName:'', games:[]}; schedulingNew=true; render()">+ Agendar Novo Jogo</button>
     ${state.schedule.length ? state.schedule.map(s => {
       const open = expandedSchedule === s.id;
       const locLabel = s.location === 'casa' ? 'Casa' : 'Fora';
@@ -658,13 +778,11 @@ function renderCalendario(){
           <div class="match-head-row">
             <div class="match-head" style="flex:1;">
               <div>
-                <div class="opp">${s.opponent} <span class="badge-loc ${locLabel.toLowerCase()}">${locLabel}</span></div>
+                <div class="opp">${s.type==='torneio' ? `<span style="color:var(--gold); font-size:11px; display:block; margin-bottom:2px; text-transform:uppercase; letter-spacing:0.05em; font-family:'Oswald';">🏆 ${s.tournamentName}${s.phase?' - '+s.phase:''}</span>` : ''}${s.opponent} <span class="badge-loc ${locLabel.toLowerCase()}">${locLabel}</span></div>
                 <div class="date">${s.date.split('-').reverse().join('/')} às ${s.time}</div>
               </div>
             </div>
-            <button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); duplicateSchedule('${s.id}')" title="Duplicar">
-              <svg style="width:16px; height:16px; transform:translateY(2px);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            </button>
+            <button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); duplicateSchedule('${s.id}')" title="Duplicar">📑</button>
             <button class="quick-del" style="color:var(--gold);" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')" title="Iniciar">▶</button>
             <button class="quick-del" onclick="event.stopPropagation(); askConfirm('Apagar este agendamento?', () => deleteSchedule('${s.id}'))" title="Apagar">🗑</button>
           </div>
@@ -700,11 +818,11 @@ window.copyCallup = function(schId){
   const meetTime = String(d.getHours()).padStart(2,'0') + 'h' + String(d.getMinutes()).padStart(2,'0');
 
   let compLabel = '';
-  if(s.type === 'campeonato') compLabel = 'Campeonato Oficial';
-  else if(s.type === 'torneio') compLabel = `Torneio${s.phase ? ' - ' + s.phase : ''}`;
+  if(s.type === 'torneio') compLabel = `Torneio: ${s.tournamentName}${s.phase ? ' - ' + s.phase : ''}`;
+  else if(s.type === 'campeonato') compLabel = 'Campeonato Oficial';
   else compLabel = 'Amigável';
 
-  let text = `⚽ *PRÓXIMO JOGO*\n🆚 Adversário: ${s.opponent}\n📅 Data: ${dateStr}\n🏟️ Local: ${s.location==='casa'?'Em Casa':'Fora'}\n🏆 Competição: ${compLabel}\n⏰ *Hora de Comparência: ${meetTime}*\n\n📋 *CONVOCADOS:*\n`;
+  let text = `⚽ *PRÓXIMO JOGO*\n🆚 Adversário: ${s.opponent}\n📅 Data: ${dateStr}\n🏟️ Equipamento/Local: ${s.location==='casa'?'Principal':'Alternativo'}\n🏆 Competição: ${compLabel}\n⏰ *Hora de Comparência: ${meetTime}*\n\n📋 *CONVOCADOS:*\n`;
   
   const called = eligiblePlayers().filter(p => s.callup.includes(p.id));
   if(called.length === 0) text += "- Nenhum selecionado ainda\n";
@@ -800,17 +918,24 @@ function renderJogos(){
       
       let typeLabel = '';
       if(m.type === 'campeonato') typeLabel = `Campeonato${m.phase ? ' · '+m.phase : ''}`;
-      else if(m.type === 'torneio') typeLabel = `Torneio${m.phase ? ' · '+m.phase : ''}`;
+      else if(m.type === 'torneio') typeLabel = `🏆 ${m.tournamentName||'Torneio'}${m.phase ? ' · '+m.phase : ''}`;
       else typeLabel = 'Amigável';
       
       const locLabel = (m.location||'casa') === 'casa' ? 'Casa' : 'Fora';
+      
+      let ratingsHtml = '';
+      if(m.ratings && Object.keys(m.ratings).length > 0){
+         const ratedPlayers = Object.entries(m.ratings).map(([id, r])=>({name: playerName(id), r})).sort((a,b)=>b.r - a.r);
+         ratingsHtml = `<div class="notes-readonly" style="margin-top:10px;"><b>⭐ Avaliações de Jogadores:</b><br>${ratedPlayers.map(p => `<span style="color:var(--gold);">${p.r}★</span> - ${p.name}`).join('<br>')}</div>`;
+      }
+
       return `
         <div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('textarea')){ expandedMatch=expandedMatch==='${m.id}'?null:'${m.id}'; render(); }">
           <div class="match-head-row">
             <div class="match-head" style="flex:1;">
               <div>
                 <div class="opp">${m.opponent} ${!m.finished ? '<span class="badge-open">Em curso</span>' : ''}<span class="badge-loc ${locLabel.toLowerCase()}">${locLabel}</span></div>
-                <div class="date">${m.date} <span class="badge-type">${typeLabel}</span></div>
+                <div class="date">${m.date} <span class="badge-type" style="${m.type==='torneio'?'color:var(--gold); border-color:var(--gold-dim);':''}">${typeLabel}</span></div>
               </div>
               <div class="match-score"><span class="s">${scored}</span> – <span class="c">${conceded}</span></div>
             </div>
@@ -820,6 +945,8 @@ function renderJogos(){
             <div class="goal-list">
               ${m.capitao ? `<div style="font-size:11px; color:var(--green); font-family:'Oswald'; margin-bottom:8px; text-transform:uppercase;">© Capitão: ${playerName(m.capitao)}</div>` : ''}
               ${matchNarrativeHtml(m)}
+              
+              ${ratingsHtml}
               
               ${m.notes ? `<div class="notes-readonly" style="margin-top:10px;">📝 ${m.notes}</div>` : ''}
               
@@ -975,6 +1102,13 @@ window.exportReportTxt = function(){
       if(g.type==='scored') lines.push(`  ⚽ ${g.minute!=null?g.minute+"' ":""}${g.half}ªP - ${playerName(g.scorerId)}${g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''}`);
       else lines.push(`  🥅 ${g.minute!=null?g.minute+"' ":""}${g.half}ªP - Sofrido`);
     });
+    
+    if(m.ratings && Object.keys(m.ratings).length > 0){
+        const ratedPlayers = Object.entries(m.ratings).map(([id, r])=>({name: playerName(id), r})).sort((a,b)=>b.r - a.r);
+        lines.push(`  Avaliações:`);
+        ratedPlayers.forEach(p => lines.push(`    ${p.r}★ - ${p.name}`));
+    }
+    
     if(m.notes) lines.push(`  Notas: ${m.notes}`);
   });
   

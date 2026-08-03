@@ -194,7 +194,7 @@ let seasonFilter = 'todas';
 let matchSearchQuery = '';
 let modalConfig = null;
 let expandedPlayer = null;
-let trainingForm = null;
+let trainingForm = null; // {absences: [], notes: ''}
 let expandedTraining = null;
 
 let schedulingNew = false;
@@ -283,12 +283,20 @@ window.uiSaveSchedule = function(){
   saveState(); render(); showToast("Jogo agendado!");
 };
 
+window.duplicateSchedule = function(id){
+  const s = state.schedule.find(x=>x.id===id);
+  if(s){
+    schForm = { opp: '', date: s.date, time: s.time, type: s.type, phase: s.phase, loc: s.location };
+    schedulingNew = true; render();
+  }
+};
+
 window.startScheduledMatch = function(schedId){
   const s = state.schedule.find(x => x.id === schedId);
   if(!s) return;
   if(getActiveMatch()) { showToast("Já tens um jogo em curso!"); return; }
   state.matches.unshift({
-    id: uid(), opponent: s.opponent, date: s.date, type: s.type, phase: s.phase || '', season: s.season || defaultSeason(), location: s.location,
+    id: uid(), opponent: s.opponent, date: s.date, type: s.type, phase: s.phase || '', season: s.season || defaultSeason(), location: s.location, originalSchedule: s,
     finished:false, goals: [], cards: [], capitao: null, timer: { isRunning:false, elapsedMs:0, lastStartTs:null }
   });
   state.schedule = state.schedule.filter(x => x.id !== schedId);
@@ -328,17 +336,47 @@ window.currentHalfFromTimeline = function(m){
 window.uiFinishMatch = function(){
   const m = getActiveMatch(); const notes = (document.getElementById('notes-input') || {}).value;
   if(!m) return;
-  const finalize = () => {
+  if(notes !== undefined) m.notes = notes;
+  
+  if(!m.timeline || !m.timeline.kickoff) {
+     modalConfig = { type: 'finishMatch' };
+     document.getElementById('modal-root').innerHTML = renderModalHTML();
+  } else {
     m.finished = true;
-    if(notes !== undefined) m.notes = notes;
-    if(!m.timeline) m.timeline = {};
     if(!m.timeline.fullTime) m.timeline.fullTime = String(new Date().getHours()).padStart(2,'0') + ':' + String(new Date().getMinutes()).padStart(2,'0');
     if(m.timer && m.timer.isRunning) window.pauseMatchTimer(m.id);
     saveState(); navigateTo('jogos');
-  };
-  
-  if(!m.timeline || !m.timeline.kickoff) window.askConfirm('Ainda não iniciaste a cronologia deste jogo. Queres mesmo terminar?', finalize);
-  else finalize();
+  }
+};
+
+window.confirmFinishMatch = function(action) {
+    const m = getActiveMatch();
+    if(!m) return;
+    if(action === 'cancel') {
+        closeModal();
+    } else if(action === 'save') {
+        m.finished = true;
+        if(!m.timeline) m.timeline = {};
+        if(!m.timeline.fullTime) m.timeline.fullTime = String(new Date().getHours()).padStart(2,'0') + ':' + String(new Date().getMinutes()).padStart(2,'0');
+        if(m.timer && m.timer.isRunning) window.pauseMatchTimer(m.id);
+        saveState();
+        closeModal();
+        navigateTo('jogos');
+    } else if(action === 'discard') {
+        if(m.originalSchedule) {
+            state.schedule.push(m.originalSchedule);
+            state.schedule.sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time));
+            state.matches = state.matches.filter(x => x.id !== m.id);
+            saveState();
+            closeModal();
+            navigateTo('calendario');
+        } else {
+            state.matches = state.matches.filter(x => x.id !== m.id);
+            saveState();
+            closeModal();
+            goHome();
+        }
+    }
 };
 
 window.updateMatchNotes = function(id, val){ const m = state.matches.find(m=>m.id===id); if(m){ m.notes = val; saveState(); } };
@@ -375,6 +413,20 @@ window.confirmModal = function(){ const cb = modalConfig ? modalConfig.onConfirm
 
 function renderModalHTML(){
   if(!modalConfig) return '';
+  if(modalConfig.type === 'finishMatch') {
+     return `
+    <div class="modal-overlay">
+      <div class="modal-card">
+        <p style="font-weight:600; font-size:16px;">Jogo não iniciado</p>
+        <p style="font-size:13px;">O cronómetro ainda não foi iniciado. Como pretendes fechar o jogo?</p>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <button class="btn btn-gold" onclick="confirmFinishMatch('save')">Gravar Jogo (Terminar)</button>
+          <button class="btn btn-red" onclick="confirmFinishMatch('discard')">Sair Sem Gravar ${getActiveMatch()?.originalSchedule ? '<br><span style="font-size:10px;">(Devolver ao Calendário)</span>' : ''}</button>
+          <button class="btn btn-outline" onclick="confirmFinishMatch('cancel')">Cancelar (Ficar no Jogo)</button>
+        </div>
+      </div>
+    </div>`;
+  }
   return `
     <div class="modal-overlay">
       <div class="modal-card">
@@ -548,7 +600,7 @@ function renderJogo(){
     <div class="card" style="margin-top:16px;">
       <div class="field" style="margin-bottom:0;">
         <label>Notas finais do jogo</label>
-        <textarea id="notes-input" placeholder="Ex: notas do jogo..." onchange="updateMatchNotes('${m.id}', this.value)">${m.notes || ''}</textarea>
+        <textarea id="notes-input" placeholder="Ex: notas do jogo...">${m.notes || ''}</textarea>
       </div>
     </div>
     <button class="btn btn-ghost" style="width:100%; margin-top:6px;" onclick="uiFinishMatch()">Terminar Jogo</button>
@@ -610,8 +662,11 @@ function renderCalendario(){
                 <div class="date">${s.date.split('-').reverse().join('/')} às ${s.time}</div>
               </div>
             </div>
-            <button class="quick-del" style="color:var(--gold);" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')">▶</button>
-            <button class="quick-del" onclick="event.stopPropagation(); askConfirm('Apagar este agendamento?', () => deleteSchedule('${s.id}'))">🗑</button>
+            <button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); duplicateSchedule('${s.id}')" title="Duplicar">
+              <svg style="width:16px; height:16px; transform:translateY(2px);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+            <button class="quick-del" style="color:var(--gold);" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')" title="Iniciar">▶</button>
+            <button class="quick-del" onclick="event.stopPropagation(); askConfirm('Apagar este agendamento?', () => deleteSchedule('${s.id}'))" title="Apagar">🗑</button>
           </div>
           ${open ? `
             <div class="goal-list">
@@ -639,7 +694,6 @@ window.copyCallup = function(schId){
   const s = state.schedule.find(x=>x.id===schId); if(!s) return;
   const dateStr = s.date.split('-').reverse().join('/');
   
-  // Calcular hora de comparência (1h antes)
   const timeParts = s.time.split(':');
   let d = new Date(); d.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]));
   d.setHours(d.getHours() - 1);
@@ -661,7 +715,7 @@ window.copyCallup = function(schId){
 
 window.uiSaveTraining = function(){
   const date = (document.getElementById('tr-date-input') || {}).value || '';
-  const notes = (document.getElementById('tr-notes-input') || {}).value || '';
+  const notes = trainingForm.notes || '';
   state.trainings.unshift({ id: uid(), date, notes, absences: [...trainingForm.absences] });
   trainingForm = null; saveState(); render(); showToast('Treino guardado ✓');
 };
@@ -679,7 +733,7 @@ function renderTreinos(){
       ${topbarHtml('Novo Treino')}
       <div class="card">
         <div class="field"><label>Data</label><input id="tr-date-input" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
-        <div class="field" style="margin-bottom:0;"><label>Notas / Foco</label><textarea id="tr-notes-input" placeholder="Ex: trabalho de finalização..."></textarea></div>
+        <div class="field" style="margin-bottom:0;"><label>Notas / Foco</label><textarea id="tr-notes-input" placeholder="Ex: trabalho de finalização..." oninput="trainingForm.notes=this.value">${trainingForm.notes || ''}</textarea></div>
       </div>
       <div class="card">
         <div class="panel-title" style="margin-bottom:6px;">Faltas</div>
@@ -693,7 +747,7 @@ function renderTreinos(){
 
   return `
     ${topbarHtml('Treinos')}
-    <button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="trainingForm={absences:[]}; render()">+ Novo Treino</button>
+    <button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="trainingForm={absences:[], notes:''}; render()">+ Novo Treino</button>
     ${state.trainings.length ? state.trainings.map(t=>{
       const open = expandedTraining === t.id;
       const absentNames = (t.absences||[]).map(playerName);

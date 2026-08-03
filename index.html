@@ -311,7 +311,6 @@ window.setMatchTimeMark = function(matchId, key){
   if(key === 'kickoff' || key === 'secondHalfStart'){
     m.timer.isRunning = true; m.timer.lastStartTs = Date.now();
   } else if(key === 'halftime'){
-    // Zera o cronómetro ao chegar ao intervalo
     m.timer.isRunning = false; m.timer.elapsedMs = 0; 
   } else if(key === 'fullTime'){
     if(m.timer.isRunning){ m.timer.elapsedMs += (Date.now() - m.timer.lastStartTs); m.timer.isRunning = false; }
@@ -338,7 +337,6 @@ window.uiFinishMatch = function(){
     saveState(); navigateTo('jogos');
   };
   
-  // Verifica se o apito inicial já foi dado. Se não foi, pergunta.
   if(!m.timeline || !m.timeline.kickoff) window.askConfirm('Ainda não iniciaste a cronologia deste jogo. Queres mesmo terminar?', finalize);
   else finalize();
 };
@@ -550,7 +548,7 @@ function renderJogo(){
     <div class="card" style="margin-top:16px;">
       <div class="field" style="margin-bottom:0;">
         <label>Notas finais do jogo</label>
-        <textarea id="notes-input" placeholder="Ex: equipa cansada na 2ª parte...">${m.notes || ''}</textarea>
+        <textarea id="notes-input" placeholder="Ex: notas do jogo..." onchange="updateMatchNotes('${m.id}', this.value)">${m.notes || ''}</textarea>
       </div>
     </div>
     <button class="btn btn-ghost" style="width:100%; margin-top:6px;" onclick="uiFinishMatch()">Terminar Jogo</button>
@@ -843,6 +841,73 @@ window.updatePlayerPositions = function(id, val){ const p=state.roster.find(x=>x
 window.updatePlayerBirthDate = function(id, val){ const p=state.roster.find(x=>x.id===id); if(p){p.birthDate=val||null; saveState(); render();} };
 window.removePlayer = function(id){ const p=state.roster.find(x=>x.id===id); if(p){ p.active=false; saveState(); render(); } };
 
+window.exportData = function(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `registo-jogos-backup-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  showToast('Backup exportado ✓');
+};
+
+window.importData = function(input){
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const parsed = JSON.parse(e.target.result);
+      if(!parsed.roster || !parsed.matches) throw new Error('formato inválido');
+      askConfirm('Isto substitui todos os dados atuais pelo backup. Continuar?', ()=>{
+        state = parsed;
+        if(!state.schedule) state.schedule = [];
+        if(!state.trainings) state.trainings = [];
+        saveState(); render(); showToast('Backup importado ✓');
+      });
+    }catch(err){ showToast('Ficheiro inválido ⚠'); }
+  };
+  reader.readAsText(file); input.value = '';
+};
+
+window.exportReportTxt = function(){
+  let lines = [];
+  lines.push('REGISTO DE JOGOS — RELATÓRIO');
+  lines.push(`Gerado em: ${new Date().toLocaleDateString('pt-PT')}`);
+  lines.push('='.repeat(40)); lines.push('');
+  
+  const s = computeStats('todos', 'todas');
+  lines.push(`Golos marcados: ${s.scored}`);
+  lines.push(`Golos sofridos: ${s.conceded}`);
+  lines.push('');
+  
+  lines.push('MARCADORES');
+  if(s.scorers.length) s.scorers.forEach(sc => lines.push(`  ${sc.name}: ${sc.count}`));
+  else lines.push('  (sem golos)');
+  lines.push('');
+  
+  lines.push('ASSISTÊNCIAS');
+  if(s.assisters.length) s.assisters.forEach(a => lines.push(`  ${a.name}: ${a.count}`));
+  else lines.push('  (sem assistências)');
+  lines.push('');
+  
+  lines.push('='.repeat(40));
+  lines.push('HISTÓRICO DE JOGOS');
+  state.matches.forEach(m=>{
+    const sc = m.goals.filter(g=>g.type==='scored').length;
+    const co = m.goals.filter(g=>g.type==='conceded').length;
+    lines.push(`\n[${m.date}] vs ${m.opponent} (${m.location==='casa'?'Casa':'Fora'}) | Resultado: ${sc}-${co}`);
+    m.goals.forEach(g=>{
+      if(g.type==='scored') lines.push(`  ⚽ ${g.minute!=null?g.minute+"' ":""}${g.half}ªP - ${playerName(g.scorerId)}${g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''}`);
+      else lines.push(`  🥅 ${g.minute!=null?g.minute+"' ":""}${g.half}ªP - Sofrido`);
+    });
+    if(m.notes) lines.push(`  Notas: ${m.notes}`);
+  });
+  
+  const blob = new Blob([lines.join('\n')], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `relatorio-jogos-${new Date().toISOString().slice(0,10)}.txt`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  showToast('Relatório TXT exportado ✓');
+};
+
 function renderPlantel(){
   const activeRoster = eligiblePlayers();
   return `
@@ -876,6 +941,17 @@ function renderPlantel(){
         <input id="new-player-input" type="text" placeholder="Nome do jogador">
         <button onclick="uiAddPlayer()">+</button>
       </div>
+    </div>
+
+    <div class="section-title">Cópia de Segurança</div>
+    <div class="card">
+      <div style="font-size:12px; color:var(--muted); margin-bottom:10px; line-height: 1.4;">O <b>JSON</b> é o backup para recuperar dados. O <b>TXT</b> é apenas um relatório para leres ou imprimires.</div>
+      <div class="btn-row" style="margin-top:0;">
+        <button class="btn btn-gold" onclick="exportData()">Exportar JSON</button>
+        <button class="btn btn-outline" onclick="document.getElementById('import-file-input').click()">Importar JSON</button>
+      </div>
+      <button class="btn btn-ghost" style="width:100%; margin-top:10px;" onclick="exportReportTxt()">Exportar Relatório (TXT)</button>
+      <input type="file" id="import-file-input" accept=".json,application/json" style="display:none;" onchange="importData(this)">
     </div>
   `;
 }

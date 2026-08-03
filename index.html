@@ -198,7 +198,7 @@ let trainingForm = null;
 let expandedTraining = null;
 
 let schedulingNew = false;
-let schForm = { opp: '', date: '', time: '09:00', type: 'amigavel', loc: 'casa' };
+let schForm = { opp: '', date: '', time: '09:00', type: 'amigavel', loc: 'casa', phase: '' };
 
 const STORAGE_KEY = 'coach-app-data-v1';
 const usingClaudeStorage = (typeof window.storage !== 'undefined');
@@ -276,7 +276,7 @@ window.uiSaveSchedule = function(){
   if(!schForm.opp.trim()){ showToast("Insere um adversário!"); return; }
   state.schedule.push({
     id: uid(), opponent: schForm.opp.trim(), date: schForm.date || new Date().toISOString().slice(0,10), time: schForm.time || '09:00',
-    type: schForm.type || 'amigavel', phase: '', season: defaultSeason(), location: schForm.loc || 'casa', callup: []
+    type: schForm.type || 'amigavel', phase: (schForm.type==='torneio' ? (schForm.phase||'').trim() : ''), season: defaultSeason(), location: schForm.loc || 'casa', callup: []
   });
   state.schedule.sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time));
   schedulingNew = false;
@@ -580,8 +580,15 @@ function renderCalendario(){
           <div class="seg">
             <div class="seg-btn ${schForm.type==='amigavel'?'active':''}" onclick="schForm.type='amigavel'; render()">Amigável</div>
             <div class="seg-btn ${schForm.type==='campeonato'?'active':''}" onclick="schForm.type='campeonato'; render()">Campeonato</div>
+            <div class="seg-btn ${schForm.type==='torneio'?'active':''}" onclick="schForm.type='torneio'; render()">Torneio</div>
           </div>
         </div>
+        ${schForm.type === 'torneio' ? `
+        <div class="field" style="margin-top:12px;">
+           <label>Nome do Torneio / Fase</label>
+           <input id="sch-phase" type="text" placeholder="Ex: Torneio Páscoa - Meias" value="${schForm.phase||''}" oninput="schForm.phase=this.value">
+        </div>
+        ` : ''}
       </div>
       <button class="btn btn-gold" style="width:100%; margin-bottom:10px;" onclick="uiSaveSchedule()">Guardar Agendamento</button>
       <button class="btn btn-outline" style="width:100%;" onclick="schedulingNew=false; render()">Cancelar</button>
@@ -590,7 +597,7 @@ function renderCalendario(){
 
   return `
     ${topbarHtml('Calendário')}
-    <button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="schForm={opp:'', date:'', time:'09:00', type:'amigavel', loc:'casa'}; schedulingNew=true; render()">+ Agendar Novo Jogo</button>
+    <button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="schForm={opp:'', date:'', time:'09:00', type:'amigavel', loc:'casa', phase:''}; schedulingNew=true; render()">+ Agendar Novo Jogo</button>
     ${state.schedule.length ? state.schedule.map(s => {
       const open = expandedSchedule === s.id;
       const locLabel = s.location === 'casa' ? 'Casa' : 'Fora';
@@ -638,7 +645,12 @@ window.copyCallup = function(schId){
   d.setHours(d.getHours() - 1);
   const meetTime = String(d.getHours()).padStart(2,'0') + 'h' + String(d.getMinutes()).padStart(2,'0');
 
-  let text = `⚽ *PRÓXIMO JOGO*\n🆚 Adversário: ${s.opponent}\n📅 Data: ${dateStr}\n🏟️ Local: ${s.location==='casa'?'Em Casa':'Fora'}\n🏆 Campeonato: ${s.type==='campeonato'?'Oficial':'Amigável'}\n⏰ *Hora de Comparência: ${meetTime}*\n\n📋 *CONVOCADOS:*\n`;
+  let compLabel = '';
+  if(s.type === 'campeonato') compLabel = 'Campeonato Oficial';
+  else if(s.type === 'torneio') compLabel = `Torneio${s.phase ? ' - ' + s.phase : ''}`;
+  else compLabel = 'Amigável';
+
+  let text = `⚽ *PRÓXIMO JOGO*\n🆚 Adversário: ${s.opponent}\n📅 Data: ${dateStr}\n🏟️ Local: ${s.location==='casa'?'Em Casa':'Fora'}\n🏆 Competição: ${compLabel}\n⏰ *Hora de Comparência: ${meetTime}*\n\n📋 *CONVOCADOS:*\n`;
   
   const called = eligiblePlayers().filter(p => s.callup.includes(p.id));
   if(called.length === 0) text += "- Nenhum selecionado ainda\n";
@@ -731,10 +743,15 @@ function renderJogos(){
       const scored = m.goals.filter(g=>g.type==='scored').length;
       const conceded = m.goals.filter(g=>g.type==='conceded').length;
       const open = expandedMatch === m.id;
-      const typeLabel = m.type === 'campeonato' ? `Campeonato${m.phase ? ' · '+m.phase : ''}` : 'Amigável';
+      
+      let typeLabel = '';
+      if(m.type === 'campeonato') typeLabel = `Campeonato${m.phase ? ' · '+m.phase : ''}`;
+      else if(m.type === 'torneio') typeLabel = `Torneio${m.phase ? ' · '+m.phase : ''}`;
+      else typeLabel = 'Amigável';
+      
       const locLabel = (m.location||'casa') === 'casa' ? 'Casa' : 'Fora';
       return `
-        <div class="card match-item" onclick="if(!event.target.closest('button')){ expandedMatch=expandedMatch==='${m.id}'?null:'${m.id}'; render(); }">
+        <div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('textarea')){ expandedMatch=expandedMatch==='${m.id}'?null:'${m.id}'; render(); }">
           <div class="match-head-row">
             <div class="match-head" style="flex:1;">
               <div>
@@ -795,11 +812,13 @@ function renderStats(){
   const s = computeStats(statsFilter, seasonFilter);
   return `
     ${topbarHtml('Estatísticas')}
-    <div class="seg">
+    <div class="seg" style="margin-bottom: 16px;">
       <div class="seg-btn ${statsFilter==='todos'?'active':''}" onclick="statsFilter='todos'; render()">Todos</div>
       <div class="seg-btn ${statsFilter==='amigavel'?'active':''}" onclick="statsFilter='amigavel'; render()">Amigáveis</div>
-      <div class="seg-btn ${statsFilter==='campeonato'?'active':''}" onclick="statsFilter='campeonato'; render()">Campeonato</div>
+      <div class="seg-btn ${statsFilter==='campeonato'?'active':''}" onclick="statsFilter='campeonato'; render()">Camp.</div>
+      <div class="seg-btn ${statsFilter==='torneio'?'active':''}" onclick="statsFilter='torneio'; render()">Torneios</div>
     </div>
+    
     <div class="section-title" style="margin-top:16px;">Resultados Globais</div>
     <div class="stat-grid" style="grid-template-columns:1fr 1fr 1fr;">
       <div class="stat-box"><div class="num" style="color:var(--gold)">${s.wins}</div><div class="lbl">Vitórias</div></div>
@@ -896,7 +915,8 @@ window.exportReportTxt = function(){
   state.matches.forEach(m=>{
     const sc = m.goals.filter(g=>g.type==='scored').length;
     const co = m.goals.filter(g=>g.type==='conceded').length;
-    lines.push(`\n[${m.date}] vs ${m.opponent} (${m.location==='casa'?'Casa':'Fora'}) | Resultado: ${sc}-${co}`);
+    let tLbl = m.type==='campeonato'?'Camp.':(m.type==='torneio'?'Torneio':'Amig.');
+    lines.push(`\n[${m.date}] vs ${m.opponent} (${tLbl} - ${m.location==='casa'?'Casa':'Fora'}) | Resultado: ${sc}-${co}`);
     m.goals.forEach(g=>{
       if(g.type==='scored') lines.push(`  ⚽ ${g.minute!=null?g.minute+"' ":""}${g.half}ªP - ${playerName(g.scorerId)}${g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''}`);
       else lines.push(`  🥅 ${g.minute!=null?g.minute+"' ":""}${g.half}ªP - Sofrido`);

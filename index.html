@@ -835,8 +835,8 @@ window.copyCallup = function(schId){
   else if(s.type === 'campeonato') compLabel = 'Campeonato Oficial';
   else compLabel = 'Amigável';
 
-  let locText = s.location === 'casa' ? '*"Casa"*' : '*"Fora"*';
-  let text = `⚽ *PRÓXIMO JOGO*\n🆚 Adversário: ${s.opponent} ${locText}\n📅 Data: ${dateStr}\n🏆 Competição: ${compLabel}\n⏰ *Hora de Comparência: ${meetTime}*\n\n📋 *CONVOCADOS:*\n`;
+  let locText = s.location === 'casa' ? '*(Casa)*' : '*"Fora"*';
+  let text = `⚽ *PRÓXIMO JOGO*\n🆚 ${s.opponent} ${locText}\n📅 ${dateStr}\n🏆 ${compLabel}\n⏰ *Hora de Comparência: ${meetTime}*\n\n📋 *CONVOCADOS:*\n`;
   
   const called = eligiblePlayers().filter(p => s.callup.includes(p.id));
   if(called.length === 0) text += "- Nenhum selecionado ainda\n";

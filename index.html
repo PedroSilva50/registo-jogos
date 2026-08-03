@@ -352,12 +352,22 @@ window.startScheduledMatch = function(schedId){
   const s = state.schedule.find(x => x.id === schedId);
   if(!s) return;
   if(getActiveMatch()) { showToast("Já tens um jogo em curso!"); return; }
-  state.matches.unshift({
-    id: uid(), opponent: s.opponent, date: s.date, type: s.type, phase: s.phase || '', season: s.season || defaultSeason(), location: s.location, originalSchedule: s, tournamentName: s.tournamentName || '',
-    finished:false, goals: [], cards: [], ratings: {}, capitao: null, timer: { isRunning:false, elapsedMs:0, lastStartTs:null }
-  });
-  state.schedule = state.schedule.filter(x => x.id !== schedId);
-  saveState(); navigateTo('jogo');
+
+  const doStart = () => {
+    state.matches.unshift({
+      id: uid(), opponent: s.opponent, date: s.date, type: s.type, phase: s.phase || '', season: s.season || defaultSeason(), location: s.location, originalSchedule: s, tournamentName: s.tournamentName || '',
+      finished:false, goals: [], cards: [], ratings: {}, capitao: null, timer: { isRunning:false, elapsedMs:0, lastStartTs:null }
+    });
+    state.schedule = state.schedule.filter(x => x.id !== schedId);
+    saveState(); navigateTo('jogo');
+  };
+
+  // Se não for o 1º agendamento da lista (cronológico), pede confirmação
+  if (state.schedule.length > 1 && state.schedule[0].id !== schedId) {
+      askConfirm('Atenção: Este jogo não é o primeiro da lista de agendamentos. Tens a certeza que queres iniciar este jogo fora de ordem?', doStart);
+  } else {
+      doStart();
+  }
 };
 
 window.pauseMatchTimer = function(matchId){
@@ -581,26 +591,7 @@ function renderJogo(){
   const locLabel = (m.location||'casa') === 'casa' ? 'Casa' : 'Fora';
 
   let dynamicPanel = '';
-  if(pendingRatings){
-    dynamicPanel = `
-      <div class="panel" style="border-color:var(--gold);">
-        <div class="panel-title" style="color:var(--gold);">Avaliar Jogadores</div>
-        <div style="display:flex; flex-direction:column; gap:8px; max-height:260px; overflow-y:auto; padding-right:4px;">
-          ${eligiblePlayers().map(p => {
-             const r = (m.ratings && m.ratings[p.id]) || 0;
-             let starsHtml = '';
-             for(let i=1; i<=5; i++){
-               starsHtml += `<span style="font-size:24px; line-height:1; cursor:pointer; margin:0 2px; color:${i<=r ? 'var(--gold)' : 'var(--line)'};" onclick="setRating('${m.id}', '${p.id}', ${i})">★</span>`;
-             }
-             return `<div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:6px; border-bottom:1px solid var(--line);">
-               <span style="font-size:13px;">${p.number ? `${p.number} - ` : ''}${p.name}</span>
-               <div style="display:flex; align-items:center;">${starsHtml}</div>
-             </div>`;
-          }).join('')}
-        </div>
-        <button class="btn btn-outline" style="width:100%; margin-top:12px;" onclick="pendingRatings=false; render()">Fechar (Gravado)</button>
-      </div>`;
-  } else if(pendingCaptain){
+  if(pendingCaptain){
     let captainChips = eligiblePlayers().length ? eligiblePlayers().map(p=>`<div class="chip chip-sm ${m.capitao===p.id?'active-green':''}" onclick="setCaptain('${m.id}','${p.id}')">${p.name}</div>`).join('') : '<div class="empty" style="grid-column:1/-1;">Sem jogadores.</div>';
     dynamicPanel = `
       <div class="panel" style="border-color:var(--gold);">
@@ -641,6 +632,30 @@ function renderJogo(){
       </div>`;
   }
 
+  let ratingsPanel = '';
+  if(pendingRatings){
+      ratingsPanel = `
+        <div style="margin-bottom:12px; padding:10px; background:var(--surface-2); border-radius:8px; border:1px solid var(--gold);">
+          <div class="panel-title" style="color:var(--gold); margin-bottom:8px;">Avaliar Jogadores</div>
+          <div style="display:flex; flex-direction:column; gap:8px; max-height:260px; overflow-y:auto; padding-right:4px;">
+            ${eligiblePlayers().map(p => {
+               const r = (m.ratings && m.ratings[p.id]) || 0;
+               let starsHtml = '';
+               for(let i=1; i<=5; i++){
+                 starsHtml += `<span style="font-size:24px; line-height:1; cursor:pointer; margin:0 2px; color:${i<=r ? 'var(--gold)' : 'var(--line)'};" onclick="setRating('${m.id}', '${p.id}', ${i})">★</span>`;
+               }
+               return `<div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:6px; border-bottom:1px solid var(--line);">
+                 <span style="font-size:13px;">${p.number ? `${p.number} - ` : ''}${p.name}</span>
+                 <div style="display:flex; align-items:center;">${starsHtml}</div>
+               </div>`;
+            }).join('')}
+          </div>
+          <button class="btn btn-outline" style="width:100%; margin-top:12px;" onclick="pendingRatings=false; render()">Fechar Avaliações</button>
+        </div>`;
+  } else {
+       ratingsPanel = `<button class="btn btn-outline" style="width:100%; padding: 10px; font-size:12px; margin-bottom:12px;" onclick="pendingRatings=true; render()">⭐ Avaliar Equipa</button>`;
+  }
+
   return `
     ${topbarHtml('Jogo em curso')}
     <div class="card chrono-card">
@@ -659,13 +674,10 @@ function renderJogo(){
       ${m.capitao ? 
         `<div style="font-size:11px; color:var(--muted); font-family:'Oswald'; margin-bottom:12px; text-transform:uppercase; display:flex; align-items:center; gap:8px;">
           <span>© Capitão: <span style="color:var(--green);">${playerName(m.capitao)}</span></span>
-        </div>` : ''
+          <button style="background:none; border:1px solid var(--line); color:var(--chalk); border-radius:4px; padding:2px 6px; font-size:9px; cursor:pointer;" onclick="pendingCaptain=true; render()">Alterar</button>
+        </div>` : 
+        `<div style="margin-bottom:12px;"><button class="card-mini-btn yellow" style="border-color:var(--gold); color:var(--gold);" onclick="pendingCaptain=true; render()">+ Definir Capitão</button></div>`
       }
-      
-      <div style="margin-bottom:12px; display:flex; gap:8px;">
-         <button class="card-mini-btn yellow" style="border-color:var(--gold); color:var(--gold); flex:1;" onclick="pendingCaptain=true; render()">Capitão</button>
-         <button class="card-mini-btn" style="border:1px solid var(--muted); color:var(--chalk); flex:1;" onclick="pendingRatings=true; render()">⭐ Avaliar</button>
-      </div>
       
       <div class="score-row">
         <div class="score-block scored"><div class="score-num mono">${scored}</div><div class="score-label">Marcados</div></div>
@@ -673,13 +685,13 @@ function renderJogo(){
         <div class="score-block conceded"><div class="score-num mono">${conceded}</div><div class="score-label">Sofridos</div></div>
       </div>
       <div class="btn-row">
-        <button class="btn btn-gold" onclick="pending={kind:'scored', half: window.currentHalfFromTimeline(getActiveMatch())}; render();" ${(!matchStarted||pending||pendingCard||pendingCaptain||pendingRatings)?'disabled':''}>+ Marcado</button>
-        <button class="btn btn-red" onclick="addGoal('${m.id}', 'conceded', window.currentHalfFromTimeline(getActiveMatch())||1, null, null)" ${(!matchStarted||pending||pendingCard||pendingCaptain||pendingRatings)?'disabled':''}>+ Sofrido</button>
+        <button class="btn btn-gold" onclick="pending={kind:'scored', half: window.currentHalfFromTimeline(getActiveMatch())}; render();" ${(!matchStarted||pending||pendingCard||pendingCaptain)?'disabled':''}>+ Marcado</button>
+        <button class="btn btn-red" onclick="addGoal('${m.id}', 'conceded', window.currentHalfFromTimeline(getActiveMatch())||1, null, null)" ${(!matchStarted||pending||pendingCard||pendingCaptain)?'disabled':''}>+ Sofrido</button>
       </div>
       ${matchStarted ? `
         <div style="display:flex; gap:8px; justify-content:center; margin-top:10px;">
-          <button class="card-mini-btn yellow" onclick="pendingCard={color:'Amarelo'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings)?'disabled':''}>🟨 Amarelo</button>
-          <button class="card-mini-btn red" onclick="pendingCard={color:'Vermelho'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings)?'disabled':''}>🟥 Vermelho</button>
+          <button class="card-mini-btn yellow" onclick="pendingCard={color:'Amarelo'}; render()" ${(pending||pendingCard||pendingCaptain)?'disabled':''}>🟨 Amarelo</button>
+          <button class="card-mini-btn red" onclick="pendingCard={color:'Vermelho'}; render()" ${(pending||pendingCard||pendingCaptain)?'disabled':''}>🟥 Vermelho</button>
         </div>
       ` : ''}
       ${dynamicPanel}
@@ -689,9 +701,10 @@ function renderJogo(){
     ${m.cards && m.cards.length ? `<div class="goal-list">${m.cards.map(c=>`<div class="goal-row"><span>${c.minute!=null?`<span class="mono" style="color:var(--gold);">${c.minute}'</span> `:''}${c.color==='Amarelo'?'🟨':'🟥'} ${playerName(c.playerId)}</span> <button class="del" onclick="askConfirm('Eliminar cartão?', ()=>deleteCard('${m.id}', '${c.id}'))">✕</button></div>`).join('')}</div>` : ''}
     
     <div class="card" style="margin-top:16px;">
+      ${ratingsPanel}
       <div class="field" style="margin-bottom:0;">
         <label>Notas finais do jogo</label>
-        <textarea id="notes-input" placeholder="Ex: notas do jogo...">${m.notes || ''}</textarea>
+        <textarea id="notes-input" placeholder="Ex: notas do jogo..." onchange="updateMatchNotes('${m.id}', this.value)">${m.notes || ''}</textarea>
       </div>
     </div>
     <button class="btn btn-ghost" style="width:100%; margin-top:6px;" onclick="uiFinishMatch()">Terminar Jogo</button>
@@ -716,10 +729,10 @@ function renderCalendario(){
         <div class="card">
           <div class="field"><label>Nome do Torneio</label><input type="text" placeholder="Ex: Torneio de Verão" value="${schForm.tournamentName||''}" oninput="schForm.tournamentName=this.value"></div>
           <div class="field">
-            <label>Equipamento / Local (Geral)</label>
+            <label>Local</label>
             <div class="seg">
-              <div class="seg-btn ${schForm.loc==='casa'?'active':''}" onclick="schForm.loc='casa'; render()">Principal (Casa)</div>
-              <div class="seg-btn ${schForm.loc==='fora'?'active':''}" onclick="schForm.loc='fora'; render()">Alternativo (Fora)</div>
+              <div class="seg-btn ${schForm.loc==='casa'?'active':''}" onclick="schForm.loc='casa'; render()">Casa</div>
+              <div class="seg-btn ${schForm.loc==='fora'?'active':''}" onclick="schForm.loc='fora'; render()">Fora</div>
             </div>
           </div>
         </div>
@@ -747,10 +760,10 @@ function renderCalendario(){
             <div class="field"><label>Hora</label><input id="sch-time" type="time" value="${schForm.time}" oninput="schForm.time=this.value"></div>
           </div>
           <div class="field">
-            <label>Equipamento / Local</label>
+            <label>Local</label>
             <div class="seg">
-              <div class="seg-btn ${schForm.loc==='casa'?'active':''}" onclick="schForm.loc='casa'; render()">Principal (Casa)</div>
-              <div class="seg-btn ${schForm.loc==='fora'?'active':''}" onclick="schForm.loc='fora'; render()">Alternativo (Fora)</div>
+              <div class="seg-btn ${schForm.loc==='casa'?'active':''}" onclick="schForm.loc='casa'; render()">Casa</div>
+              <div class="seg-btn ${schForm.loc==='fora'?'active':''}" onclick="schForm.loc='fora'; render()">Fora</div>
             </div>
           </div>
           <div class="field" style="margin-bottom:0;">
@@ -822,7 +835,8 @@ window.copyCallup = function(schId){
   else if(s.type === 'campeonato') compLabel = 'Campeonato Oficial';
   else compLabel = 'Amigável';
 
-  let text = `⚽ *PRÓXIMO JOGO*\n🆚 Adversário: ${s.opponent}\n📅 Data: ${dateStr}\n🏟️ Equipamento/Local: ${s.location==='casa'?'Principal':'Alternativo'}\n🏆 Competição: ${compLabel}\n⏰ *Hora de Comparência: ${meetTime}*\n\n📋 *CONVOCADOS:*\n`;
+  let locText = s.location === 'casa' ? '*"Casa"*' : '*"Fora"*';
+  let text = `⚽ *PRÓXIMO JOGO*\n🆚 Adversário: ${s.opponent} ${locText}\n📅 Data: ${dateStr}\n🏆 Competição: ${compLabel}\n⏰ *Hora de Comparência: ${meetTime}*\n\n📋 *CONVOCADOS:*\n`;
   
   const called = eligiblePlayers().filter(p => s.callup.includes(p.id));
   if(called.length === 0) text += "- Nenhum selecionado ainda\n";
@@ -935,7 +949,7 @@ function renderJogos(){
             <div class="match-head" style="flex:1;">
               <div>
                 <div class="opp">${m.opponent} ${!m.finished ? '<span class="badge-open">Em curso</span>' : ''}<span class="badge-loc ${locLabel.toLowerCase()}">${locLabel}</span></div>
-                <div class="date">${m.date} <span class="badge-type" style="${m.type==='torneio'?'color:var(--gold); border-color:var(--gold-dim);':''}">${typeLabel}</span></div>
+                <div class="date">${m.date} <span class="badge-type">${typeLabel}</span></div>
               </div>
               <div class="match-score"><span class="s">${scored}</span> – <span class="c">${conceded}</span></div>
             </div>
@@ -1098,9 +1112,22 @@ window.exportReportTxt = function(){
     const co = m.goals.filter(g=>g.type==='conceded').length;
     let tLbl = m.type==='campeonato'?'Camp.':(m.type==='torneio'?'Torneio':'Amig.');
     lines.push(`\n[${m.date}] vs ${m.opponent} (${tLbl} - ${m.location==='casa'?'Casa':'Fora'}) | Resultado: ${sc}-${co}`);
-    m.goals.forEach(g=>{
-      if(g.type==='scored') lines.push(`  ⚽ ${g.minute!=null?g.minute+"' ":""}${g.half}ªP - ${playerName(g.scorerId)}${g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''}`);
-      else lines.push(`  🥅 ${g.minute!=null?g.minute+"' ":""}${g.half}ªP - Sofrido`);
+    
+    // Unir golos e cartões para imprimir por ordem cronológica aproximada
+    const events = [];
+    m.goals.forEach(g => events.push({ type: 'goal', minute: g.minute, half: g.half, data: g }));
+    (m.cards || []).forEach(c => events.push({ type: 'card', minute: c.minute, half: c.half, data: c }));
+    events.sort((a,b) => (a.minute==null?999:a.minute)-(b.minute==null?999:b.minute));
+
+    events.forEach(e => {
+        if(e.type === 'goal') {
+            const g = e.data;
+            if(g.type==='scored') lines.push(`  ⚽ ${g.minute!=null?g.minute+"' ":""}${g.half}ªP - ${playerName(g.scorerId)}${g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''}`);
+            else lines.push(`  🥅 ${g.minute!=null?g.minute+"' ":""}${g.half}ªP - Sofrido`);
+        } else {
+            const c = e.data;
+            lines.push(`  ${c.color==='Amarelo'?'🟨':'🟥'} ${c.minute!=null?c.minute+"' ":""}${c.half}ªP - ${playerName(c.playerId)}`);
+        }
     });
     
     if(m.ratings && Object.keys(m.ratings).length > 0){

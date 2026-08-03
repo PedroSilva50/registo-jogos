@@ -64,7 +64,7 @@
   .card-mini-btn:disabled{opacity:0.35;}
   
   .chrono-card{text-align:center; margin-bottom:16px;}
-  .chrono-time{font-size:36px; font-weight:700; font-family:'Roboto Mono',monospace; color:var(--chalk); letter-spacing:0.02em;}
+  .chrono-time{font-size:42px; font-weight:700; font-family:'Roboto Mono',monospace; color:var(--chalk); letter-spacing:0.02em;}
   .chrono-sub{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; font-family:'Oswald'; margin-bottom:8px;}
 
   .panel{ background:var(--surface-2); border-radius:12px; padding:14px; margin-top:12px; border:1px solid var(--line); }
@@ -130,7 +130,6 @@
   .add-row{display:flex; gap:8px; margin-top:10px;}
   .add-row input{flex:1;}
   .add-row button{padding:0 16px; border-radius:8px; border:none; background:var(--gold); color:#241B08; font-weight:700; cursor:pointer;}
-  .notes-readonly{font-size:13px; color:var(--muted); white-space:pre-wrap; line-height:1.5; padding-top:4px;}
 
   .navbar{ position:fixed; bottom:0; left:0; right:0; background:#0C1D17; border-top:1px solid var(--line); display:flex; padding-bottom:env(safe-area-inset-bottom); z-index:10; }
   .navbtn{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:10px 4px 8px; background:none; border:none; color:var(--muted); font-family:'Oswald'; font-size:9px; text-transform:uppercase; letter-spacing:0.05em; cursor:pointer; }
@@ -142,7 +141,7 @@
 
   /* HOME */
   .home-screen{position:relative; min-height:calc(100vh - 28px); display:flex; align-items:center; justify-content:center; padding:12px 4px;}
-  .home-pitch-bg{position:absolute; inset:-20px 0px; z-index:0; opacity:1;}
+  .home-pitch-bg{position:absolute; inset:0; z-index:0; opacity:0.6; display:flex; align-items:center; justify-content:center; overflow:hidden;}
   .home-content{position:relative; z-index:1; width:100%; text-align:center;}
   .home-ball{width:64px; height:64px; margin:0 auto 14px; display:flex; justify-content:center;}
   .home-content h1{font-size:26px; margin:0 0 4px; color:var(--chalk); line-height:1.15;}
@@ -151,13 +150,13 @@
   .home-btn{ display:flex; align-items:center; gap:14px; background:rgba(21,51,40,0.88); border:1px solid var(--line); border-radius:14px; padding:16px 18px; color:var(--chalk); font-family:'Oswald'; font-size:15px; text-transform:uppercase; letter-spacing:0.04em; font-weight:600; cursor:pointer; text-align:left; }
   .home-btn:active{background:var(--gold-dim); border-color:var(--gold);}
   .home-btn-icon{width:24px; height:24px; flex-shrink:0; color:var(--gold); display:flex; justify-content:center; align-items:center;}
+  .home-credit{ margin-top:28px; font-size:11px; color:var(--muted); letter-spacing:0.08em; text-transform:uppercase; font-family:'Oswald'; }
 </style>
 </head>
 <body>
 <div class="app" id="app"></div>
 <div id="modal-root"></div>
 
-<!-- GARANTIA: Todos os SVG com width/height fixo para não distorcer -->
 <nav class="navbar" id="navbar" style="display:none;">
   <button class="navbtn" onclick="navigateTo('jogo')" data-tab="jogo">
     <svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg> Jogo
@@ -307,9 +306,13 @@ window.setMatchTimeMark = function(matchId, key){
   if(!m.timeline) m.timeline = {};
   m.timeline[key] = String(new Date().getHours()).padStart(2,'0') + ':' + String(new Date().getMinutes()).padStart(2,'0');
   if(!m.timer) m.timer = { isRunning:false, elapsedMs:0, lastStartTs:null };
+  
   if(key === 'kickoff' || key === 'secondHalfStart'){
     m.timer.isRunning = true; m.timer.lastStartTs = Date.now();
-  } else if(key === 'halftime' || key === 'fullTime'){
+  } else if(key === 'halftime'){
+    // Zera o cronómetro ao chegar ao intervalo
+    m.timer.isRunning = false; m.timer.elapsedMs = 0; 
+  } else if(key === 'fullTime'){
     if(m.timer.isRunning){ m.timer.elapsedMs += (Date.now() - m.timer.lastStartTs); m.timer.isRunning = false; }
   }
   saveState(); render();
@@ -333,11 +336,14 @@ window.uiFinishMatch = function(){
     if(m.timer && m.timer.isRunning) window.pauseMatchTimer(m.id);
     saveState(); render();
   };
-  if(m.timeline && m.timeline.kickoff) finalize();
-  else window.askConfirm('Ainda não iniciaste a cronologia deste jogo. Queres mesmo terminar?', finalize);
+  
+  // Verifica se o apito inicial já foi dado. Se não foi, pergunta.
+  if(!m.timeline || !m.timeline.kickoff) window.askConfirm('Ainda não iniciaste a cronologia deste jogo. Queres mesmo terminar?', finalize);
+  else finalize();
 };
 
-window.reopenMatch = function(id){ const m = state.matches.find(m=>m.id===id); if(m){ m.finished=false; saveState(); render(); } };
+window.updateMatchNotes = function(id, val){ const m = state.matches.find(m=>m.id===id); if(m){ m.notes = val; saveState(); } };
+window.reopenMatch = function(id){ const m = state.matches.find(m=>m.id===id); if(m){ m.finished=false; saveState(); navigateTo('jogo'); } };
 window.deleteMatch = function(id){ state.matches = state.matches.filter(m=>m.id!==id); saveState(); render(); };
 window.deleteSchedule = function(id){ state.schedule = state.schedule.filter(x=>x.id!==id); saveState(); render(); };
 
@@ -418,19 +424,20 @@ function renderHome(){
   const active = getActiveMatch();
   return `
     <div class="home-screen">
-      <div class="home-pitch-bg"><svg preserveAspectRatio="xMidYMid slice" style="width:100%; height:100%;" viewBox="0 0 400 600"><rect x="20" y="20" width="360" height="560" fill="none" stroke="rgba(243,239,230,0.10)" stroke-width="2"/><line x1="20" y1="300" x2="380" y2="300" stroke="rgba(243,239,230,0.10)" stroke-width="2"/><circle cx="200" cy="300" r="62" fill="none" stroke="rgba(243,239,230,0.10)" stroke-width="2"/><rect x="85" y="20" width="230" height="95" fill="none" stroke="rgba(243,239,230,0.10)" stroke-width="2"/></svg></div>
+      <div class="home-pitch-bg"><svg preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%; max-width: 400px;" viewBox="0 0 400 600"><rect x="20" y="20" width="360" height="560" fill="none" stroke="rgba(243,239,230,0.15)" stroke-width="2"/><line x1="20" y1="300" x2="380" y2="300" stroke="rgba(243,239,230,0.15)" stroke-width="2"/><circle cx="200" cy="300" r="62" fill="none" stroke="rgba(243,239,230,0.15)" stroke-width="2"/><rect x="85" y="20" width="230" height="95" fill="none" stroke="rgba(243,239,230,0.15)" stroke-width="2"/><rect x="140" y="20" width="120" height="38" fill="none" stroke="rgba(243,239,230,0.15)" stroke-width="2"/><rect x="85" y="485" width="230" height="95" fill="none" stroke="rgba(243,239,230,0.15)" stroke-width="2"/><rect x="140" y="542" width="120" height="38" fill="none" stroke="rgba(243,239,230,0.15)" stroke-width="2"/></svg></div>
       <div class="home-content">
         <div class="home-ball">${ballIconSvg()}</div>
         <h1>Registo de Jogos</h1>
         <div class="home-sub">Painel do Treinador</div>
         <div class="home-menu">
-          ${active ? `<button class="home-btn" onclick="navigateTo('jogo')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>Continuar Jogo</button>` : ''}
+          ${active ? `<button class="home-btn" onclick="navigateTo('jogo')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>Continuar Jogo Atual</button>` : ''}
           <button class="home-btn" onclick="navigateTo('calendario')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>Calendário (Criar Jogo)</button>
           <button class="home-btn" onclick="navigateTo('treinos')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>Treinos</button>
           <button class="home-btn" onclick="navigateTo('jogos')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span>Resultados</button>
           <button class="home-btn" onclick="navigateTo('stats')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></span>Estatísticas</button>
           <button class="home-btn" onclick="navigateTo('plantel')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M2 20c0-3.3 3-5 7-5s7 1.7 7 5"/><circle cx="17" cy="8" r="2.5"/><path d="M17.5 12.2c2.6.5 4.5 2 4.5 4.8"/></svg></span>Plantel</button>
         </div>
+        <div class="home-credit">by Pedro Silva</div>
       </div>
     </div>
   `;
@@ -440,7 +447,7 @@ function renderJogo(){
   const m = getActiveMatch();
   if(!m){
     return `
-      ${topbarHtml('Jogo')}
+      ${topbarHtml('Jogo em curso')}
       <div style="text-align:center; margin-top:60px;">
         <div class="empty">Nenhum jogo a decorrer no momento.</div>
         <button class="btn btn-gold" style="width:100%; max-width:300px; margin:20px auto 0;" onclick="navigateTo('calendario')">Ir para Calendário</button>
@@ -500,9 +507,9 @@ function renderJogo(){
     <div class="card chrono-card">
       <div class="chrono-sub">${m.timer && m.timer.isRunning ? 'A decorrer' : 'Cronómetro'}</div>
       <div class="chrono-time" id="live-timer">${formatMatchTime(getMatchElapsedMs(m))}</div>
-      ${(!m.timeline || !m.timeline.kickoff) ? `<button class="btn btn-gold" style="padding:8px; font-size:11px; margin-top:10px;" onclick="askConfirm('Registar apito inicial?', ()=>setMatchTimeMark('${m.id}','kickoff'))">Apito Inicial</button>` : ''}
-      ${(m.timeline && m.timeline.kickoff && !m.timeline.halftime) ? `<button class="btn btn-ghost" style="padding:8px; font-size:11px; margin-top:10px;" onclick="askConfirm('Registar intervalo?', ()=>setMatchTimeMark('${m.id}','halftime'))">Intervalo</button>` : ''}
-      ${(m.timeline && m.timeline.halftime && !m.timeline.secondHalfStart) ? `<button class="btn btn-gold" style="padding:8px; font-size:11px; margin-top:10px;" onclick="askConfirm('Registar início da 2ª parte?', ()=>setMatchTimeMark('${m.id}','secondHalfStart'))">Início 2ª Parte</button>` : ''}
+      ${(!m.timeline || !m.timeline.kickoff) ? `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; margin: 10px auto 0; display: block;" onclick="askConfirm('Registar apito inicial?', ()=>setMatchTimeMark('${m.id}','kickoff'))">Apito Inicial</button>` : ''}
+      ${(m.timeline && m.timeline.kickoff && !m.timeline.halftime) ? `<button class="btn btn-ghost" style="padding:8px 20px; font-size:12px; margin: 10px auto 0; display: block;" onclick="askConfirm('Registar intervalo?', ()=>setMatchTimeMark('${m.id}','halftime'))">Intervalo</button>` : ''}
+      ${(m.timeline && m.timeline.halftime && !m.timeline.secondHalfStart) ? `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; margin: 10px auto 0; display: block;" onclick="askConfirm('Registar início da 2ª parte?', ()=>setMatchTimeMark('${m.id}','secondHalfStart'))">Início 2ª Parte</button>` : ''}
     </div>
     
     <div class="scoreboard">
@@ -625,11 +632,19 @@ window.toggleCallup = function(schId, pId){
 window.copyCallup = function(schId){
   const s = state.schedule.find(x=>x.id===schId); if(!s) return;
   const dateStr = s.date.split('-').reverse().join('/');
-  let text = `⚽ *PRÓXIMO JOGO*\n🆚 Adversário: ${s.opponent}\n📅 Data: ${dateStr} às ${s.time}\n🏟️ Local: ${s.location==='casa'?'Em Casa':'Fora'}\n🏆 Campeonato: ${s.type==='campeonato'?'Oficial':'Amigável'}\n\n📋 *CONVOCADOS:*\n`;
+  
+  // Calcular hora de comparência (1h antes)
+  const timeParts = s.time.split(':');
+  let d = new Date(); d.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]));
+  d.setHours(d.getHours() - 1);
+  const meetTime = String(d.getHours()).padStart(2,'0') + 'h' + String(d.getMinutes()).padStart(2,'0');
+
+  let text = `⚽ *PRÓXIMO JOGO*\n🆚 Adversário: ${s.opponent}\n📅 Data: ${dateStr} às ${s.time}\n🏟️ Local: ${s.location==='casa'?'Em Casa':'Fora'}\n🏆 Campeonato: ${s.type==='campeonato'?'Oficial':'Amigável'}\n⏰ *Hora de Comparência: ${meetTime}*\n\n📋 *CONVOCADOS:*\n`;
+  
   const called = eligiblePlayers().filter(p => s.callup.includes(p.id));
   if(called.length === 0) text += "- Nenhum selecionado ainda\n";
   called.forEach(p => text += `- ${p.number?`#${p.number} `:''}${p.name}\n`);
-  text += "\n⚠️ Ponto de encontro: [Completar]";
+  
   navigator.clipboard.writeText(text).then(()=>showToast("Copiado para WhatsApp ✓")).catch(()=>showToast("Erro ao copiar"));
 };
 
@@ -720,7 +735,7 @@ function renderJogos(){
       const typeLabel = m.type === 'campeonato' ? `Campeonato${m.phase ? ' · '+m.phase : ''}` : 'Amigável';
       const locLabel = (m.location||'casa') === 'casa' ? 'Casa' : 'Fora';
       return `
-        <div class="card match-item" onclick="if(!event.target.closest('button')){ expandedMatch=expandedMatch==='${m.id}'?null:'${m.id}'; render(); }">
+        <div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('textarea')){ expandedMatch=expandedMatch==='${m.id}'?null:'${m.id}'; render(); }">
           <div class="match-head-row">
             <div class="match-head" style="flex:1;">
               <div>
@@ -735,9 +750,14 @@ function renderJogos(){
             <div class="goal-list">
               ${m.capitao ? `<div style="font-size:11px; color:var(--green); font-family:'Oswald'; margin-bottom:8px; text-transform:uppercase;">© Capitão: ${playerName(m.capitao)}</div>` : ''}
               ${matchNarrativeHtml(m)}
-              ${m.notes ? `<div class="notes-readonly">📝 ${m.notes}</div>` : ''}
+              
+              <div class="field" style="margin-bottom:0; margin-top:14px;">
+                <label>Editar Notas do Jogo</label>
+                <textarea placeholder="Ex: notas sobre o jogo..." onchange="updateMatchNotes('${m.id}', this.value)">${m.notes || ''}</textarea>
+              </div>
+              
               <div class="btn-row" style="margin-top:12px;">
-                ${m.finished ? `<button class="btn btn-outline" onclick="event.stopPropagation(); reopenMatch('${m.id}')">Reabrir Jogo</button>` : ''}
+                ${m.finished ? `<button class="btn btn-outline" onclick="event.stopPropagation(); reopenMatch('${m.id}')">Reabrir (Editar Cronologia/Golos)</button>` : ''}
               </div>
             </div>
           ` : ''}
@@ -817,10 +837,11 @@ function renderStats(){
 
 window.uiAddPlayer = function(){
   const v = (document.getElementById('new-player-input') || {}).value || '';
-  if(v.trim()) { state.roster.push({ id: uid(), name: v.trim(), birthDate: null, number: null, active: true }); saveState(); render(); }
+  if(v.trim()) { state.roster.push({ id: uid(), name: v.trim(), birthDate: null, number: null, positions: '', active: true }); saveState(); render(); }
 };
 window.updatePlayerName = function(id, val){ const p=state.roster.find(x=>x.id===id); if(p){p.name=val.trim(); saveState();} };
 window.updatePlayerNumber = function(id, val){ const p=state.roster.find(x=>x.id===id); if(p){p.number=parseInt(val)||null; saveState();} };
+window.updatePlayerPositions = function(id, val){ const p=state.roster.find(x=>x.id===id); if(p){p.positions=val; saveState(); render();} };
 window.updatePlayerBirthDate = function(id, val){ const p=state.roster.find(x=>x.id===id); if(p){p.birthDate=val||null; saveState(); render();} };
 window.removePlayer = function(id){ const p=state.roster.find(x=>x.id===id); if(p){ p.active=false; saveState(); render(); } };
 
@@ -833,13 +854,19 @@ function renderPlantel(){
         const open = expandedPlayer === p.id;
         return `
           <div class="player-item" onclick="if(!event.target.closest('button') && !event.target.closest('input')){ expandedPlayer=expandedPlayer==='${p.id}'?null:'${p.id}'; render(); }">
-            <div class="player-row" style="border-bottom:none; padding-bottom:${open?'4px':'10px'};">
-              <span style="flex:1;">${p.number ? `<span class="mono" style="color:var(--gold);">#${p.number}</span> ` : ''}${p.name}${p.birthDate ? ` <span style="color:var(--muted); font-size:12px;">- ${computeAge(p.birthDate)} anos</span>` : ''}</span>
+            <div class="player-row" style="border-bottom:none; padding-bottom:${open?'4px':'10px'}; display:flex; align-items:center;">
+              <span style="flex:1;">
+                ${p.number ? `<span class="mono" style="color:var(--gold);">#${p.number}</span> ` : ''}
+                ${p.name}
+                ${p.positions ? `<span style="font-size:9px; color:var(--gold); border:1px solid var(--gold-dim); padding:1px 4px; border-radius:4px; margin-left:6px; font-family:'Oswald';">${p.positions}</span>` : ''}
+                ${p.birthDate ? ` <span style="color:var(--muted); font-size:12px;">- ${computeAge(p.birthDate)} anos</span>` : ''}
+              </span>
             </div>
             ${open ? `
               <div style="padding-bottom:12px; display:flex; flex-direction:column; gap:10px;">
                 <div class="field" style="margin-bottom:0;"><label>Nome</label><input type="text" onchange="updatePlayerName('${p.id}', this.value)" value="${p.name}"></div>
                 <div class="field" style="margin-bottom:0;"><label>Número</label><input type="number" min="1" max="99" onchange="updatePlayerNumber('${p.id}', this.value)" value="${p.number||''}"></div>
+                <div class="field" style="margin-bottom:0;"><label>Posições (ex: MC, PL)</label><input type="text" onchange="updatePlayerPositions('${p.id}', this.value)" value="${p.positions||''}"></div>
                 <div class="field" style="margin-bottom:0;"><label>Data de Nascimento</label><input type="date" onchange="updatePlayerBirthDate('${p.id}', this.value)" value="${p.birthDate||''}"></div>
                 <button class="btn btn-outline" style="color:var(--red);" onclick="askConfirm('Remover jogador?', ()=>removePlayer('${p.id}'))">Remover Jogador</button>
               </div>
@@ -859,6 +886,11 @@ function render(){
   document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active', b.dataset.tab===currentTab));
   const app = document.getElementById('app');
   const nav = document.getElementById('navbar');
+  
+  // Mostrar/Esconder aba de "Jogo Atual" do menu
+  const btnJogo = document.querySelector('[data-tab="jogo"]');
+  if(btnJogo) btnJogo.style.display = getActiveMatch() ? 'flex' : 'none';
+
   if(currentTab === 'home'){ nav.style.display = 'none'; app.innerHTML = renderHome(); }
   else {
     nav.style.display = 'flex';

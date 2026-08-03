@@ -99,7 +99,7 @@
   .badge-loc.fora{border:1px solid var(--red); color:var(--red);}
   .badge-open{display:inline-block; font-size:9px; background:var(--gold-dim); color:var(--gold); padding:2px 6px; border-radius:4px; margin-left:6px; text-transform:uppercase; font-family:'Oswald'; letter-spacing:0.05em;}
 
-  .quick-del{background:none; border:none; color:var(--muted); font-size:15px; cursor:pointer; padding:4px 6px; margin-left:6px;}
+  .quick-del{background:none; border:none; color:var(--muted); font-size:15px; cursor:pointer; padding:4px 6px; margin-left:2px;}
   .quick-del:active{color:var(--red);}
   .match-head-row{display:flex; align-items:flex-start; justify-content:space-between;}
   
@@ -199,8 +199,9 @@ let trainingForm = null;
 let expandedTraining = null;
 
 let schedulingNew = false;
+let editingSchId = null;
 let schForm = { 
-  isTournament: false,
+  isBatch: false,
   opp: '', date: '', time: '09:00', type: 'amigavel', loc: 'casa', phase: '',
   tournamentName: '',
   games: []
@@ -240,8 +241,16 @@ function showToast(msg){
   showToast._t = setTimeout(()=>t.classList.remove('show'), 2000);
 }
 
-window.navigateTo = function(tab){ currentTab = tab; pending = null; pendingCard = null; pendingCaptain = false; pendingRatings = false; render(); };
-window.goHome = function(){ currentTab = 'home'; pending = null; pendingCard = null; pendingCaptain = false; pendingRatings = false; render(); };
+window.navigateTo = function(tab){ 
+  currentTab = tab; pending = null; pendingCard = null; pendingCaptain = false; pendingRatings = false; 
+  schedulingNew = false; editingSchId = null;
+  render(); 
+};
+window.goHome = function(){ 
+  currentTab = 'home'; pending = null; pendingCard = null; pendingCaptain = false; pendingRatings = false; 
+  schedulingNew = false; editingSchId = null;
+  render(); 
+};
 
 function getActiveMatch(){ return state.matches.find(m => !m.finished) || null; }
 function playerName(id){
@@ -277,60 +286,54 @@ function getMatchElapsedMs(m){
 }
 function getMatchMinute(m){ return Math.floor(getMatchElapsedMs(m) / 60000); }
 
-/* ---------- MATCH LOGIC ---------- */
+/* ---------- SCHEDULE LOGIC ---------- */
 window.uiAddTournamentGame = function(){
   const last = schForm.games[schForm.games.length-1];
   schForm.games.push({
-    id: uid(),
-    phase: last ? last.phase : 'Fase de Grupos',
-    opp: '',
-    date: last ? last.date : (schForm.date || new Date().toISOString().slice(0,10)),
-    time: '10:00'
+    id: uid(), phase: last ? last.phase : 'Fase de Grupos', opp: '',
+    date: last ? last.date : (schForm.date || new Date().toISOString().slice(0,10)), time: '10:00'
   });
   render();
 };
-window.uiRemoveTournamentGame = function(id){
-  schForm.games = schForm.games.filter(x=>x.id!==id);
-  render();
-};
-window.uiUpdateTournamentGame = function(id, field, val){
-  const g = schForm.games.find(x=>x.id===id);
-  if(g) g[field] = val;
-};
+window.uiRemoveTournamentGame = function(id){ schForm.games = schForm.games.filter(x=>x.id!==id); render(); };
+window.uiUpdateTournamentGame = function(id, field, val){ const g = schForm.games.find(x=>x.id===id); if(g) g[field] = val; };
 
 window.uiSaveSchedule = function(){
-  if(schForm.isTournament){
+  if(editingSchId) {
+    if(!schForm.opp.trim()){ showToast("Insere um adversário!"); return; }
+    const s = state.schedule.find(x=>x.id===editingSchId);
+    if(s) {
+       s.opponent = schForm.opp.trim();
+       s.date = schForm.date || s.date;
+       s.time = schForm.time || s.time;
+       s.type = schForm.type;
+       s.location = schForm.loc;
+       s.phase = (schForm.phase || '').trim();
+       s.tournamentName = (schForm.type === 'torneio') ? (schForm.tournamentName || '').trim() : '';
+    }
+    state.schedule.sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time));
+    editingSchId = null; schedulingNew = false;
+    saveState(); render(); showToast("Agendamento atualizado!");
+    return;
+  }
+
+  if(schForm.isBatch){
     if(!schForm.tournamentName.trim()){ showToast("Insere o nome do torneio!"); return; }
     const validGames = schForm.games.filter(g => g.opp.trim() !== '');
     if(validGames.length === 0){ showToast("Insere pelo menos um adversário!"); return; }
     
     validGames.forEach(g => {
       state.schedule.push({
-        id: uid(),
-        opponent: g.opp.trim(),
-        date: g.date || new Date().toISOString().slice(0,10),
-        time: g.time || '09:00',
-        type: 'torneio',
-        phase: g.phase.trim(),
-        tournamentName: schForm.tournamentName.trim(),
-        season: defaultSeason(),
-        location: schForm.loc || 'fora',
-        callup: []
+        id: uid(), opponent: g.opp.trim(), date: g.date || new Date().toISOString().slice(0,10), time: g.time || '09:00',
+        type: 'torneio', phase: g.phase.trim(), tournamentName: schForm.tournamentName.trim(), season: defaultSeason(), location: schForm.loc || 'fora', callup: []
       });
     });
     showToast("Torneio agendado!");
   } else {
     if(!schForm.opp.trim()){ showToast("Insere um adversário!"); return; }
     state.schedule.push({
-      id: uid(),
-      opponent: schForm.opp.trim(),
-      date: schForm.date || new Date().toISOString().slice(0,10),
-      time: schForm.time || '09:00',
-      type: schForm.type || 'amigavel',
-      phase: (schForm.type==='campeonato' ? (schForm.phase||'').trim() : ''),
-      season: defaultSeason(),
-      location: schForm.loc || 'casa',
-      callup: []
+      id: uid(), opponent: schForm.opp.trim(), date: schForm.date || new Date().toISOString().slice(0,10), time: schForm.time || '09:00',
+      type: schForm.type || 'amigavel', phase: (schForm.type==='campeonato'||schForm.type==='torneio' ? (schForm.phase||'').trim() : ''), tournamentName: schForm.tournamentName || '', season: defaultSeason(), location: schForm.loc || 'casa', callup: []
     });
     showToast("Jogo agendado!");
   }
@@ -340,11 +343,19 @@ window.uiSaveSchedule = function(){
   saveState(); render();
 };
 
+window.editSchedule = function(id){
+  const s = state.schedule.find(x=>x.id===id);
+  if(s){
+    schForm = { isBatch: false, opp: s.opponent, date: s.date, time: s.time, type: s.type, phase: s.phase||'', loc: s.location, tournamentName: s.tournamentName||'', games: [] };
+    editingSchId = id; schedulingNew = true; render();
+  }
+};
+
 window.duplicateSchedule = function(id){
   const s = state.schedule.find(x=>x.id===id);
   if(s){
-    schForm = { isTournament: false, opp: '', date: s.date, time: s.time, type: s.type, phase: s.phase, loc: s.location, tournamentName: s.tournamentName||'', games: [] };
-    schedulingNew = true; render();
+    schForm = { isBatch: false, opp: '', date: s.date, time: s.time, type: s.type, phase: s.phase||'', loc: s.location, tournamentName: s.tournamentName||'', games: [] };
+    editingSchId = null; schedulingNew = true; render();
   }
 };
 
@@ -362,14 +373,46 @@ window.startScheduledMatch = function(schedId){
     saveState(); navigateTo('jogo');
   };
 
-  // Se não for o 1º agendamento da lista (cronológico), pede confirmação
-  if (state.schedule.length > 1 && state.schedule[0].id !== schedId) {
+  if (state.schedule.length > 0 && state.schedule[0].id !== schedId) {
       askConfirm('Atenção: Este jogo não é o primeiro da lista de agendamentos. Tens a certeza que queres iniciar este jogo fora de ordem?', doStart);
   } else {
       doStart();
   }
 };
 
+window.deleteSchedule = function(id){ state.schedule = state.schedule.filter(x=>x.id!==id); saveState(); render(); };
+
+window.toggleCallup = function(schId, pId){
+  const s = state.schedule.find(x=>x.id===schId);
+  if(s){ if(s.callup.includes(pId)) s.callup = s.callup.filter(x=>x!==pId); else s.callup.push(pId); saveState(); render(); }
+};
+
+window.copyCallup = function(schId){
+  const s = state.schedule.find(x=>x.id===schId); if(!s) return;
+  const dateStr = s.date.split('-').reverse().join('/');
+  
+  const timeParts = s.time.split(':');
+  let d = new Date(); d.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]));
+  d.setHours(d.getHours() - 1);
+  const meetTime = String(d.getHours()).padStart(2,'0') + 'h' + String(d.getMinutes()).padStart(2,'0');
+
+  let compLabel = '';
+  if(s.type === 'torneio') compLabel = `Torneio: ${s.tournamentName}${s.phase ? ' - ' + s.phase : ''}`;
+  else if(s.type === 'campeonato') compLabel = `Campeonato Oficial${s.phase ? ' - ' + s.phase : ''}`;
+  else compLabel = 'Amigável';
+
+  let matchTitle = s.location === 'casa' ? `GD São Roque 🆚 ${s.opponent}` : `${s.opponent} 🆚 GD São Roque`;
+  
+  let text = `⚽ *${matchTitle}*\n📅 ${dateStr}\n⏱️ *Hora de Comparência: ${meetTime}*\n🏟️ *${s.location === 'casa' ? 'Casa' : 'Fora'}*\n🏆 ${compLabel}\n\n📋 *CONVOCADOS:*\n`;
+  
+  const called = eligiblePlayers().filter(p => s.callup.includes(p.id));
+  if(called.length === 0) text += "- Nenhum selecionado ainda\n";
+  called.forEach(p => text += `- ${p.number ? `${p.number} - ` : ''}${p.name}\n`);
+  
+  navigator.clipboard.writeText(text).then(()=>showToast("Copiado para WhatsApp ✓")).catch(()=>showToast("Erro ao copiar"));
+};
+
+/* ---------- ACTIVE MATCH LOGIC ---------- */
 window.pauseMatchTimer = function(matchId){
   const m = state.matches.find(m=>m.id===matchId);
   if(!m || !m.timer || !m.timer.isRunning) return;
@@ -449,7 +492,6 @@ window.confirmFinishMatch = function(action) {
 window.updateMatchNotes = function(id, val){ const m = state.matches.find(m=>m.id===id); if(m){ m.notes = val; saveState(); } };
 window.reopenMatch = function(id){ const m = state.matches.find(m=>m.id===id); if(m){ m.finished=false; saveState(); navigateTo('jogo'); } };
 window.deleteMatch = function(id){ state.matches = state.matches.filter(m=>m.id!==id); saveState(); render(); };
-window.deleteSchedule = function(id){ state.schedule = state.schedule.filter(x=>x.id!==id); saveState(); render(); };
 
 window.addGoal = function(matchId, type, half, scorerId, assistId){
   const m = state.matches.find(m=>m.id===matchId); if(!m) return;
@@ -685,13 +727,13 @@ function renderJogo(){
         <div class="score-block conceded"><div class="score-num mono">${conceded}</div><div class="score-label">Sofridos</div></div>
       </div>
       <div class="btn-row">
-        <button class="btn btn-gold" onclick="pending={kind:'scored', half: window.currentHalfFromTimeline(getActiveMatch())}; render();" ${(!matchStarted||pending||pendingCard||pendingCaptain)?'disabled':''}>+ Marcado</button>
-        <button class="btn btn-red" onclick="addGoal('${m.id}', 'conceded', window.currentHalfFromTimeline(getActiveMatch())||1, null, null)" ${(!matchStarted||pending||pendingCard||pendingCaptain)?'disabled':''}>+ Sofrido</button>
+        <button class="btn btn-gold" onclick="pending={kind:'scored', half: window.currentHalfFromTimeline(getActiveMatch())}; render();" ${(!matchStarted||pending||pendingCard||pendingCaptain||pendingRatings)?'disabled':''}>+ Marcado</button>
+        <button class="btn btn-red" onclick="addGoal('${m.id}', 'conceded', window.currentHalfFromTimeline(getActiveMatch())||1, null, null)" ${(!matchStarted||pending||pendingCard||pendingCaptain||pendingRatings)?'disabled':''}>+ Sofrido</button>
       </div>
       ${matchStarted ? `
         <div style="display:flex; gap:8px; justify-content:center; margin-top:10px;">
-          <button class="card-mini-btn yellow" onclick="pendingCard={color:'Amarelo'}; render()" ${(pending||pendingCard||pendingCaptain)?'disabled':''}>🟨 Amarelo</button>
-          <button class="card-mini-btn red" onclick="pendingCard={color:'Vermelho'}; render()" ${(pending||pendingCard||pendingCaptain)?'disabled':''}>🟥 Vermelho</button>
+          <button class="card-mini-btn yellow" onclick="pendingCard={color:'Amarelo'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings)?'disabled':''}>🟨 Amarelo</button>
+          <button class="card-mini-btn red" onclick="pendingCard={color:'Vermelho'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings)?'disabled':''}>🟥 Vermelho</button>
         </div>
       ` : ''}
       ${dynamicPanel}
@@ -719,17 +761,19 @@ function renderCalendario(){
     if(!schForm.games || schForm.games.length===0) schForm.games = [{id: uid(), phase: 'Fase de Grupos', opp: '', date: schForm.date, time: '09:00'}];
     
     return `
-      ${topbarHtml('Agendar Jogo')}
+      ${topbarHtml(editingSchId ? 'Editar Agendamento' : 'Agendar Jogo')}
+      ${!editingSchId ? `
       <div class="seg" style="margin-bottom:16px;">
-        <div class="seg-btn ${!schForm.isTournament?'active':''}" onclick="schForm.isTournament=false; render()">Jogo Único</div>
-        <div class="seg-btn ${schForm.isTournament?'active':''}" onclick="schForm.isTournament=true; render()">Torneio</div>
+        <div class="seg-btn ${!schForm.isBatch?'active':''}" onclick="schForm.isBatch=false; render()">Jogo Único</div>
+        <div class="seg-btn ${schForm.isBatch?'active':''}" onclick="schForm.isBatch=true; render()">Torneio (Múltiplos)</div>
       </div>
+      ` : ''}
       
-      ${schForm.isTournament ? `
+      ${schForm.isBatch ? `
         <div class="card">
           <div class="field"><label>Nome do Torneio</label><input type="text" placeholder="Ex: Torneio de Verão" value="${schForm.tournamentName||''}" oninput="schForm.tournamentName=this.value"></div>
           <div class="field">
-            <label>Local</label>
+            <label>Local (Geral)</label>
             <div class="seg">
               <div class="seg-btn ${schForm.loc==='casa'?'active':''}" onclick="schForm.loc='casa'; render()">Casa</div>
               <div class="seg-btn ${schForm.loc==='fora'?'active':''}" onclick="schForm.loc='fora'; render()">Fora</div>
@@ -766,23 +810,36 @@ function renderCalendario(){
               <div class="seg-btn ${schForm.loc==='fora'?'active':''}" onclick="schForm.loc='fora'; render()">Fora</div>
             </div>
           </div>
-          <div class="field" style="margin-bottom:0;">
+          <div class="field" style="margin-bottom: ${schForm.type!=='amigavel' ? '12px' : '0'};">
             <label>Tipo de jogo</label>
             <div class="seg">
               <div class="seg-btn ${schForm.type==='amigavel'?'active':''}" onclick="schForm.type='amigavel'; render()">Amigável</div>
-              <div class="seg-btn ${schForm.type==='campeonato'?'active':''}" onclick="schForm.type='campeonato'; render()">Campeonato</div>
+              <div class="seg-btn ${schForm.type==='campeonato'?'active':''}" onclick="schForm.type='campeonato'; render()">Camp.</div>
+              <div class="seg-btn ${schForm.type==='torneio'?'active':''}" onclick="schForm.type='torneio'; render()">Torneio</div>
             </div>
           </div>
+          ${schForm.type === 'torneio' ? `
+          <div class="field" style="margin-bottom:12px;">
+             <label>Nome do Torneio</label>
+             <input type="text" placeholder="Ex: Torneio de Verão" value="${schForm.tournamentName||''}" oninput="schForm.tournamentName=this.value">
+          </div>
+          ` : ''}
+          ${schForm.type === 'torneio' || schForm.type === 'campeonato' ? `
+          <div class="field" style="margin-bottom:0;">
+             <label>Fase / Jornada</label>
+             <input type="text" placeholder="${schForm.type==='torneio'?'Ex: Meia-final':'Ex: Jornada 10'}" value="${schForm.phase||''}" oninput="schForm.phase=this.value">
+          </div>
+          ` : ''}
         </div>
       `}
       <button class="btn btn-gold" style="width:100%; margin-bottom:10px;" onclick="uiSaveSchedule()">Guardar Agendamento</button>
-      <button class="btn btn-outline" style="width:100%;" onclick="schedulingNew=false; render()">Cancelar</button>
+      <button class="btn btn-outline" style="width:100%;" onclick="schedulingNew=false; editingSchId=null; render()">Cancelar</button>
     `;
   }
 
   return `
     ${topbarHtml('Calendário')}
-    <button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="schForm={isTournament:false, opp:'', date:'', time:'09:00', type:'amigavel', loc:'casa', phase:'', tournamentName:'', games:[]}; schedulingNew=true; render()">+ Agendar Novo Jogo</button>
+    <button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="schForm={isBatch:false, opp:'', date:'', time:'09:00', type:'amigavel', loc:'casa', phase:'', tournamentName:'', games:[]}; editingSchId=null; schedulingNew=true; render()">+ Agendar Novo Jogo</button>
     ${state.schedule.length ? state.schedule.map(s => {
       const open = expandedSchedule === s.id;
       const locLabel = s.location === 'casa' ? 'Casa' : 'Fora';
@@ -795,9 +852,14 @@ function renderCalendario(){
                 <div class="date">${s.date.split('-').reverse().join('/')} às ${s.time}</div>
               </div>
             </div>
-            <button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); duplicateSchedule('${s.id}')" title="Duplicar">📑</button>
-            <button class="quick-del" style="color:var(--gold);" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')" title="Iniciar">▶</button>
-            <button class="quick-del" onclick="event.stopPropagation(); askConfirm('Apagar este agendamento?', () => deleteSchedule('${s.id}'))" title="Apagar">🗑</button>
+            <div style="display:flex; gap:6px;">
+                <button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); editSchedule('${s.id}')" title="Editar">
+                   <svg style="width:16px; height:16px; transform:translateY(2px);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); duplicateSchedule('${s.id}')" title="Duplicar / Adicionar Jogo">📑</button>
+                <button class="quick-del" style="color:var(--gold);" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')" title="Iniciar">▶</button>
+                <button class="quick-del" onclick="event.stopPropagation(); askConfirm('Apagar este agendamento?', () => deleteSchedule('${s.id}'))" title="Apagar">🗑</button>
+            </div>
           </div>
           ${open ? `
             <div class="goal-list">
@@ -832,11 +894,12 @@ window.copyCallup = function(schId){
 
   let compLabel = '';
   if(s.type === 'torneio') compLabel = `Torneio: ${s.tournamentName}${s.phase ? ' - ' + s.phase : ''}`;
-  else if(s.type === 'campeonato') compLabel = 'Campeonato Oficial';
+  else if(s.type === 'campeonato') compLabel = `Campeonato Oficial${s.phase ? ' - ' + s.phase : ''}`;
   else compLabel = 'Amigável';
 
-  let locText = s.location === 'casa' ? '*(Casa)*' : '*"Fora"*';
-  let text = `⚽ *PRÓXIMO JOGO*\n🆚 ${s.opponent} ${locText}\n📅 ${dateStr}\n🏆 ${compLabel}\n⏰ *Hora de Comparência: ${meetTime}*\n\n📋 *CONVOCADOS:*\n`;
+  let matchTitle = s.location === 'casa' ? `GD São Roque 🆚 ${s.opponent}` : `${s.opponent} 🆚 GD São Roque`;
+  
+  let text = `⚽ *${matchTitle}*\n📅 ${dateStr}\n⏱️ *Hora de Comparência: ${meetTime}*\n🏟️ *${s.location === 'casa' ? 'Casa' : 'Fora'}*\n🏆 ${compLabel}\n\n📋 *CONVOCADOS:*\n`;
   
   const called = eligiblePlayers().filter(p => s.callup.includes(p.id));
   if(called.length === 0) text += "- Nenhum selecionado ainda\n";

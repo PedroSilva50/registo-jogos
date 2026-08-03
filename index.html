@@ -130,6 +130,7 @@
   .add-row{display:flex; gap:8px; margin-top:10px;}
   .add-row input{flex:1;}
   .add-row button{padding:0 16px; border-radius:8px; border:none; background:var(--gold); color:#241B08; font-weight:700; cursor:pointer;}
+  .notes-readonly{font-size:13px; color:var(--muted); white-space:pre-wrap; line-height:1.5; padding-top:4px;}
 
   .navbar{ position:fixed; bottom:0; left:0; right:0; background:#0C1D17; border-top:1px solid var(--line); display:flex; padding-bottom:env(safe-area-inset-bottom); z-index:10; }
   .navbtn{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:10px 4px 8px; background:none; border:none; color:var(--muted); font-family:'Oswald'; font-size:9px; text-transform:uppercase; letter-spacing:0.05em; cursor:pointer; }
@@ -334,7 +335,7 @@ window.uiFinishMatch = function(){
     if(!m.timeline) m.timeline = {};
     if(!m.timeline.fullTime) m.timeline.fullTime = String(new Date().getHours()).padStart(2,'0') + ':' + String(new Date().getMinutes()).padStart(2,'0');
     if(m.timer && m.timer.isRunning) window.pauseMatchTimer(m.id);
-    saveState(); render();
+    saveState(); navigateTo('jogos');
   };
   
   // Verifica se o apito inicial já foi dado. Se não foi, pergunta.
@@ -639,11 +640,11 @@ window.copyCallup = function(schId){
   d.setHours(d.getHours() - 1);
   const meetTime = String(d.getHours()).padStart(2,'0') + 'h' + String(d.getMinutes()).padStart(2,'0');
 
-  let text = `⚽ *PRÓXIMO JOGO*\n🆚 Adversário: ${s.opponent}\n📅 Data: ${dateStr} às ${s.time}\n🏟️ Local: ${s.location==='casa'?'Em Casa':'Fora'}\n🏆 Campeonato: ${s.type==='campeonato'?'Oficial':'Amigável'}\n⏰ *Hora de Comparência: ${meetTime}*\n\n📋 *CONVOCADOS:*\n`;
+  let text = `⚽ *PRÓXIMO JOGO*\n🆚 Adversário: ${s.opponent}\n📅 Data: ${dateStr}\n🏟️ Local: ${s.location==='casa'?'Em Casa':'Fora'}\n🏆 Campeonato: ${s.type==='campeonato'?'Oficial':'Amigável'}\n⏰ *Hora de Comparência: ${meetTime}*\n\n📋 *CONVOCADOS:*\n`;
   
   const called = eligiblePlayers().filter(p => s.callup.includes(p.id));
   if(called.length === 0) text += "- Nenhum selecionado ainda\n";
-  called.forEach(p => text += `- ${p.number?`#${p.number} `:''}${p.name}\n`);
+  called.forEach(p => text += `- ${p.number ? `${p.number} - ` : ''}${p.name}\n`);
   
   navigator.clipboard.writeText(text).then(()=>showToast("Copiado para WhatsApp ✓")).catch(()=>showToast("Erro ao copiar"));
 };
@@ -735,7 +736,7 @@ function renderJogos(){
       const typeLabel = m.type === 'campeonato' ? `Campeonato${m.phase ? ' · '+m.phase : ''}` : 'Amigável';
       const locLabel = (m.location||'casa') === 'casa' ? 'Casa' : 'Fora';
       return `
-        <div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('textarea')){ expandedMatch=expandedMatch==='${m.id}'?null:'${m.id}'; render(); }">
+        <div class="card match-item" onclick="if(!event.target.closest('button')){ expandedMatch=expandedMatch==='${m.id}'?null:'${m.id}'; render(); }">
           <div class="match-head-row">
             <div class="match-head" style="flex:1;">
               <div>
@@ -751,13 +752,10 @@ function renderJogos(){
               ${m.capitao ? `<div style="font-size:11px; color:var(--green); font-family:'Oswald'; margin-bottom:8px; text-transform:uppercase;">© Capitão: ${playerName(m.capitao)}</div>` : ''}
               ${matchNarrativeHtml(m)}
               
-              <div class="field" style="margin-bottom:0; margin-top:14px;">
-                <label>Editar Notas do Jogo</label>
-                <textarea placeholder="Ex: notas sobre o jogo..." onchange="updateMatchNotes('${m.id}', this.value)">${m.notes || ''}</textarea>
-              </div>
+              ${m.notes ? `<div class="notes-readonly" style="margin-top:10px;">📝 ${m.notes}</div>` : ''}
               
               <div class="btn-row" style="margin-top:12px;">
-                ${m.finished ? `<button class="btn btn-outline" onclick="event.stopPropagation(); reopenMatch('${m.id}')">Reabrir (Editar Cronologia/Golos)</button>` : ''}
+                ${m.finished ? `<button class="btn btn-outline" onclick="event.stopPropagation(); reopenMatch('${m.id}')">Editar Dados do Jogo</button>` : ''}
               </div>
             </div>
           ` : ''}

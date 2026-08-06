@@ -511,6 +511,7 @@ window.confirmFinishMatch = function(action) {
 window.updateMatchNotes = function(id, val){ const m = state.matches.find(m=>m.id===id); if(m){ m.notes = val; saveState(); } };
 window.reopenMatch = function(id){ const m = state.matches.find(m=>m.id===id); if(m){ m.finished=false; saveState(); navigateTo('jogo'); } };
 window.deleteMatch = function(id){ state.matches = state.matches.filter(m=>m.id!==id); saveState(); render(); };
+window.deleteSchedule = function(id){ state.schedule = state.schedule.filter(x=>x.id!==id); saveState(); render(); };
 
 window.addGoal = function(matchId, type, half, scorerId, assistId){
   const m = state.matches.find(m=>m.id===matchId); if(!m) return;
@@ -1077,10 +1078,8 @@ function computeStats(typeFilterVal, seasonFilterVal){
   let wins=0, draws=0, losses=0; let casaWins=0, casaDraws=0, casaLosses=0, foraWins=0, foraDraws=0, foraLosses=0;
   const matches = state.matches.filter(m => (!typeFilterVal || typeFilterVal==='todos' || m.type===typeFilterVal) && (!seasonFilterVal || seasonFilterVal==='todas' || (m.season || 'Sem época')===seasonFilterVal));
   
-  // Array para o gráfico A (Evolução de Golos) - últimos 6 jogos
+  // Gráfico A e B (dados processados)
   const last6Matches = [...matches].filter(m=>m.finished).sort((a,b) => new Date(a.date) - new Date(b.date)).slice(-6);
-  
-  // Array para o gráfico B (Forma) - últimos 5 jogos
   const last5Form = [...matches].filter(m=>m.finished).sort((a,b) => new Date(a.date) - new Date(b.date)).slice(-5).map(m => {
       const mSc = m.goals.filter(g=>g.type==='scored').length;
       const mCo = m.goals.filter(g=>g.type==='conceded').length;
@@ -1104,7 +1103,6 @@ function computeStats(typeFilterVal, seasonFilterVal){
     });
     (m.cards||[]).forEach(c=>{ if(c.color==='Amarelo') yellowCount[c.playerId] = (yellowCount[c.playerId]||0)+1; else redCount[c.playerId] = (redCount[c.playerId]||0)+1; });
   });
-  
   const scorers = Object.entries(scorerCount).map(([id,count])=>({id, name: playerName(id), count})).sort((a,b)=>b.count-a.count);
   const assisters = Object.entries(assistCount).map(([id,count])=>({id, name: playerName(id), count})).sort((a,b)=>b.count-a.count);
   const cardRanking = [...new Set([...Object.keys(yellowCount), ...Object.keys(redCount)])].map(id=>({id, name: playerName(id), yellow: yellowCount[id]||0, red: redCount[id]||0})).sort((a,b)=>(b.yellow+b.red)-(a.yellow+a.red));
@@ -1115,11 +1113,12 @@ function computeStats(typeFilterVal, seasonFilterVal){
 function renderStats(){
   const s = computeStats(statsFilter, seasonFilter);
   
-  // Gráfico B (Forma - Últimos 5 jogos)
+  // Gráfico B (Forma)
   let formHtml = '';
   if(s.last5Form.length > 0) {
       formHtml = `
-      <div class="card" style="margin-top:16px;">
+      <div class="section-title" style="margin-top:16px;">Forma e Evolução</div>
+      <div class="card">
         <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; font-family:'Oswald'; margin-bottom:10px;">Forma (Últimos ${s.last5Form.length} Jogos)</div>
         <div class="chart-form-row">
             <div class="chart-form-line"></div>
@@ -1129,10 +1128,9 @@ function renderStats(){
       `;
   }
 
-  // Gráfico A (Evolução de Golos - Últimos 6 jogos)
+  // Gráfico A (Evolução de Golos)
   let goalsChartHtml = '';
   if(s.last6Matches.length > 0) {
-      // Find max goals to calculate percentages for bar heights
       let maxG = 1;
       s.last6Matches.forEach(m => {
          const sc = m.goals.filter(g=>g.type==='scored').length;
@@ -1142,7 +1140,7 @@ function renderStats(){
       });
 
       goalsChartHtml = `
-      <div class="card" style="margin-top:16px;">
+      <div class="card" style="margin-top:10px;">
         <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; font-family:'Oswald'; margin-bottom:4px; display:flex; justify-content:space-between;">
            <span>Evolução de Golos (Últ. ${s.last6Matches.length})</span>
            <span><span style="color:var(--gold);">■ Mar.</span> <span style="color:var(--red); margin-left:4px;">■ Sof.</span></span>
@@ -1153,19 +1151,21 @@ function renderStats(){
                const co = m.goals.filter(g=>g.type==='conceded').length;
                const scPct = (sc / maxG) * 100;
                const coPct = (co / maxG) * 100;
-               // Get short opponent name (first word)
                const shortOpp = m.opponent.split(' ')[0];
-               return `
-               <div class="chart-bar-group">
+               const safeOpp = m.opponent.replace(/'/g, "\\'");
+               const clickMsg = (m.location === 'casa') ? \`GD São Roque \${sc} - \${co} \${safeOpp}\` : \`\${safeOpp} \${co} - \${sc} GD São Roque\`;
+               return \`
+               <div class="chart-bar-group" onclick="showToast('\${clickMsg}')" style="cursor:pointer;">
                  <div class="chart-bars">
-                    <div class="chart-bar scored" style="height:${scPct}%;" title="${sc} Marcados"></div>
-                    <div class="chart-bar conceded" style="height:${coPct}%;" title="${co} Sofridos"></div>
+                    <div class="chart-bar scored" style="height:\${scPct}%;"></div>
+                    <div class="chart-bar conceded" style="height:\${coPct}%;"></div>
                  </div>
-                 <div class="chart-x-label">${shortOpp}</div>
+                 <div class="chart-x-label">\${shortOpp}</div>
                </div>
-               `;
+               \`;
            }).join('')}
         </div>
+        <div style="font-size:9px; color:var(--muted); text-align:center; margin-top:8px;">Toca nas barras para ver o resultado</div>
       </div>
       `;
   }
@@ -1179,9 +1179,6 @@ function renderStats(){
       <div class="seg-btn ${statsFilter==='torneio'?'active':''}" onclick="statsFilter='torneio'; render()">Torneios</div>
     </div>
     
-    ${formHtml}
-    ${goalsChartHtml}
-
     <div class="section-title" style="margin-top:16px;">Resultados Globais</div>
     <div class="stat-grid" style="grid-template-columns:1fr 1fr 1fr;">
       <div class="stat-box"><div class="num" style="color:var(--gold)">${s.wins}</div><div class="lbl">Vitórias</div></div>
@@ -1213,6 +1210,9 @@ function renderStats(){
     <div class="card">
       ${s.cardRanking.length ? s.cardRanking.map(c=>`<div class="scorer-row"><span>${c.name}</span><span class="n mono">${c.yellow ? `🟨${c.yellow}`:''}${c.yellow&&c.red?' ':''}${c.red ? `🟥${c.red}`:''}</span></div>`).join('') : '<div class="empty">Nenhum cartão registado.</div>'}
     </div>
+    
+    ${formHtml}
+    ${goalsChartHtml}
   `;
 }
 

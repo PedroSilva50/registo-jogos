@@ -245,7 +245,7 @@ async function loadState(){
        state = JSON.parse(res.value);
        if(!state.trainings) state.trainings = [];
        if(!state.schedule) state.schedule = [];
-       if(!state.lastBackupDate && state.matches.length > 0) state.lastBackupDate = Date.now() - (8 * 24 * 60 * 60 * 1000); // Força aviso se nunca fez e tem jogos
+       if(!state.lastBackupDate && state.matches.length > 0) state.lastBackupDate = Date.now() - (8 * 24 * 60 * 60 * 1000); 
     }
   }catch(e){}
   render();
@@ -257,7 +257,7 @@ function showToast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   clearTimeout(showToast._t);
-  showToast._t = setTimeout(()=>t.classList.remove('show'), 2000);
+  showToast._t = setTimeout(()=>t.classList.remove('show'), 3000); // 3 segundos para ler bem a tooltip
 }
 
 window.navigateTo = function(tab){ 
@@ -1078,10 +1078,8 @@ function computeStats(typeFilterVal, seasonFilterVal){
   let wins=0, draws=0, losses=0; let casaWins=0, casaDraws=0, casaLosses=0, foraWins=0, foraDraws=0, foraLosses=0;
   const matches = state.matches.filter(m => (!typeFilterVal || typeFilterVal==='todos' || m.type===typeFilterVal) && (!seasonFilterVal || seasonFilterVal==='todas' || (m.season || 'Sem época')===seasonFilterVal));
   
-  // Array para o gráfico A (Evolução de Golos) - últimos 6 jogos
+  // Gráfico A e B (dados processados)
   const last6Matches = [...matches].filter(m=>m.finished).sort((a,b) => new Date(a.date) - new Date(b.date)).slice(-6);
-  
-  // Array para o gráfico B (Forma) - últimos 5 jogos
   const last5Form = [...matches].filter(m=>m.finished).sort((a,b) => new Date(a.date) - new Date(b.date)).slice(-5).map(m => {
       const mSc = m.goals.filter(g=>g.type==='scored').length;
       const mCo = m.goals.filter(g=>g.type==='conceded').length;
@@ -1114,7 +1112,30 @@ function computeStats(typeFilterVal, seasonFilterVal){
 
 function renderStats(){
   const s = computeStats(statsFilter, seasonFilter);
+
+  // Rendimento por Parte
+  let bal1 = s.scoredHalf[1] - s.concededHalf[1];
+  let bal2 = s.scoredHalf[2] - s.concededHalf[2];
+  let sign1 = bal1 > 0 ? '+' : '';
+  let sign2 = bal2 > 0 ? '+' : '';
+  let color1 = bal1 > 0 ? 'var(--green)' : (bal1 < 0 ? 'var(--red)' : 'var(--muted)');
+  let color2 = bal2 > 0 ? 'var(--green)' : (bal2 < 0 ? 'var(--red)' : 'var(--muted)');
+
+  let rendimentoHtml = `
+    <div class="section-title" style="margin-top:16px;">Rendimento por Parte</div>
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--line);">
+        <div><b style="color:var(--chalk); font-size:13px;">1ª Parte</b><br><span style="font-size:11px; color:var(--muted);">${s.scoredHalf[1]} Marcados | ${s.concededHalf[1]} Sofridos</span></div>
+        <div style="text-align:right;"><span style="font-size:10px; color:var(--muted); text-transform:uppercase;">Balanço</span><br><b style="font-size:16px; color:${color1}; font-family:'Roboto Mono',monospace;">${sign1}${bal1}</b></div>
+      </div>
+      <div style="display:flex; justify-content:space-between;">
+        <div><b style="color:var(--chalk); font-size:13px;">2ª Parte</b><br><span style="font-size:11px; color:var(--muted);">${s.scoredHalf[2]} Marcados | ${s.concededHalf[2]} Sofridos</span></div>
+        <div style="text-align:right;"><span style="font-size:10px; color:var(--muted); text-transform:uppercase;">Balanço</span><br><b style="font-size:16px; color:${color2}; font-family:'Roboto Mono',monospace;">${sign2}${bal2}</b></div>
+      </div>
+    </div>
+  `;
   
+  // Gráfico B (Forma)
   let formHtml = '';
   if(s.last5Form && s.last5Form.length > 0) {
       formHtml = `
@@ -1129,6 +1150,7 @@ function renderStats(){
       `;
   }
 
+  // Gráfico A (Evolução de Golos)
   let goalsChartHtml = '';
   if(s.last6Matches && s.last6Matches.length > 0) {
       let maxG = 1;
@@ -1146,8 +1168,19 @@ function renderStats(){
            const coPct = (co / maxG) * 100;
            const shortOpp = m.opponent.split(' ')[0];
            
+           const sc1 = m.goals.filter(g=>g.type==='scored' && g.half===1).length;
+           const co1 = m.goals.filter(g=>g.type==='conceded' && g.half===1).length;
+           const sc2 = m.goals.filter(g=>g.type==='scored' && g.half===2).length;
+           const co2 = m.goals.filter(g=>g.type==='conceded' && g.half===2).length;
+           
+           let halfText = m.location === 'casa'
+             ? ` (1ªP: ${sc1}-${co1} | 2ªP: ${sc2}-${co2})`
+             : ` (1ªP: ${co1}-${sc1} | 2ªP: ${co2}-${sc2})`;
+           
            const safeOpp = m.opponent.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-           const msg = m.location === 'casa' ? 'GD São Roque ' + sc + ' - ' + co + ' ' + safeOpp : safeOpp + ' ' + co + ' - ' + sc + ' GD São Roque';
+           const msg = m.location === 'casa' 
+             ? 'GD São Roque ' + sc + ' - ' + co + ' ' + safeOpp + halfText 
+             : safeOpp + ' ' + co + ' - ' + sc + ' GD São Roque' + halfText;
            
            return '<div class="chart-bar-group" onclick="showToast(\'' + msg + '\')" style="cursor:pointer;">' +
              '<div class="chart-bars">' +
@@ -1213,6 +1246,7 @@ function renderStats(){
       ${s.cardRanking.length ? s.cardRanking.map(c=>`<div class="scorer-row"><span>${c.name}</span><span class="n mono">${c.yellow ? `🟨${c.yellow}`:''}${c.yellow&&c.red?' ':''}${c.red ? `🟥${c.red}`:''}</span></div>`).join('') : '<div class="empty">Nenhum cartão registado.</div>'}
     </div>
     
+    ${rendimentoHtml}
     ${formHtml}
     ${goalsChartHtml}
   `;

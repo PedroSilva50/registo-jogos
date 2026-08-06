@@ -257,7 +257,7 @@ function showToast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   clearTimeout(showToast._t);
-  showToast._t = setTimeout(()=>t.classList.remove('show'), 3000); // 3 segundos para ler bem a tooltip
+  showToast._t = setTimeout(()=>t.classList.remove('show'), 3000);
 }
 
 window.navigateTo = function(tab){ 
@@ -511,7 +511,6 @@ window.confirmFinishMatch = function(action) {
 window.updateMatchNotes = function(id, val){ const m = state.matches.find(m=>m.id===id); if(m){ m.notes = val; saveState(); } };
 window.reopenMatch = function(id){ const m = state.matches.find(m=>m.id===id); if(m){ m.finished=false; saveState(); navigateTo('jogo'); } };
 window.deleteMatch = function(id){ state.matches = state.matches.filter(m=>m.id!==id); saveState(); render(); };
-window.deleteSchedule = function(id){ state.schedule = state.schedule.filter(x=>x.id!==id); saveState(); render(); };
 
 window.addGoal = function(matchId, type, half, scorerId, assistId){
   const m = state.matches.find(m=>m.id===matchId); if(!m) return;
@@ -1114,8 +1113,8 @@ function renderStats(){
   const s = computeStats(statsFilter, seasonFilter);
 
   // Rendimento por Parte
-  let bal1 = s.scoredHalf[1] - s.concededHalf[1];
-  let bal2 = s.scoredHalf[2] - s.concededHalf[2];
+  let bal1 = (s.scoredHalf[1] || 0) - (s.concededHalf[1] || 0);
+  let bal2 = (s.scoredHalf[2] || 0) - (s.concededHalf[2] || 0);
   let sign1 = bal1 > 0 ? '+' : '';
   let sign2 = bal2 > 0 ? '+' : '';
   let color1 = bal1 > 0 ? 'var(--green)' : (bal1 < 0 ? 'var(--red)' : 'var(--muted)');
@@ -1125,11 +1124,11 @@ function renderStats(){
     <div class="section-title" style="margin-top:16px;">Rendimento por Parte</div>
     <div class="card">
       <div style="display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--line);">
-        <div><b style="color:var(--chalk); font-size:13px;">1ª Parte</b><br><span style="font-size:11px; color:var(--muted);">${s.scoredHalf[1]} Marcados | ${s.concededHalf[1]} Sofridos</span></div>
+        <div><b style="color:var(--chalk); font-size:13px;">1ª Parte</b><br><span style="font-size:11px; color:var(--muted);">${s.scoredHalf[1] || 0} Marcados | ${s.concededHalf[1] || 0} Sofridos</span></div>
         <div style="text-align:right;"><span style="font-size:10px; color:var(--muted); text-transform:uppercase;">Balanço</span><br><b style="font-size:16px; color:${color1}; font-family:'Roboto Mono',monospace;">${sign1}${bal1}</b></div>
       </div>
       <div style="display:flex; justify-content:space-between;">
-        <div><b style="color:var(--chalk); font-size:13px;">2ª Parte</b><br><span style="font-size:11px; color:var(--muted);">${s.scoredHalf[2]} Marcados | ${s.concededHalf[2]} Sofridos</span></div>
+        <div><b style="color:var(--chalk); font-size:13px;">2ª Parte</b><br><span style="font-size:11px; color:var(--muted);">${s.scoredHalf[2] || 0} Marcados | ${s.concededHalf[2] || 0} Sofridos</span></div>
         <div style="text-align:right;"><span style="font-size:10px; color:var(--muted); text-transform:uppercase;">Balanço</span><br><b style="font-size:16px; color:${color2}; font-family:'Roboto Mono',monospace;">${sign2}${bal2}</b></div>
       </div>
     </div>

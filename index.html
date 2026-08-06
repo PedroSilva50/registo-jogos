@@ -170,6 +170,12 @@
   .chart-bar.scored { background: var(--gold); }
   .chart-bar.conceded { background: var(--red); }
   .chart-x-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Oswald'; text-align: center; max-width: 40px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+
+  /* PROFILE CARD */
+  .profile-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .profile-stat { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; text-align: center; }
+  .profile-stat .val { font-family: 'Roboto Mono', monospace; font-size: 24px; font-weight: 700; color: var(--chalk); }
+  .profile-stat .lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Oswald'; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -213,6 +219,7 @@ let seasonFilter = 'todas';
 let matchSearchQuery = '';
 let modalConfig = null;
 let expandedPlayer = null;
+let editingPlayerId = null; // Novo estado para o modo de edição do jogador
 let trainingForm = null;
 let expandedTraining = null;
 
@@ -912,35 +919,6 @@ function renderCalendario(){
   `;
 }
 
-window.toggleCallup = function(schId, pId){
-  const s = state.schedule.find(x=>x.id===schId);
-  if(s){ if(s.callup.includes(pId)) s.callup = s.callup.filter(x=>x!==pId); else s.callup.push(pId); saveState(); render(); }
-};
-window.copyCallup = function(schId){
-  const s = state.schedule.find(x=>x.id===schId); if(!s) return;
-  const dateStr = s.date.split('-').reverse().join('/');
-  
-  const timeParts = s.time.split(':');
-  let d = new Date(); d.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]));
-  d.setHours(d.getHours() - 1);
-  const meetTime = String(d.getHours()).padStart(2,'0') + 'h' + String(d.getMinutes()).padStart(2,'0');
-
-  let compLabel = '';
-  if(s.type === 'torneio') compLabel = `Torneio: ${s.tournamentName}${s.phase ? ' - ' + s.phase : ''}`;
-  else if(s.type === 'campeonato') compLabel = `Campeonato Oficial${s.phase ? ' - ' + s.phase : ''}`;
-  else compLabel = 'Amigável';
-
-  let matchTitle = s.location === 'casa' ? `GD São Roque 🆚 ${s.opponent}` : `${s.opponent} 🆚 GD São Roque`;
-  
-  let text = `⚽ *${matchTitle}*\n📅 ${dateStr}\n⏱️ *Hora de Comparência: ${meetTime}*\n🏟️ *${s.location === 'casa' ? 'Casa' : 'Fora'}*\n🏆 ${compLabel}\n\n📋 *CONVOCADOS:*\n`;
-  
-  const called = eligiblePlayers().filter(p => s.callup.includes(p.id));
-  if(called.length === 0) text += "- Nenhum selecionado ainda\n";
-  called.forEach(p => text += `- ${p.number ? `${p.number} - ` : ''}${p.name}\n`);
-  
-  navigator.clipboard.writeText(text).then(()=>showToast("Copiado para WhatsApp ✓")).catch(()=>showToast("Erro ao copiar"));
-};
-
 window.uiSaveTraining = function(){
   const date = (document.getElementById('tr-date-input') || {}).value || '';
   const notes = trainingForm.notes || '';
@@ -1107,6 +1085,50 @@ function computeStats(typeFilterVal, seasonFilterVal){
   const cardRanking = [...new Set([...Object.keys(yellowCount), ...Object.keys(redCount)])].map(id=>({id, name: playerName(id), yellow: yellowCount[id]||0, red: redCount[id]||0})).sort((a,b)=>(b.yellow+b.red)-(a.yellow+a.red));
   
   return { scored, conceded, scoredHalf, concededHalf, scorers, assisters, wins, draws, losses, casaWins, casaDraws, casaLosses, foraWins, foraDraws, foraLosses, cardRanking, last6Matches, last5Form };
+}
+
+/* FUNÇÃO NOVA: Calcula estatísticas exclusivas para o Raio-X do Jogador */
+function calcularEstatisticaJogador(playerId) {
+  let golos = 0, assistencias = 0;
+  let amarelos = 0, vermelhos = 0;
+  let somaAvaliacoes = 0, numAvaliacoes = 0;
+  let faltasTreino = 0;
+  let presencasConvocatoria = 0;
+
+  // Analisar os jogos
+  state.matches.forEach(m => {
+    // Contar convocações (jogos finalizados contam)
+    if(m.finished) presencasConvocatoria++; // Simplificação: assumimos que esteve presente na época
+    
+    // Contar golos e assistências
+    m.goals.forEach(g => {
+       if (g.type === 'scored' && g.scorerId === playerId) golos++;
+       if (g.type === 'scored' && g.assistId === playerId) assistencias++;
+    });
+
+    // Contar cartões
+    (m.cards || []).forEach(c => {
+       if(c.playerId === playerId) {
+          if(c.color === 'Amarelo') amarelos++;
+          else vermelhos++;
+       }
+    });
+
+    // Calcular média das estrelas
+    if(m.ratings && m.ratings[playerId]) {
+       somaAvaliacoes += m.ratings[playerId];
+       numAvaliacoes++;
+    }
+  });
+
+  // Analisar os treinos (Faltas)
+  state.trainings.forEach(t => {
+     if(t.absences && t.absences.includes(playerId)) faltasTreino++;
+  });
+
+  let media = numAvaliacoes > 0 ? (somaAvaliacoes / numAvaliacoes).toFixed(1) : '-';
+
+  return { golos, assistencias, amarelos, vermelhos, media, faltasTreino, presencasConvocatoria };
 }
 
 function renderStats(){
@@ -1359,23 +1381,61 @@ function renderPlantel(){
     <div class="card">
       ${activeRoster.length ? activeRoster.map(p=>{
         const open = expandedPlayer === p.id;
+        const isEditing = editingPlayerId === p.id;
+        const stats = open ? calcularEstatisticaJogador(p.id) : null;
+        
         return `
-          <div class="player-item" onclick="if(!event.target.closest('button') && !event.target.closest('input')){ expandedPlayer=expandedPlayer==='${p.id}'?null:'${p.id}'; render(); }">
-            <div class="player-row" style="border-bottom:none; padding-bottom:${open?'4px':'10px'}; display:flex; align-items:center;">
+          <div class="player-item" onclick="if(!event.target.closest('button') && !event.target.closest('input')){ expandedPlayer=expandedPlayer==='${p.id}'?null:'${p.id}'; editingPlayerId=null; render(); }">
+            <div class="player-row" style="border-bottom:none; padding-bottom:${open?'10px':'10px'}; display:flex; align-items:center;">
               <span style="flex:1;">
                 ${p.number ? `<span class="mono" style="color:var(--gold);">#${p.number}</span> ` : ''}
-                ${p.name}
+                <strong style="font-size:15px;">${p.name}</strong>
                 ${p.positions ? `<span style="font-size:9px; color:var(--gold); border:1px solid var(--gold-dim); padding:1px 4px; border-radius:4px; margin-left:6px; font-family:'Oswald';">${p.positions}</span>` : ''}
                 ${p.birthDate ? ` <span style="color:var(--muted); font-size:12px;">- ${computeAge(p.birthDate)} anos</span>` : ''}
               </span>
             </div>
             ${open ? `
-              <div style="padding-bottom:12px; display:flex; flex-direction:column; gap:10px;">
-                <div class="field" style="margin-bottom:0;"><label>Nome</label><input type="text" onchange="updatePlayerName('${p.id}', this.value)" value="${p.name}"></div>
-                <div class="field" style="margin-bottom:0;"><label>Número</label><input type="number" min="1" max="99" onchange="updatePlayerNumber('${p.id}', this.value)" value="${p.number||''}"></div>
-                <div class="field" style="margin-bottom:0;"><label>Posições (ex: MC, PL)</label><input type="text" onchange="updatePlayerPositions('${p.id}', this.value)" value="${p.positions||''}"></div>
-                <div class="field" style="margin-bottom:0;"><label>Data de Nascimento</label><input type="date" onchange="updatePlayerBirthDate('${p.id}', this.value)" value="${p.birthDate||''}"></div>
-                <button class="btn btn-outline" style="color:var(--red);" onclick="askConfirm('Remover jogador?', ()=>removePlayer('${p.id}'))">Remover Jogador</button>
+              <div style="padding-bottom:12px;">
+                ${!isEditing ? `
+                  <!-- Cartão de Perfil do Jogador -->
+                  <div class="profile-stats-grid">
+                    <div class="profile-stat">
+                       <div class="val">${stats.golos}</div>
+                       <div class="lbl">⚽ Golos</div>
+                    </div>
+                    <div class="profile-stat">
+                       <div class="val">${stats.assistencias}</div>
+                       <div class="lbl">🎯 Assistências</div>
+                    </div>
+                    <div class="profile-stat">
+                       <div class="val" style="color:var(--gold);">${stats.media}</div>
+                       <div class="lbl">⭐ Forma Média</div>
+                    </div>
+                    <div class="profile-stat">
+                       <div class="val" style="color:var(--red);">${stats.faltasTreino}</div>
+                       <div class="lbl">📉 Faltas aos Treinos</div>
+                    </div>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface-2); padding:10px; border-radius:8px; margin-bottom:12px;">
+                     <span style="font-size:11px; color:var(--muted); font-family:'Oswald'; text-transform:uppercase; letter-spacing:0.05em;">Disciplina</span>
+                     <span class="mono" style="font-size:14px;">🟨 ${stats.amarelos} &nbsp; 🟥 ${stats.vermelhos}</span>
+                  </div>
+                  <button class="btn btn-outline" style="width:100%; font-size:12px; padding:10px;" onclick="event.stopPropagation(); editingPlayerId='${p.id}'; render();">✏️ Editar Dados do Jogador</button>
+                ` : `
+                  <!-- Formulário Antigo de Edição -->
+                  <div style="display:flex; flex-direction:column; gap:10px; background:var(--surface-2); padding:12px; border-radius:12px; border:1px solid var(--line);">
+                    <div class="panel-title" style="margin-bottom:0; color:var(--gold);">Modo Edição</div>
+                    <div class="field" style="margin-bottom:0;"><label>Nome</label><input type="text" onchange="updatePlayerName('${p.id}', this.value)" value="${p.name}"></div>
+                    <div class="field" style="margin-bottom:0;"><label>Número</label><input type="number" min="1" max="99" onchange="updatePlayerNumber('${p.id}', this.value)" value="${p.number||''}"></div>
+                    <div class="field" style="margin-bottom:0;"><label>Posições (ex: MC, PL)</label><input type="text" onchange="updatePlayerPositions('${p.id}', this.value)" value="${p.positions||''}"></div>
+                    <div class="field" style="margin-bottom:0;"><label>Data de Nascimento</label><input type="date" onchange="updatePlayerBirthDate('${p.id}', this.value)" value="${p.birthDate||''}"></div>
+                    
+                    <div style="display:flex; gap:10px; margin-top:10px;">
+                       <button class="btn btn-ghost" style="flex:1;" onclick="event.stopPropagation(); editingPlayerId=null; render();">✓ Concluir</button>
+                       <button class="btn btn-outline" style="color:var(--red); flex:1;" onclick="askConfirm('Remover jogador?', ()=>removePlayer('${p.id}'))">🗑 Remover</button>
+                    </div>
+                  </div>
+                `}
               </div>
             ` : ''}
           </div>

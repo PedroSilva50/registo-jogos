@@ -335,8 +335,6 @@ function getHalfDuration(m, half) {
      return 0;
   }
 }
-
-// CORREÇÃO AQUI: INT (isHalftime) assume minuto 9999 para ordenar corretamente
 function getPlayersOnPitchAtEndOfHalf(m, half) {
   let current = [...(m.lineup || [])];
   let subs = (m.subs || []).filter(s => s.half <= half).sort((a,b) => {
@@ -351,7 +349,6 @@ function getPlayersOnPitchAtEndOfHalf(m, half) {
   });
   return current;
 }
-
 function calcPlayerMinutes(m, pId) {
   let mins = 0;
   [1, 2].forEach(half => {
@@ -625,7 +622,6 @@ function ballIconSvg(){
   </svg>`;
 }
 
-// CORREÇÃO AQUI: Ordenação visual na cronologia para o INT ficar no fim da 1ª parte
 function matchNarrativeHtml(m){
   const tm = m.timeline || {}; const cards = m.cards || []; const subs = m.subs || [];
   const eventsForHalf = (half) => {
@@ -645,9 +641,16 @@ function matchNarrativeHtml(m){
   let rows = '';
   const h1 = eventsForHalf(1); const h2 = eventsForHalf(2);
   
+  const h1_regular = h1.filter(e => !e.isHalftime);
+  const h1_int = h1.filter(e => e.isHalftime);
+
   if(h1.length || tm.kickoff) {
       rows += `<div style="font-size:11px; color:var(--gold); font-family:-apple-system, BlinkMacSystemFont, sans-serif; text-transform:uppercase; margin:8px 0 4px; font-weight:600;">⏱️ 1ª Parte</div>`;
-      rows += h1.map(e => e.type==='goal'?goalRow(e.data):(e.type==='card'?cardRow(e.data):subRow(e))).join('');
+      rows += h1_regular.map(e => e.type==='goal'?goalRow(e.data):(e.type==='card'?cardRow(e.data):subRow(e))).join('');
+  }
+  if(tm.halftime || h1_int.length > 0) {
+      rows += `<div style="font-size:11px; color:var(--muted); font-family:-apple-system, BlinkMacSystemFont, sans-serif; text-transform:uppercase; margin:12px 0 8px; font-weight:600; text-align:center; border-top:1px dashed var(--line); border-bottom:1px dashed var(--line); padding:6px 0;">🏁 Fim da 1ª Parte</div>`;
+      rows += h1_int.map(e => e.type==='goal'?goalRow(e.data):(e.type==='card'?cardRow(e.data):subRow(e))).join('');
   }
   if(h2.length || tm.secondHalfStart) {
       rows += `<div style="font-size:11px; color:var(--gold); font-family:-apple-system, BlinkMacSystemFont, sans-serif; text-transform:uppercase; margin:14px 0 4px; font-weight:600;">⏱️ 2ª Parte</div>`;
@@ -995,16 +998,21 @@ window.exportReportTxt = function(){
     (m.cards || []).forEach(c => events.push({ type: 'card', minute: c.minute, half: c.half, data: c }));
     (m.subs || []).forEach(sub => events.push({ type: 'sub', minute: sub.isHalftime ? 'INT' : sub.minute, half: sub.half, data: sub, isHalftime: sub.isHalftime }));
     
-    // CORREÇÃO: Mesma regra de ordenação do INT para o TXT
     events.sort((a,b) => {
        if(a.isHalftime && !b.isHalftime) return 1;
        if(!a.isHalftime && b.isHalftime) return -1;
        return (a.minute==null?999:a.minute)-(b.minute==null?999:b.minute);
     });
 
-    let printedH1 = false, printedH2 = false;
+    let printedH1 = false, printedH1End = false, printedH2 = false;
     events.forEach(e => {
-        if(e.half === 1 && !printedH1) { lines.push(`  ⏱️ 1ª Parte:`); printedH1 = true; }
+        if(e.half === 1 && !e.isHalftime && !printedH1) { lines.push(`  ⏱️ 1ª Parte:`); printedH1 = true; }
+        
+        if((e.isHalftime || e.half === 2) && !printedH1End) { 
+            lines.push(`  🏁 Fim da 1ª Parte`); 
+            printedH1End = true; 
+        }
+
         if(e.half === 2 && !printedH2) { lines.push(`  ⏱️ 2ª Parte:`); printedH2 = true; }
 
         if(e.type === 'goal') {

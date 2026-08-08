@@ -244,7 +244,7 @@ async function loadState(){
        state = JSON.parse(res.value);
        if(!state.trainings) state.trainings = [];
        if(!state.schedule) state.schedule = [];
-       if(state.trackSubs === undefined) state.trackSubs = true; // Por defeito as substituições estão ativas
+       if(state.trackSubs === undefined) state.trackSubs = true;
        if(!state.lastBackupDate && state.matches.length > 0) state.lastBackupDate = Date.now() - (8 * 24 * 60 * 60 * 1000); 
     }
   }catch(e){}
@@ -309,7 +309,6 @@ function getMatchElapsedMs(m){
 }
 function getMatchMinute(m){ return Math.floor(getMatchElapsedMs(m) / 60000); }
 
-// --- LÓGICA DE MINUTOS E SUBSTITUIÇÕES ---
 function timeToMins(tStr) {
   if(!tStr) return 0;
   const parts = tStr.split(':');
@@ -361,7 +360,6 @@ function calcPlayerMinutes(m, pId) {
   return mins > 0 ? mins : 0;
 }
 
-/* ---------- SCHEDULE LOGIC ---------- */
 window.uiAddTournamentGame = function(){
   const last = schForm.games[schForm.games.length-1];
   schForm.games.push({ id: uid(), phase: last ? last.phase : 'Fase de Grupos', opp: '', date: last ? last.date : (schForm.date || new Date().toISOString().slice(0,10)), time: '10:00' });
@@ -437,13 +435,22 @@ window.copyCallup = function(schId){
   let compLabel = s.type === 'torneio' ? `Torneio: ${s.tournamentName}${s.phase ? ' - ' + s.phase : ''}` : (s.type === 'campeonato' ? `Campeonato Oficial${s.phase ? ' - ' + s.phase : ''}` : 'Amigável');
   let matchTitle = s.location === 'casa' ? `GD São Roque 🆚 ${s.opponent}` : `${s.opponent} 🆚 GD São Roque`;
   let text = `⚽ *${matchTitle}*\n📅 ${dateStr}\n⏱️ *Hora de Comparência: ${meetTime}*\n🏟️ *${s.location === 'casa' ? 'Casa' : 'Fora'}*\n🏆 ${compLabel}\n\n📋 *CONVOCADOS:*\n`;
+  
   const called = eligiblePlayers().filter(p => s.callup.includes(p.id));
+  
+  // Nova lógica de ordenação: Primeiro quem tem número, depois alfabético
+  called.sort((a,b) => {
+    if(a.number && b.number) return a.number - b.number;
+    if(a.number) return -1;
+    if(b.number) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
   if(called.length === 0) text += "- Nenhum selecionado\n";
   called.forEach(p => text += `- ${p.number ? `${p.number} - ` : ''}${p.name}\n`);
   navigator.clipboard.writeText(text).then(()=>showToast("Copiado para WhatsApp ✓")).catch(()=>showToast("Erro ao copiar"));
 };
 
-/* ---------- ACTIVE MATCH LOGIC ---------- */
 window.togglePendingLineup = function(id) {
   if(pendingLineupSet.includes(id)) pendingLineupSet = pendingLineupSet.filter(x=>x!==id);
   else pendingLineupSet.push(id);
@@ -540,7 +547,6 @@ window.setRating = function(matchId, playerId, rating){
   saveState(); render();
 };
 
-/* ---------- MODAL ---------- */
 window.askConfirm = function(message, onConfirm){ modalConfig = { message, onConfirm }; document.getElementById('modal-root').innerHTML = renderModalHTML(); };
 window.closeModal = function(){ modalConfig = null; document.getElementById('modal-root').innerHTML = ''; };
 window.confirmModal = function(){ const cb = modalConfig ? modalConfig.onConfirm : null; window.closeModal(); if(cb) cb(); };
@@ -572,7 +578,10 @@ function renderModalHTML(){
         <p style="font-size:13px;">O cronómetro ainda não foi iniciado. Como pretendes fechar o jogo?</p>
         <div style="display:flex; flex-direction:column; gap:10px;">
           <button class="btn btn-gold" onclick="confirmFinishMatch('save')">Gravar Jogo</button>
-          <button class="btn btn-red" onclick="confirmFinishMatch('discard')">Sair Sem Gravar</button>
+          <button class="btn btn-red" style="flex-direction:column; gap:2px; padding:10px;" onclick="confirmFinishMatch('discard')">
+              <span>Sair Sem Gravar</span>
+              <span style="font-size:10px; font-weight:normal; text-transform:none; letter-spacing:0; opacity:0.8;">(devolve jogo ao calendário)</span>
+          </button>
           <button class="btn btn-outline" onclick="confirmFinishMatch('cancel')">Cancelar</button>
         </div>
       </div>
@@ -590,7 +599,6 @@ function renderModalHTML(){
     </div>`;
 }
 
-/* ---------- RENDER HELPERS ---------- */
 function topbarHtml(title){ return `<div class="topbar"><div style="display:flex; align-items:center;"><span class="topbar-home" onclick="goHome()" title="Início">${ballIconSvg()}</span><h1>${title}</h1></div><span class="topbar-settings" onclick="openSettings()">⚙️</span></div>`; }
 function ballIconSvg(){
   return `<svg style="width:100%; height:100%;" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
@@ -625,7 +633,6 @@ function matchNarrativeHtml(m){
   return rows || '<div class="empty">Sem eventos registados.</div>';
 }
 
-/* ---------- VIEWS ---------- */
 function renderHome(){
   const active = getActiveMatch();
   let backupWarning = '';

@@ -335,11 +335,15 @@ function getHalfDuration(m, half) {
      return 0;
   }
 }
+
+// CORREÇÃO AQUI: INT (isHalftime) assume minuto 9999 para ordenar corretamente
 function getPlayersOnPitchAtEndOfHalf(m, half) {
   let current = [...(m.lineup || [])];
   let subs = (m.subs || []).filter(s => s.half <= half).sort((a,b) => {
       if(a.half !== b.half) return a.half - b.half;
-      return (a.isHalftime ? 0 : (a.minute || 0)) - (b.isHalftime ? 0 : (b.minute || 0));
+      let minA = a.isHalftime ? 9999 : (a.minute || 0);
+      let minB = b.isHalftime ? 9999 : (b.minute || 0);
+      return minA - minB;
   });
   subs.forEach(s => {
       current = current.filter(id => id !== s.outId);
@@ -347,6 +351,7 @@ function getPlayersOnPitchAtEndOfHalf(m, half) {
   });
   return current;
 }
+
 function calcPlayerMinutes(m, pId) {
   let mins = 0;
   [1, 2].forEach(half => {
@@ -536,14 +541,14 @@ window.confirmSub = function(mId) {
    const m = state.matches.find(x=>x.id===mId); if(!m) return;
    if(!m.subs) m.subs = [];
    const currentH = window.currentHalfFromTimeline(m);
-   const isHalftime = currentH === 'halftime';
+   const isHT = currentH === 'halftime';
    m.subs.push({ 
      id: uid(), 
      outId: pendingSub.outId, 
      inId: pendingSub.inId, 
-     half: isHalftime ? 1 : (currentH || 1), 
-     isHalftime: isHalftime,
-     minute: isHalftime ? null : getMatchMinute(m) 
+     half: isHT ? 1 : (currentH || 1), 
+     isHalftime: isHT,
+     minute: isHT ? null : getMatchMinute(m) 
    });
    pendingSub = null; saveState(); render();
 };
@@ -619,6 +624,8 @@ function ballIconSvg(){
     <path d="M50 29 L50 9 M63 39 L81 30 M58 55 L71 71 M42 55 L29 71 M37 39 L19 30" stroke="var(--gold)" stroke-width="3" fill="none" stroke-linecap="round"/>
   </svg>`;
 }
+
+// CORREÇÃO AQUI: Ordenação visual na cronologia para o INT ficar no fim da 1ª parte
 function matchNarrativeHtml(m){
   const tm = m.timeline || {}; const cards = m.cards || []; const subs = m.subs || [];
   const eventsForHalf = (half) => {
@@ -626,13 +633,13 @@ function matchNarrativeHtml(m){
     const cds = cards.filter(c=>c.half===half).map(c=>({ type:'card', minute:c.minute, data:c }));
     const sbs = subs.filter(s=>s.half===half || (half===1 && s.isHalftime)).map(s=>({ type:'sub', minute:s.isHalftime?'INT':s.minute, data:s, isHalftime: s.isHalftime }));
     return [...goals, ...cds, ...sbs].sort((a,b)=>{
-       if(a.isHalftime) return 1;
-       if(b.isHalftime) return -1;
+       if(a.isHalftime && !b.isHalftime) return 1;
+       if(!a.isHalftime && b.isHalftime) return -1;
        return (a.minute==null?999:a.minute)-(b.minute==null?999:b.minute);
     });
   };
-  const goalRow = (g) => `<div class="goal-row"><span>${g.minute!=null?`<span class="mono" style="color:var(--gold);">${g.minute}'</span> `:''}${g.type==='scored'?'⚽ '+playerName(g.scorerId)+(g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''):'golo sofrido'}</span><button class="del" onclick="event.stopPropagation(); askConfirm('Eliminar golo?', ()=>deleteGoal('${m.id}', '${g.id}'))">✕</button></div>`;
-  const cardRow = (c) => `<div class="goal-row"><span>${c.minute!=null?`<span class="mono" style="color:var(--gold);">${c.minute}'</span> `:''}${c.color==='Amarelo'?'🟨':'sed'} ${playerName(c.playerId)}</span><button class="del" onclick="event.stopPropagation(); askConfirm('Eliminar cartão?', ()=>deleteCard('${m.id}', '${c.id}'))">✕</button></div>`;
+  const goalRow = (g) => `<div class="goal-row"><span>${g.minute!=null?`<span class="mono" style="color:var(--gold);">${g.minute}'</span> `:''}${g.type==='scored'?'⚽ '+playerName(g.scorerId)+(g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''):'🥅 Sofrido'}</span><button class="del" onclick="event.stopPropagation(); askConfirm('Eliminar golo?', ()=>deleteGoal('${m.id}', '${g.id}'))">✕</button></div>`;
+  const cardRow = (c) => `<div class="goal-row"><span>${c.minute!=null?`<span class="mono" style="color:var(--gold);">${c.minute}'</span> `:''}${c.color==='Amarelo'?'🟨':'🟥'} ${playerName(c.playerId)}</span><button class="del" onclick="event.stopPropagation(); askConfirm('Eliminar cartão?', ()=>deleteCard('${m.id}', '${c.id}'))">✕</button></div>`;
   const subRow = (s) => `<div class="goal-row"><span><span class="mono" style="color:var(--gold);">${s.isHalftime ? 'INT' : (s.minute!=null?s.minute+"'":"")}</span> 🔄 <span style="color:var(--red)">↓ ${playerName(s.data.outId)}</span> <span style="color:var(--green)">↑ ${playerName(s.data.inId)}</span></span><button class="del" onclick="event.stopPropagation(); askConfirm('Eliminar substituição?', ()=>deleteSub('${m.id}', '${s.data.id}'))">✕</button></div>`;
 
   let rows = '';
@@ -987,9 +994,11 @@ window.exportReportTxt = function(){
     m.goals.forEach(g => events.push({ type: 'goal', minute: g.minute, half: g.half, data: g }));
     (m.cards || []).forEach(c => events.push({ type: 'card', minute: c.minute, half: c.half, data: c }));
     (m.subs || []).forEach(sub => events.push({ type: 'sub', minute: sub.isHalftime ? 'INT' : sub.minute, half: sub.half, data: sub, isHalftime: sub.isHalftime }));
+    
+    // CORREÇÃO: Mesma regra de ordenação do INT para o TXT
     events.sort((a,b) => {
-       if(a.isHalftime) return 1;
-       if(b.isHalftime) return -1;
+       if(a.isHalftime && !b.isHalftime) return 1;
+       if(!a.isHalftime && b.isHalftime) return -1;
        return (a.minute==null?999:a.minute)-(b.minute==null?999:b.minute);
     });
 
@@ -1001,13 +1010,13 @@ window.exportReportTxt = function(){
         if(e.type === 'goal') {
             const g = e.data;
             if(g.type==='scored') lines.push(`    ⚽ ${g.minute!=null?g.minute+"' ":""}- ${playerName(g.scorerId)}${g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''}`);
-            else lines.push(`    golo sofrido`);
+            else lines.push(`    🥅 ${g.minute!=null?g.minute+"' ":""}- Sofrido`);
         } else if(e.type === 'card') {
             const c = e.data;
-            lines.push(`    ${c.color==='Amarelo'?'🟨':'sed'} ${c.minute!=null?c.minute+"' ":""}- ${playerName(c.playerId)}`);
+            lines.push(`    ${c.color==='Amarelo'?'🟨':'🟥'} ${c.minute!=null?c.minute+"' ":""}- ${playerName(c.playerId)}`);
         } else if(e.type === 'sub') {
             const sub = e.data;
-            lines.push(`    🔄 ${sub.isHalftime ? 'INT' : (sub.minute!=null?sub.minute+"' ":"")}- Sai: ${playerName(sub.outId)} | Entra: ${playerName(sub.inId)}`);
+            lines.push(`    🔄 ${sub.isHalftime ? 'INT ' : (sub.minute!=null?sub.minute+"' ":"")}- Sai: ${playerName(sub.outId)} | Entra: ${playerName(sub.inId)}`);
         }
     });
     
@@ -1049,7 +1058,7 @@ function renderPlantel(){
                     ${state.trackSubs ? `<div class="profile-stat"><div class="val" style="color:var(--chalk);">${st.minutos}</div><div class="lbl">⏱️ Minutos</div></div><div class="profile-stat"><div class="val" style="color:var(--chalk);">${st.jogosTitular}</div><div class="lbl">Titular (XI)</div></div>` : ''}
                     <div class="profile-stat"><div class="val" style="color:var(--red);">${st.faltasTreino}</div><div class="lbl">📉 Faltas aos Treinos</div></div>
                   </div>
-                  <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface-2); padding:10px; border-radius:8px; margin-bottom:12px;"><span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:700;">Disciplina</span><span class="mono" style="font-size:14px;">🟨 ${st.amarelos} &nbsp; sed ${st.vermelhos}</span></div>
+                  <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface-2); padding:10px; border-radius:8px; margin-bottom:12px;"><span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:700;">Disciplina</span><span class="mono" style="font-size:14px;">🟨 ${st.amarelos} &nbsp; 🟥 ${st.vermelhos}</span></div>
                   <button class="btn btn-outline" style="width:100%; font-size:12px; padding:10px;" onclick="event.stopPropagation(); editingPlayerId='${p.id}'; render();">✏️ Editar Dados do Jogador</button>
                 ` : `
                   <div style="display:flex; flex-direction:column; gap:10px; background:var(--surface-2); padding:12px; border-radius:12px; border:1px solid var(--line);">

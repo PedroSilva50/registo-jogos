@@ -170,17 +170,18 @@
   .profile-stat .val { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 20px; font-weight: 700; color: var(--chalk); }
   .profile-stat .lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; font-weight:700;}
 
-  /* TACTIC BOARD */
-  .tactic-pitch-container { width: 100%; max-width: 400px; margin: 0 auto 16px; position: relative; aspect-ratio: 2/3; background: #1B452D; border: 2px solid #FFF; overflow: hidden; touch-action: none; border-radius: 4px;}
+  /* TACTIC BOARD - OTIMIZADO PARA MOBILE */
+  .tactic-pitch-container { width: 100%; max-width: 400px; margin: 0 auto 16px; position: relative; aspect-ratio: 2/3; background: #1B452D; border: 2px solid #FFF; overflow: hidden; touch-action: none; border-radius: 8px;}
   .tactic-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .tactic-piece {
-      position: absolute; width: 30px; height: 30px; border-radius: 50%; transform: translate(-50%, -50%);
-      display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
-      cursor: grab; user-select: none; box-shadow: 0 4px 6px rgba(0,0,0,0.5); z-index: 10;
+      position: absolute; width: 34px; height: 34px; border-radius: 50%; transform: translate(-50%, -50%);
+      display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+      cursor: grab; user-select: none; box-shadow: 0 4px 8px rgba(0,0,0,0.6); z-index: 10;
+      touch-action: none; -webkit-user-select: none;
   }
   .tactic-piece.own { background: var(--gold); color: var(--btn-gold-txt); border: 2px solid #FFF; }
   .tactic-piece.opp { background: var(--red); color: #FFF; border: 2px solid #FFF; }
-  .tactic-piece.ball { background: #FFF; font-size: 18px; box-shadow: 0 2px 4px rgba(0,0,0,0.5); border: none; }
+  .tactic-piece.ball { background: #FFF; font-size: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.5); border: none; }
   .tactic-piece span { pointer-events: none; }
 </style>
 </head>
@@ -238,7 +239,7 @@ const dict = {
     match_vs: "vs", match_home: "Casa", match_away: "Fora", match_scored: "Marcados", match_conc: "Sofridos", match_add_goal: "+ Marcado", match_add_conc: "+ Sofrido",
     match_yellow: "Amarelo", match_red: "Vermelho", match_locked: "🔒 Ações de jogo bloqueadas (Apito Final)",
     match_notes: "Notas finais do jogo", match_notes_ph: "Ex: notas do jogo...",
-    tac_title: "Quadro Tático", tac_inst: "Toca para adicionar. Arrasta para mover.<br>Arrasta para fora do relvado para apagar.",
+    tac_title: "Quadro Tático", tac_inst: "Toca para adicionar. Arrasta para mover.<br>Toca 2 vezes na peça para a apagar.",
     tac_box: "Caixa de Peças", tac_clear: "🧹 Limpar Quadro", tac_opp: "+ Adversário", tac_ball: "+ Bola ⚽", tac_own: "Teus Jogadores", tac_no_pls: "Sem mais jogadores disponíveis.",
     sch_title: "Calendário", sch_new: "+ Agendar Novo Jogo", sch_edit: "Editar Agendamento", sch_single: "Jogo Único", sch_multi: "Torneio (Múltiplos)",
     sch_tour_name: "Nome do Torneio", sch_tour_ph: "Ex: Torneio de Verão", sch_loc_gen: "Local (Geral)", sch_tour_games: "Jogos do Torneio", sch_game: "Jogo",
@@ -303,7 +304,7 @@ const dict = {
     match_vs: "vs", match_home: "Home", match_away: "Away", match_scored: "Scored", match_conc: "Conceded", match_add_goal: "+ Scored", match_add_conc: "+ Conceded",
     match_yellow: "Yellow", match_red: "Red", match_locked: "🔒 Match actions locked (Full Time)",
     match_notes: "Final match notes", match_notes_ph: "E.g.: match notes...",
-    tac_title: "Tactic Board", tac_inst: "Tap to add. Drag to move.<br>Drag off the pitch to remove.",
+    tac_title: "Tactic Board", tac_inst: "Tap to add. Drag to move.<br>Double tap a piece to delete it.",
     tac_box: "Piece Box", tac_clear: "🧹 Clear Board", tac_opp: "+ Opponent", tac_ball: "+ Ball ⚽", tac_own: "Your Players", tac_no_pls: "No more players available.",
     sch_title: "Schedule", sch_new: "+ Schedule New Match", sch_edit: "Edit Match", sch_single: "Single Match", sch_multi: "Tournament (Multiple)",
     sch_tour_name: "Tournament Name", sch_tour_ph: "E.g.: Summer Cup", sch_loc_gen: "Location (General)", sch_tour_games: "Tournament Matches", sch_game: "Match",
@@ -601,7 +602,7 @@ function matchNarrativeHtml(m, isLocked = false){
     const sbs = subs.filter(s=>s.half===half || (half===1 && s.isHalftime)).map(s=>({ type:'sub', minute:s.isHalftime?'INT':s.minute, data:s, isHalftime: s.isHalftime }));
     return [...goals, ...cds, ...sbs].sort((a,b)=>{ if(a.isHalftime && !b.isHalftime) return 1; if(!a.isHalftime && b.isHalftime) return -1; return (a.minute==null?999:a.minute)-(b.minute==null?999:b.minute); });
   };
-  const goalRow = (g) => `<div class="goal-row"><span>${g.minute!=null?`<span class="mono" style="color:var(--gold);">${g.minute}'</span> `:''}${g.type==='scored'?'⚽ '+playerName(g.scorerId)+(g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''):'🥅 '+t('rep_conc')}</span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_goal')}', ()=>deleteGoal('${m.id}', '${g.id}'))">✕</button>` : ''}</div>`;
+  const goalRow = (g) => `<div class="goal-row"><span>${g.minute!=null?`<span class="mono" style="color:var(--gold);">${g.minute}'</span> `:''}${g.type==='scored'?'⚽ '+playerName(g.scorerId)+(g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''):'g '+t('rep_conc')}</span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_goal')}', ()=>deleteGoal('${m.id}', '${g.id}'))">✕</button>` : ''}</div>`;
   const cardRow = (c) => `<div class="goal-row"><span>${c.minute!=null?`<span class="mono" style="color:var(--gold);">${c.minute}'</span> `:''}${c.color==='Amarelo'?'🟨':'🟥'} ${playerName(c.playerId)}</span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_card')}', ()=>deleteCard('${m.id}', '${c.id}'))">✕</button>` : ''}</div>`;
   const subRow = (s) => `<div class="goal-row"><span><span class="mono" style="color:var(--gold);">${s.isHalftime ? 'INT' : (s.minute!=null?s.minute+"'":"")}</span> 🔄 <span style="color:var(--red)">↓ ${playerName(s.data.outId)}</span> <span style="color:var(--green)">↑ ${playerName(s.data.inId)}</span></span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sub')}', ()=>deleteSub('${m.id}', '${s.data.id}'))">✕</button>` : ''}</div>`;
 
@@ -773,6 +774,12 @@ window.changeTacticFormat = function(f) {
     else { state.tacticFormat = f; saveState(); render(); }
 };
 
+window.removeTacticPiece = function(id) {
+    if(!state.tactics) return;
+    state.tactics = state.tactics.filter(i => i.id !== id);
+    saveState(); render();
+};
+
 function renderTatica(){
   const format = state.tacticFormat || 11; const playersOnPitch = (state.tactics||[]).map(t => t.playerId).filter(Boolean);
   const availablePlayers = eligiblePlayers().filter(p => !playersOnPitch.includes(p.id));
@@ -786,7 +793,7 @@ function renderTatica(){
     <div style="font-size:10px; color:var(--muted); text-align:center; margin-bottom:10px; text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">${t('tac_inst')}</div>
     <div id="tactic-pitch" class="tactic-pitch-container">
       <svg class="tactic-svg" viewBox="0 0 100 150" preserveAspectRatio="none"><line x1="0" y1="75" x2="100" y2="75" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/><circle cx="50" cy="75" r="15" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/><rect x="25" y="0" width="50" height="20" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/><rect x="35" y="0" width="30" height="8" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/><rect x="25" y="130" width="50" height="20" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/><rect x="35" y="142" width="30" height="8" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/></svg>
-      ${(state.tactics||[]).map(item => `<div class="tactic-piece ${item.kind}" data-id="${item.id}" style="left:${item.x}%; top:${item.y}%;"><span>${item.label}</span></div>`).join('')}
+      ${(state.tactics||[]).map(item => `<div class="tactic-piece ${item.kind}" data-id="${item.id}" ondblclick="removeTacticPiece('${item.id}')" style="left:${item.x}%; top:${item.y}%;"><span>${item.label}</span></div>`).join('')}
     </div>
     <div class="panel" style="margin-top:0;">
        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;"><div class="panel-title" style="margin-bottom:0;">${t('tac_box')}</div><button class="quick-del" style="font-size:10px; border:1px solid var(--line); border-radius:4px; padding:4px 8px; font-weight:700; text-transform:uppercase;" onclick="askConfirm('${t('msg_clear_tac')}', ()=>{state.tactics=[]; saveState(); render();})">${t('tac_clear')}</button></div>
@@ -801,36 +808,81 @@ function renderTatica(){
   `;
 }
 
-let dragObj = { dragging: false, id: null, el: null, offsetX: 0, offsetY: 0, pitch: null };
-function getPointer(e) { return e.touches && e.touches.length > 0 ? e.touches[0] : e; }
-document.addEventListener('touchstart', startDrag, {passive: false}); document.addEventListener('mousedown', startDrag);
-document.addEventListener('touchmove', moveDrag, {passive: false}); document.addEventListener('mousemove', moveDrag);
-document.addEventListener('touchend', endDrag); document.addEventListener('mouseup', endDrag);
+// MOTOR DRAG & DROP RECALIBRADO PARA TELEMÓVEIS
+let dragObj = { dragging: false, id: null, el: null, pitchRect: null };
+
+function getTouchPos(e) {
+  const touch = e.touches && e.touches.length > 0 ? e.touches[0] : (e.changedTouches ? e.changedTouches[0] : e);
+  return { x: touch.clientX, y: touch.clientY };
+}
+
+document.addEventListener('touchstart', startDrag, {passive: false});
+document.addEventListener('mousedown', startDrag);
+document.addEventListener('touchmove', moveDrag, {passive: false});
+document.addEventListener('mousemove', moveDrag);
+document.addEventListener('touchend', endDrag);
+document.addEventListener('mouseup', endDrag);
 
 function startDrag(e) {
   if (currentTab !== 'tatica') return;
-  const piece = e.target.closest('.tactic-piece'); if (!piece) return;
-  const pitchEl = document.getElementById('tactic-pitch'); if (!pitchEl) return;
-  dragObj.dragging = true; dragObj.el = piece; dragObj.id = piece.dataset.id; dragObj.pitch = pitchEl.getBoundingClientRect();
-  const p = getPointer(e); const rect = piece.getBoundingClientRect();
-  dragObj.offsetX = p.clientX - (rect.left + rect.width/2); dragObj.offsetY = p.clientY - (rect.top + rect.height/2);
-  piece.style.transition = 'none'; piece.style.zIndex = 1000;
+  const piece = e.target.closest('.tactic-piece');
+  if (!piece) return;
+  const pitchEl = document.getElementById('tactic-pitch');
+  if (!pitchEl) return;
+  
+  dragObj.dragging = true;
+  dragObj.el = piece;
+  dragObj.id = piece.dataset.id;
+  dragObj.pitchRect = pitchEl.getBoundingClientRect();
+  
+  piece.style.transition = 'none';
+  piece.style.zIndex = 1000;
 }
+
 function moveDrag(e) {
   if (!dragObj.dragging || currentTab !== 'tatica') return;
-  e.preventDefault(); const p = getPointer(e);
-  let x = p.clientX - dragObj.pitch.left - dragObj.offsetX; let y = p.clientY - dragObj.pitch.top - dragObj.offsetY;
-  dragObj.el.style.left = x + 'px'; dragObj.el.style.top = y + 'px';
+  e.preventDefault(); // Impede o ecrã do telemóvel de fazer scroll enquanto arrastas
+  
+  const pos = getTouchPos(e);
+  let relX = pos.x - dragObj.pitchRect.left;
+  let relY = pos.y - dragObj.pitchRect.top;
+  
+  let pctX = (relX / dragObj.pitchRect.width) * 100;
+  let pctY = (relY / dragObj.pitchRect.height) * 100;
+  
+  // Limita o movimento visual dentro do relvado
+  pctX = Math.max(0, Math.min(100, pctX));
+  pctY = Math.max(0, Math.min(100, pctY));
+  
+  dragObj.el.style.left = pctX + '%';
+  dragObj.el.style.top = pctY + '%';
 }
+
 function endDrag(e) {
   if (!dragObj.dragging || currentTab !== 'tatica') return;
   dragObj.dragging = false;
-  const p = getPointer(e) || (e.changedTouches ? e.changedTouches[0] : e);
-  const px = p.clientX - dragObj.pitch.left - dragObj.offsetX; const py = p.clientY - dragObj.pitch.top - dragObj.offsetY;
-  const pctX = (px / dragObj.pitch.width) * 100; const pctY = (py / dragObj.pitch.height) * 100;
-  if (pctX < -5 || pctX > 105 || pctY < -5 || pctY > 105) { state.tactics = state.tactics.filter(i => i.id !== dragObj.id); } 
-  else { const item = state.tactics.find(i => i.id === dragObj.id); if (item) { item.x = Math.max(0, Math.min(100, pctX)); item.y = Math.max(0, Math.min(100, pctY)); } }
-  dragObj.el.style.zIndex = ''; saveState(); render();
+  
+  const pos = getTouchPos(e);
+  let relX = pos.x - dragObj.pitchRect.left;
+  let relY = pos.y - dragObj.pitchRect.top;
+  
+  let pctX = (relX / dragObj.pitchRect.width) * 100;
+  let pctY = (relY / dragObj.pitchRect.height) * 100;
+  
+  // Se arrastado para longe do campo, apaga
+  if (pctX < -10 || pctX > 110 || pctY < -10 || pctY > 110) {
+     state.tactics = state.tactics.filter(i => i.id !== dragObj.id);
+  } else {
+     const item = state.tactics.find(i => i.id === dragObj.id);
+     if (item) {
+         item.x = Math.max(0, Math.min(100, pctX));
+         item.y = Math.max(0, Math.min(100, pctY));
+     }
+  }
+  
+  dragObj.el.style.zIndex = '';
+  saveState();
+  render();
 }
 
 window.uiUpdateSearch = function(val){ matchSearchQuery = val; render(); const el = document.getElementById('match-search-input'); if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } };
@@ -1066,7 +1118,7 @@ window.exportReportTxt = function(){
   state.matches.forEach(m=>{
     const sc = m.goals.filter(g=>g.type==='scored').length; const co = m.goals.filter(g=>g.type==='conceded').length;
     let tLbl = m.type==='campeonato'?t('sch_champ'):(m.type==='torneio'?t('sch_tour'):t('sch_friendly'));
-    let lLbl = m.location==='casa'?t('match_home'):t('match_away');
+    let lLbl = m.location==='casa'?t('sch_home'):t('sch_away');
     const myClub = getMyClub();
     let matchTitle = m.location === 'casa' ? `${myClub} vs ${m.opponent}` : `${m.opponent} vs ${myClub}`;
     lines.push(`\n[${m.date}] ${matchTitle} (${tLbl} - ${lLbl}) | ${t('rep_res')} ${sc}-${co}`);

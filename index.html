@@ -247,6 +247,7 @@ const dict = {
     set_subs: "Registar Substituições e Minutos", set_yes: "Sim", set_no: "Não", set_subs_desc: "Pede a equipa inicial antes do apito e regista minutos.",
     set_fairplay: "Mostrar Indicador de Minutos (Fair Play)", set_diary: "Ativar Diário do Balneário", set_videos: "Ativar Biblioteca de Vídeos",
     set_kit: "Cor do Equipamento (Tática)", set_archive: "Terminar e Arquivar Época",
+    archive_title: "Fim de Época", archive_desc: "Vais iniciar uma nova época. O calendário, treinos e diário serão apagados. Os jogos concluídos passam para o Arquivo e as estatísticas dos jogadores voltam a zero.", archive_warn: "Guarda os teus dados antes de avançar:", archive_btn: "Sim, Arquivar Época",
     cancel: "Cancelar", confirm: "Confirmar", del: "Apagar", save: "Gravar", edit: "Editar", remove: "Remover", close: "Fechar",
     match_curr: "Jogo em curso", match_none: "Nenhum jogo a decorrer no momento.", match_goto_sch: "Ir para Calendário",
     match_kickoff: "Apito Inicial", match_ht: "Intervalo", match_2nd: "Início 2ª Parte", match_ft: "🏁 Apito Final",
@@ -325,6 +326,7 @@ const dict = {
     set_subs: "Track Substitutions & Mins", set_yes: "Yes", set_no: "No", set_subs_desc: "Asks for starting XI before kickoff and tracks minutes.",
     set_fairplay: "Show Minutes Indicator (Fair Play)", set_diary: "Enable Locker Room Diary", set_videos: "Enable Video Library",
     set_kit: "Team Kit Color (Tactic)", set_archive: "End and Archive Season",
+    archive_title: "End of Season", archive_desc: "You are about to start a new season. Schedule, trainings and diary will be cleared. Finished matches move to the Archive and player stats reset to zero.", archive_warn: "Save your data before proceeding:", archive_btn: "Yes, Archive Season",
     cancel: "Cancel", confirm: "Confirm", del: "Delete", save: "Save", edit: "Edit", remove: "Remove", close: "Close",
     match_curr: "Current Match", match_none: "No match currently in progress.", match_goto_sch: "Go to Schedule",
     match_kickoff: "Kickoff", match_ht: "Half-time", match_2nd: "Start 2nd Half", match_ft: "🏁 Full Time",
@@ -385,7 +387,7 @@ const dict = {
     msg_del_match: "Delete match?", msg_del_tr: "Delete session?", msg_tr_saved: "Session saved ✓", msg_vid_saved: "Video saved ✓", msg_diary_saved: "Diary note saved ✓",
     msg_del_pl: "Remove player?", msg_err_add_pl: "Error adding player: ", msg_bkp_exp: "Backup exported ✓",
     msg_bkp_imp: "Backup imported ✓", msg_inv_file: "Invalid file ⚠", msg_overwrite: "This will replace all current data with the backup. Continue?",
-    msg_ask_archive: "Are you sure you want to archive the current season? Trainings, diary and schedule will be cleared. Finished matches move to the Archive and player minutes reset to zero.",
+    msg_ask_archive: "Are you sure you want to archive the current season? Trainings, diary and schedule will be cleared. Finished matches move to the Archive and player stats reset to zero.",
     msg_archive_done: "Season archived successfully ✓",
     rep_title: "COACHFOLIO — SEASON REPORT", rep_gen: "Generated:"
   }
@@ -656,18 +658,22 @@ window.closeModal = function(){ modalConfig = null; document.getElementById('mod
 window.confirmModal = function(){ const cb = modalConfig ? modalConfig.onConfirm : null; window.closeModal(); if(cb) cb(); };
 
 window.archiveSeason = function() {
-    askConfirm(t('msg_ask_archive'), () => {
-        const parts = state.currentSeason.split('/');
-        let nextSeason = parts.length === 2 ? `${parseInt(parts[1])}/${parseInt(parts[1])+1}` : 'Nova Época';
-        state.currentSeason = nextSeason;
-        state.schedule = [];
-        state.trainings = [];
-        state.diary = [];
-        saveState();
-        closeModal();
-        showToast(t('msg_archive_done'));
-        goHome();
-    });
+    closeModal();
+    modalConfig = { type: 'archiveSeason' };
+    document.getElementById('modal-root').innerHTML = renderModalHTML();
+};
+
+window.doArchiveSeason = function() {
+    const parts = state.currentSeason.split('/');
+    let nextSeason = parts.length === 2 ? `${parseInt(parts[1])}/${parseInt(parts[1])+1}` : 'Nova Época';
+    state.currentSeason = nextSeason;
+    state.schedule = [];
+    state.trainings = [];
+    state.diary = [];
+    saveState();
+    closeModal();
+    showToast(t('msg_archive_done'));
+    goHome();
 };
 
 function renderModalHTML(){
@@ -754,6 +760,26 @@ function renderModalHTML(){
              </div>
          </div>
          <button class="btn btn-outline" style="width:100%;" onclick="closeModal()">${t('close')}</button>
+       </div>
+     </div>`;
+  }
+  if(modalConfig.type === 'archiveSeason') {
+     return `
+     <div class="modal-overlay">
+       <div class="modal-card">
+         <h3 style="margin-top:0; color:var(--red);">${t('archive_title')}</h3>
+         <p style="font-size:13px; text-align:left; color:var(--chalk);">${t('archive_desc')}</p>
+         <div style="background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:20px;">
+             <p style="font-size:12px; font-weight:bold; color:var(--gold); margin-top:0; margin-bottom:10px;">${t('archive_warn')}</p>
+             <div style="display:flex; flex-direction:column; gap:8px;">
+                 <button class="btn btn-ghost" style="font-size:12px;" onclick="exportReportPDF()">📄 ${t('exp_pdf')}</button>
+                 <button class="btn btn-ghost" style="font-size:12px;" onclick="exportData()">💾 ${t('exp_json')}</button>
+             </div>
+         </div>
+         <div style="display:flex; gap:10px;">
+           <button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button>
+           <button class="btn btn-red" onclick="doArchiveSeason()">${t('archive_btn')}</button>
+         </div>
        </div>
      </div>`;
   }
@@ -1399,7 +1425,7 @@ function renderStats(){
   if(s.last6Matches && s.last6Matches.length > 0) {
       let maxG = 1; s.last6Matches.forEach(m => { const sc = m.goals.filter(g=>g.type==='scored').length; const co = m.goals.filter(g=>g.type==='conceded').length; if(sc > maxG) maxG = sc; if(co > maxG) maxG = co; });
       const barsHtml = s.last6Matches.map(m => {
-           const sc = m.goals.filter(g=>g.type==='scored').length; const co = m.goals.filter(g=>g.type=='conceded').length;
+           const sc = m.goals.filter(g=>g.type==='scored').length; const co = m.goals.filter(g=>g.type==='conceded').length;
            const scPct = (sc / maxG) * 100; const coPct = (co / maxG) * 100; const shortOpp = m.opponent.split(' ')[0];
            const sc1 = m.goals.filter(g=>g.type==='scored' && g.half===1).length; const co1 = m.goals.filter(g=>g.type==='conceded' && g.half===1).length;
            const sc2 = m.goals.filter(g=>g.type==='scored' && g.half===2).length; const co2 = m.goals.filter(g=>g.type==='conceded' && g.half===2).length;

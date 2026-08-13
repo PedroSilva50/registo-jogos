@@ -176,7 +176,7 @@
   .profile-stat .lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; font-weight:700;}
 
   /* TACTIC BOARD */
-  .tactic-pitch-container { width: 100%; max-width: 400px; margin: 0 auto 16px; position: relative; aspect-ratio: 2/3; background: #1B452D; border: 2px solid #FFF; overflow: hidden; touch-action: none; border-radius: 8px;}
+  .tactic-pitch-container { width: 100%; max-width: 400px; margin: 0 auto 16px; position: relative; background: #1B452D; border: 2px solid #FFF; overflow: hidden; touch-action: none; border-radius: 8px;}
   .tactic-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .tactic-piece {
       position: absolute; width: 34px; height: 34px; border-radius: 50%; transform: translate(-50%, -50%);
@@ -184,11 +184,18 @@
       cursor: grab; user-select: none; box-shadow: 0 4px 8px rgba(0,0,0,0.6); z-index: 10;
       touch-action: none; -webkit-user-select: none;
   }
-  .tactic-piece.own { color: #FFF; border: 2px solid #FFF; }
-  .tactic-piece.opp { background: var(--red); color: #FFF; border: 2px solid #FFF; }
-  .tactic-piece.ball { background: #FFF; font-size: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.5); border: none; }
+  .tactic-piece.own { border: 2px solid #FFF; }
+  .tactic-piece.opp { border: 2px solid #FFF; }
+  .tactic-piece.ball { background: #FFF; font-size: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.5); border: none; color: #000; }
   .tactic-piece span { pointer-events: none; }
 
+  /* LEAGUES TABLE */
+  .league-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+  .league-table th, .league-table td { padding: 8px 4px; border-bottom: 1px solid var(--line); text-align: center; }
+  .league-table th { color: var(--muted); font-size: 10px; text-transform: uppercase; font-weight: 700; }
+  .league-table td.team-name { text-align: left; font-weight: 700; }
+  .league-table tr:last-child td { border-bottom: none; }
+  
   /* PRINT MODE FOR PDF EXPORT */
   #print-area { display: none; }
   @media print {
@@ -212,7 +219,6 @@
 <div id="modal-root"></div>
 <div id="print-area"></div>
 
-<!-- NAVBAR RESTRUTURADA EM 4 HUBS -->
 <nav class="navbar" id="navbar" style="display:none;">
   <button class="navbtn" onclick="navigateToHub('jogo')" data-hub="jogo">
     <svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg> <span id="nav-lbl-match">Dia de Jogo</span>
@@ -231,7 +237,6 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// --- DICIONÁRIO I18N ---
 const dict = {
   pt: {
     def_club: "A Minha Equipa", set_club: "Nome da tua Equipa", set_club_ph: "Ex: GD São Roque",
@@ -241,16 +246,17 @@ const dict = {
     hub_match_title: "Dia de Jogo", hub_match_desc: "Jogo em Curso & Resultados Guardados",
     hub_plan_title: "Planeamento", hub_plan_desc: "Calendário, Treinos & Diário do Balneário",
     hub_strat_title: "Estratégia", hub_strat_desc: "Quadro Tático Interativo & Vídeos",
-    hub_team_title: "Equipa & Dados", hub_team_desc: "Plantel, Minutos Fair Play & Estatísticas",
+    hub_team_title: "Equipa & Dados", hub_team_desc: "Plantel, Classificações & Estatísticas",
     set_title: "⚙️ Definições", set_theme: "Tema Visual", set_theme_orig: "Floresta", set_theme_sun: "Sol", set_theme_ocean: "Oceano",
     set_lang: "Idioma / Language",
     set_subs: "Registar Substituições e Minutos", set_yes: "Sim", set_no: "Não", set_subs_desc: "Pede a equipa inicial antes do apito e regista minutos.",
-    set_fairplay: "Mostrar Indicador de Minutos (Fair Play)", set_diary: "Ativar Diário do Balneário", set_videos: "Ativar Biblioteca de Vídeos",
-    set_kit: "Cor do Equipamento (Tática)", set_archive: "Terminar e Arquivar Época",
+    set_fairplay: "Mostrar Indicador de Minutos (Fair Play)", set_diary: "Ativar Diário do Balneário", set_videos: "Ativar Biblioteca de Vídeos", set_leagues: "Ativar Módulo de Classificações",
+    set_kit: "Cor da Equipa (Tática)", set_opp_kit: "Cor do Adversário (Tática)", set_archive: "Terminar e Arquivar Época",
+    set_season_format: "Formato da Época", set_season_eu: "Europa (Ex: 26/27)", set_season_civ: "Ano Civil (Ex: 2026)",
     archive_title: "Fim de Época", archive_desc: "Vais iniciar uma nova época. O calendário, treinos e diário serão apagados. Os jogos concluídos passam para o Arquivo e as estatísticas dos jogadores voltam a zero.", archive_warn: "Guarda os teus dados antes de avançar:", archive_btn: "Sim, Arquivar Época",
     cancel: "Cancelar", confirm: "Confirmar", del: "Apagar", save: "Gravar", edit: "Editar", remove: "Remover", close: "Fechar",
     match_curr: "Jogo em curso", match_none: "Nenhum jogo a decorrer no momento.", match_goto_sch: "Ir para Calendário",
-    match_kickoff: "Apito Inicial", match_ht: "Intervalo", match_2nd: "Início 2ª Parte", match_ft: "🏁 Apito Final",
+    match_kickoff: "Apito Inicial", match_ht: "Intervalo", match_ht_lbl: "Intervalo", match_2nd: "Início 2ª Parte", match_ft: "🏁 Apito Final",
     match_pause: "⏸ Pausar", match_resume: "▶ Retomar", match_ended: "🏁 Jogo Terminado (Falta gravar relatório)",
     match_cap: "Escolher Capitão", match_cap_btn: "+ Definir Capitão", match_cap_change: "Alterar",
     match_goal_half: "Golo marcado — qual parte?", match_conc_half: "Golo sofrido — qual parte?", match_half1: "1ª Parte", match_half2: "2ª Parte",
@@ -289,6 +295,7 @@ const dict = {
     pl_goals: "⚽ Golos", pl_assists: "🎯 Assistências", pl_avg: "⭐ Forma Média", pl_mins: "⏱️ Minutos", pl_start: "Titular (XI)", pl_tr_abs: "📉 Faltas aos Treinos",
     pl_disc: "Disciplina", pl_edit: "✏️ Editar Dados do Jogador", pl_mode: "Modo Edição", pl_name: "Nome", pl_num: "Número", pl_pos: "Posições (ex: MC, PL)",
     pl_dob: "Data de Nascimento", pl_done: "✓ Concluir", pl_add_ph: "Nome do jogador",
+    lg_title: "Classificações", lg_new: "+ Nova Competição", lg_name: "Nome da Competição", lg_teams: "Equipas Inscritas", lg_add_team: "+ Adicionar Equipa", lg_matches: "Resultados da Jornada", lg_add_match: "+ Registar Resultado", lg_table: "Tabela Classificativa",
     fp_balanced: "🟢 Minutos Equilibrados", fp_medium: "🟡 Tempo Abaixo da Média", fp_low: "🔴 Pouco Utilizado",
     exp_title: "Cópia de Segurança & Exportação", exp_desc: "O JSON é o backup para recuperar dados. O PDF e o CSV são relatórios para análise e partilha.",
     exp_json: "Exportar JSON", imp_json: "Importar JSON", exp_pdf: "Relatório (PDF)", exp_csv: "Estatísticas (CSV)",
@@ -299,18 +306,19 @@ const dict = {
     msg_no_opp: "Insere um adversário!", msg_no_tour: "Insere o nome do torneio!", msg_no_games: "Insere pelo menos um adversário!",
     msg_sch_saved: "Agendamento atualizado!", msg_tour_saved: "Torneio agendado!", msg_game_saved: "Jogo agendado!",
     msg_del_sch: "Apagar este agendamento?", msg_warn_order: "Atenção: Este jogo não é o primeiro da lista. Iniciar fora de ordem?",
-    msg_ongoing: "Já tens um jogo em curso!", msg_copied: "Copiado para WhatsApp ✓", msg_copy_err: "Erro ao copiar",
+    msg_ongoing: "Já tens um jogo em curso!", msg_copied: "Partilha pronta ✓", msg_copy_err: "Erro ao partilhar",
     msg_ko: "Registar apito inicial?", msg_ht: "Registar intervalo?", msg_2nd: "Registar início da 2ª parte?", msg_ft: "De certeza que queres apitar para o final do jogo? O relógio vai parar definitivamente.",
     msg_not_started: "Jogo não iniciado", msg_not_started_desc: "O cronómetro ainda não foi iniciado. Como pretendes fechar o jogo?",
     msg_save_game: "Gravar Jogo", msg_exit_nosave: "Sair Sem Gravar", msg_exit_desc: "(devolve jogo ao calendário)",
     msg_match_ended: "Jogo terminado!", msg_ask_rate: "Queres avaliar o desempenho dos jogadores agora?",
     msg_yes_rate: "Sim, Avaliar", msg_no_rate: "Não, Gravar logo",
     msg_del_match: "Eliminar jogo?", msg_del_tr: "Apagar treino?", msg_tr_saved: "Treino guardado ✓", msg_vid_saved: "Vídeo guardado ✓", msg_diary_saved: "Nota guardada no Diário ✓",
-    msg_del_pl: "Remover jogador?", msg_err_add_pl: "Erro ao adicionar jogador: ", msg_bkp_exp: "Backup exportado ✓",
+    msg_del_pl: "Remover jogador?", msg_err_add_pl: "Error adding player: ", msg_bkp_exp: "Backup exportado ✓",
     msg_bkp_imp: "Backup importado ✓", msg_inv_file: "Ficheiro inválido ⚠", msg_overwrite: "Isto substitui todos os dados atuais pelo backup. Continuar?",
     msg_ask_archive: "De certeza que queres arquivar a Época atual? Os treinos, diário e calendário serão limpos. Os jogos concluídos passam para o Arquivo Histórico e os minutos dos jogadores recomeçam do zero.",
     msg_archive_done: "Época arquivada com sucesso ✓",
-    rep_title: "COACHFOLIO — RELATÓRIO DE ÉPOCA", rep_gen: "Gerado em:"
+    msg_del_lg_team: "Remover equipa? (Irá remover os seus jogos)", msg_del_lg_match: "Eliminar resultado?",
+    rep_title: "COACHFOLIO — RELATÓRIO DE ÉPOCA", rep_gen: "Gerado em:", rep_conc: "Sofrido"
   },
   en: {
     def_club: "My Team", set_club: "Your Team Name", set_club_ph: "E.g.: FC Porto",
@@ -320,16 +328,17 @@ const dict = {
     hub_match_title: "Match Day", hub_match_desc: "Live Match & Saved Results",
     hub_plan_title: "Planning", hub_plan_desc: "Schedule, Trainings & Locker Room Diary",
     hub_strat_title: "Strategy", hub_strat_desc: "Interactive Tactic Board & Videos",
-    hub_team_title: "Team & Data", hub_team_desc: "Squad, Fair Play Minutes & Global Stats",
+    hub_team_title: "Team & Data", hub_team_desc: "Squad, Standings & Global Stats",
     set_title: "⚙️ Settings", set_theme: "Visual Theme", set_theme_orig: "Forest", set_theme_sun: "Sun", set_theme_ocean: "Ocean",
     set_lang: "Idioma / Language",
     set_subs: "Track Substitutions & Mins", set_yes: "Yes", set_no: "No", set_subs_desc: "Asks for starting XI before kickoff and tracks minutes.",
-    set_fairplay: "Show Minutes Indicator (Fair Play)", set_diary: "Enable Locker Room Diary", set_videos: "Enable Video Library",
-    set_kit: "Team Kit Color (Tactic)", set_archive: "End and Archive Season",
+    set_fairplay: "Show Minutes Indicator (Fair Play)", set_diary: "Enable Locker Room Diary", set_videos: "Enable Video Library", set_leagues: "Enable Standings Module",
+    set_kit: "Team Kit Color (Tactic)", set_opp_kit: "Opponent Kit Color (Tactic)", set_archive: "End and Archive Season",
+    set_season_format: "Season Format", set_season_eu: "Europe (E.g.: 26/27)", set_season_civ: "Calendar Year (E.g.: 2026)",
     archive_title: "End of Season", archive_desc: "You are about to start a new season. Schedule, trainings and diary will be cleared. Finished matches move to the Archive and player stats reset to zero.", archive_warn: "Save your data before proceeding:", archive_btn: "Yes, Archive Season",
     cancel: "Cancel", confirm: "Confirm", del: "Delete", save: "Save", edit: "Edit", remove: "Remove", close: "Close",
     match_curr: "Current Match", match_none: "No match currently in progress.", match_goto_sch: "Go to Schedule",
-    match_kickoff: "Kickoff", match_ht: "Half-time", match_2nd: "Start 2nd Half", match_ft: "🏁 Full Time",
+    match_kickoff: "Kickoff", match_ht: "Half-time", match_ht_lbl: "Half-Time", match_2nd: "Start 2nd Half", match_ft: "🏁 Full Time",
     match_pause: "⏸ Pause", match_resume: "▶ Resume", match_ended: "🏁 Match Ended (Pending Report)",
     match_cap: "Choose Captain", match_cap_btn: "+ Set Captain", match_cap_change: "Change",
     match_goal_half: "Goal scored — which half?", match_conc_half: "Goal conceded — which half?", match_half1: "1st Half", match_half2: "2nd Half",
@@ -368,6 +377,7 @@ const dict = {
     pl_goals: "⚽ Goals", pl_assists: "🎯 Assists", pl_avg: "⭐ Avg Form", pl_mins: "⏱️ Mins", pl_start: "Started", pl_tr_abs: "📉 Training Absences",
     pl_disc: "Discipline", pl_edit: "✏️ Edit Player Data", pl_mode: "Edit Mode", pl_name: "Name", pl_num: "Number", pl_pos: "Positions (e.g., CM, ST)",
     pl_dob: "Date of Birth", pl_done: "✓ Done", pl_add_ph: "Player name",
+    lg_title: "Standings", lg_new: "+ New League", lg_name: "League Name", lg_teams: "Registered Teams", lg_add_team: "+ Add Team", lg_matches: "Match Results", lg_add_match: "+ Add Result", lg_table: "League Table",
     fp_balanced: "🟢 Balanced Minutes", fp_medium: "🟡 Below Team Average", fp_low: "🔴 Low Minutes Played",
     exp_title: "Backup & Export", exp_desc: "JSON is the backup to restore data. PDF and CSV are analysis reports.",
     exp_json: "Export JSON", imp_json: "Import JSON", exp_pdf: "Report (PDF)", exp_csv: "Stats (CSV)",
@@ -378,7 +388,7 @@ const dict = {
     msg_no_opp: "Enter an opponent!", msg_no_tour: "Enter the tournament name!", msg_no_games: "Enter at least one opponent!",
     msg_sch_saved: "Schedule updated!", msg_tour_saved: "Tournament scheduled!", msg_game_saved: "Match scheduled!",
     msg_del_sch: "Delete this schedule?", msg_warn_order: "Warning: This match is not next in line. Start out of order?",
-    msg_ongoing: "You already have a match in progress!", msg_copied: "Copied to WhatsApp ✓", msg_copy_err: "Error copying",
+    msg_ongoing: "You already have a match in progress!", msg_copied: "Share ready ✓", msg_copy_err: "Error sharing",
     msg_ko: "Record kickoff?", msg_ht: "Record half-time?", msg_2nd: "Record 2nd half start?", msg_ft: "Are you sure you want to blow the final whistle? The clock will stop permanently.",
     msg_not_started: "Match not started", msg_not_started_desc: "The clock hasn't been started yet. How do you want to close the match?",
     msg_save_game: "Save Match", msg_exit_nosave: "Exit Without Saving", msg_exit_desc: "(returns match to schedule)",
@@ -389,14 +399,16 @@ const dict = {
     msg_bkp_imp: "Backup imported ✓", msg_inv_file: "Invalid file ⚠", msg_overwrite: "This will replace all current data with the backup. Continue?",
     msg_ask_archive: "Are you sure you want to archive the current season? Trainings, diary and schedule will be cleared. Finished matches move to the Archive and player stats reset to zero.",
     msg_archive_done: "Season archived successfully ✓",
-    rep_title: "COACHFOLIO — SEASON REPORT", rep_gen: "Generated:"
+    msg_del_lg_team: "Remove team? (Will also remove its matches)", msg_del_lg_match: "Delete result?",
+    rep_title: "COACHFOLIO — SEASON REPORT", rep_gen: "Generated:", rep_conc: "Conceded"
   }
 };
 
 let state = { 
-  roster: [], matches: [], trainings: [], schedule: [], tactics: [], tacticPaths: [], videos: [], diary: [], 
+  roster: [], matches: [], trainings: [], schedule: [], tactics: [], tacticPaths: [], videos: [], diary: [], leagues: [],
   tacticFormat: 11, lastBackupDate: null, trackSubs: true, theme: 'original', lang: 'pt', myClubName: '',
-  showFairPlay: true, enableVideos: true, enableDiary: true, teamColor: '#D9A441', currentSeason: ''
+  showFairPlay: true, enableVideos: true, enableDiary: true, enableLeagues: true, teamColor: '#D9A441', oppColor: '#C8493F', currentSeason: '', seasonFormat: 'europeu',
+  tacticHalfPitch: false, rosterSortBy: 'numero'
 };
 
 function t(key, vars = {}) {
@@ -418,7 +430,11 @@ function applyTheme(themeName) {
    const metaColor = document.querySelector('meta[name="theme-color"]'); if(metaColor) metaColor.setAttribute('content', th['--bg']);
 }
 
-function defaultSeason(){ const d = new Date(); const y = d.getFullYear(); return d.getMonth() >= 6 ? `${y}/${y+1}` : `${y-1}/${y}`; }
+function defaultSeason(){ 
+    const d = new Date(); const y = d.getFullYear(); 
+    if(state.seasonFormat === 'civil') return String(y);
+    return d.getMonth() >= 6 ? `${y}/${y+1}` : `${y-1}/${y}`; 
+}
 
 let currentHub = 'home';
 let currentTab = 'home';
@@ -426,6 +442,7 @@ let pending = null; let pendingCard = null; let pendingCaptain = false; let pend
 let expandedMatch = null; let expandedSchedule = null; let statsFilter = 'todos'; let statsPhaseFilter = 'todas'; let videoFilter = 'todos'; let seasonFilter = 'todas'; let matchSearchQuery = '';
 let modalConfig = null; let expandedPlayer = null; let editingPlayerId = null; let trainingForm = null; let expandedTraining = null; let videoForm = null; let expandedVideo = null; let diaryForm = null; let expandedDiary = null;
 let schedulingNew = false; let editingSchId = null; let schForm = { isBatch: false, opp: '', date: '', time: '09:00', type: 'amigavel', loc: 'casa', phase: '', matchday: '', tournamentName: '', games: [] };
+let expandedLeague = null; let leagueForm = null; let editingLgMatch = null;
 
 const STORAGE_KEY = 'coach-app-data-v1';
 const usingClaudeStorage = (typeof window.storage !== 'undefined');
@@ -440,14 +457,20 @@ async function loadState(){
     if(res && res.value) {
        state = JSON.parse(res.value);
        if(!state.roster) state.roster = []; if(!state.matches) state.matches = []; if(!state.trainings) state.trainings = []; if(!state.schedule) state.schedule = [];
-       if(!state.tactics) state.tactics = []; if(!state.tacticPaths) state.tacticPaths = []; if(!state.videos) state.videos = []; if(!state.diary) state.diary = []; if(!state.tacticFormat) state.tacticFormat = 11;
+       if(!state.tactics) state.tactics = []; if(!state.tacticPaths) state.tacticPaths = []; if(!state.videos) state.videos = []; if(!state.diary) state.diary = []; if(!state.leagues) state.leagues = [];
+       if(!state.tacticFormat) state.tacticFormat = 11;
        if(state.trackSubs === undefined) state.trackSubs = true;
        if(state.showFairPlay === undefined) state.showFairPlay = true;
        if(state.enableVideos === undefined) state.enableVideos = true;
        if(state.enableDiary === undefined) state.enableDiary = true;
+       if(state.enableLeagues === undefined) state.enableLeagues = true;
+       if(state.tacticHalfPitch === undefined) state.tacticHalfPitch = false;
        if(!state.teamColor) state.teamColor = '#D9A441';
+       if(!state.oppColor) state.oppColor = '#C8493F';
+       if(!state.seasonFormat) state.seasonFormat = 'europeu';
        if(!state.currentSeason) state.currentSeason = defaultSeason();
        if(!state.theme) state.theme = 'original'; if(!state.lang) state.lang = 'pt'; if(!state.myClubName) state.myClubName = '';
+       if(!state.rosterSortBy) state.rosterSortBy = 'numero';
        if(!state.lastBackupDate && state.matches.length > 0) state.lastBackupDate = Date.now() - (8 * 24 * 60 * 60 * 1000); 
     } else {
        state.currentSeason = defaultSeason();
@@ -461,6 +484,18 @@ function escapeHTML(str) { if(!str) return ''; return String(str).replace(/[&<>'
 function uid(){ return Math.random().toString(36).slice(2,10); }
 function showToast(msg){ const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(showToast._t); showToast._t = setTimeout(()=>el.classList.remove('show'), 3000); }
 function getMyClub() { return state.myClubName && state.myClubName.trim() !== '' ? state.myClubName : t('def_club'); }
+
+window.shareContent = function(text) {
+  if (navigator.share) {
+     navigator.share({ title: 'Coachfolio', text: text }).then(()=>showToast(t('msg_copied'))).catch((e)=>{
+         if(e.name !== 'AbortError') fallbackCopy(text);
+     });
+  } else { fallbackCopy(text); }
+};
+
+window.fallbackCopy = function(text) {
+  navigator.clipboard.writeText(text).then(()=>showToast(t('msg_copied'))).catch(()=>showToast(t('msg_copy_err')));
+};
 
 function getYouTubeEmbedUrl(url) {
   if(!url) return null;
@@ -476,14 +511,14 @@ window.navigateToHub = function(hub) {
   else if(hub === 'estrategia') currentTab = 'tatica';
   else if(hub === 'equipa') currentTab = 'plantel';
   pending = null; pendingCard = null; pendingCaptain = false; pendingRatings = false; pendingSub = null;
-  schedulingNew = false; editingSchId = null; pendingLineupSet = []; editingPlayerId = null; trainingForm = null; videoForm = null; diaryForm = null;
+  schedulingNew = false; editingSchId = null; pendingLineupSet = []; editingPlayerId = null; trainingForm = null; videoForm = null; diaryForm = null; leagueForm = null; editingLgMatch = null;
   render();
 };
 
 window.navigateToTab = function(tab) {
   currentTab = tab;
   pending = null; pendingCard = null; pendingCaptain = false; pendingRatings = false; pendingSub = null;
-  schedulingNew = false; editingSchId = null; pendingLineupSet = []; editingPlayerId = null; trainingForm = null; videoForm = null; diaryForm = null;
+  schedulingNew = false; editingSchId = null; pendingLineupSet = []; editingPlayerId = null; trainingForm = null; videoForm = null; diaryForm = null; leagueForm = null; editingLgMatch = null;
   render();
 };
 
@@ -492,7 +527,25 @@ window.openSettings = function(){ modalConfig = { type: 'settings' }; document.g
 window.setTheme = function(tName) { state.theme = tName; applyTheme(tName); saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); };
 window.setLanguage = function(lang) { state.lang = lang; saveState(); render(); document.getElementById('modal-root').innerHTML = renderModalHTML(); };
 
-function sortPlayerObjs(arr) { return arr.sort((a, b) => { const numA = (a.number !== null && a.number !== '' && !isNaN(a.number)) ? parseInt(a.number) : 9999; const numB = (b.number !== null && b.number !== '' && !isNaN(b.number)) ? parseInt(b.number) : 9999; if (numA !== numB) return numA - numB; const nameA = a && a.name ? String(a.name) : ''; const nameB = b && b.name ? String(b.name) : ''; return nameA.localeCompare(nameB); }); }
+function sortPlayerObjs(arr) { 
+   const sortBy = state.rosterSortBy || 'numero';
+   return arr.sort((a, b) => { 
+     if(sortBy === 'nome') {
+        return (a.name||'').localeCompare(b.name||'');
+     } else if(sortBy === 'posicao') {
+        const posA = (a.positions||'').split(/[,\/-]/)[0].trim().toLowerCase();
+        const posB = (b.positions||'').split(/[,\/-]/)[0].trim().toLowerCase();
+        if(posA !== posB) return posA.localeCompare(posB);
+        return (a.name||'').localeCompare(b.name||'');
+     } else {
+        const numA = (a.number !== null && a.number !== '' && !isNaN(a.number)) ? parseInt(a.number) : 9999; 
+        const numB = (b.number !== null && b.number !== '' && !isNaN(b.number)) ? parseInt(b.number) : 9999; 
+        if (numA !== numB) return numA - numB; 
+        return (a.name||'').localeCompare(b.name||''); 
+     }
+   }); 
+}
+
 function playerLabel(p) { if(!p) return t('pl_no_name'); return p.number ? `${p.number} - ${p.name}` : (p.name || t('pl_no_name')); }
 function getActiveMatch(){ return state.matches.find(m => !m.finished) || null; }
 function playerName(id){ if(id === 'unknown') return t('match_nobody'); const p = state.roster.find(p=>p.id===id); return p ? playerLabel(p) : '—'; }
@@ -537,7 +590,7 @@ window.uiSaveSchedule = function(){
     showToast(t('msg_tour_saved'));
   } else {
     if(!schForm.opp.trim()){ showToast(t('msg_no_opp')); return; }
-    state.schedule.push({ id: uid(), opponent: schForm.opp.trim(), date: schForm.date || new Date().toISOString().slice(0,10), time: schForm.time || '09:00', type: schForm.type || 'amigavel', phase: (schForm.type==='campeonato'||schForm.type==='torneio' ? (schForm.phase||'').trim() : ''), matchday: (schForm.type==='campeonato'||schForm.type==='torneio' ? (schForm.matchday||'').trim() : ''), tournamentName: schForm.tournamentName || '', season: state.currentSeason, location: schForm.loc || 'casa', callup: [] });
+    state.schedule.push({ id: uid(), opponent: schForm.opp.trim(), date: schForm.date || new DatetoISOString().slice(0,10), time: schForm.time || '09:00', type: schForm.type || 'amigavel', phase: (schForm.type==='campeonato'||schForm.type==='torneio' ? (schForm.phase||'').trim() : ''), matchday: (schForm.type==='campeonato'||schForm.type==='torneio' ? (schForm.matchday||'').trim() : ''), tournamentName: schForm.tournamentName || '', season: state.currentSeason, location: schForm.loc || 'casa', callup: [] });
     showToast(t('msg_game_saved'));
   }
   state.schedule.sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time)); schedulingNew = false; saveState(); render();
@@ -570,7 +623,7 @@ window.copyCallup = function(schId){
   const called = sortPlayerObjs(eligiblePlayers().filter(p => s.callup.includes(p.id)));
   if(called.length === 0) text += "- \n";
   called.forEach(p => text += `- ${playerLabel(p)}\n`);
-  navigator.clipboard.writeText(text).then(()=>showToast(t('msg_copied'))).catch(()=>showToast(t('msg_copy_err')));
+  window.shareContent(text);
 };
 
 // GERADOR DE PARTILHA MATCHDAY
@@ -597,10 +650,21 @@ window.shareMatchdayCard = function(matchId) {
   }
   text += `\n💪 #Matchday #${myClub.replace(/\s+/g,'')}`;
   
-  navigator.clipboard.writeText(text).then(()=>showToast(t('msg_copied'))).catch(()=>showToast(t('msg_copy_err')));
+  window.shareContent(text);
 };
 
-window.togglePendingLineup = function(id) { if(pendingLineupSet.includes(id)) pendingLineupSet = pendingLineupSet.filter(x=>x!==id); else pendingLineupSet.push(id); render(); };
+window.togglePendingLineup = function(id) { 
+    if(pendingLineupSet.includes(id)) {
+        pendingLineupSet = pendingLineupSet.filter(x=>x!==id); 
+    } else {
+        if(pendingLineupSet.length >= state.tacticFormat) {
+            showToast(`Limite: ${state.tacticFormat} titulares!`);
+            return;
+        }
+        pendingLineupSet.push(id); 
+    }
+    render(); 
+};
 window.confirmLineup = function(mId) { const m = state.matches.find(x=>x.id===mId); if(m) { m.lineup = [...pendingLineupSet]; saveState(); } render(); };
 window.pauseMatchTimer = function(matchId){ const m = state.matches.find(m=>m.id===matchId); if(!m || !m.timer || !m.timer.isRunning) return; m.timer.elapsedMs += (Date.now() - m.timer.lastStartTs); m.timer.isRunning = false; saveState(); render(); };
 window.resumeMatchTimer = function(matchId){ const m = state.matches.find(m=>m.id===matchId); if(!m || !m.timer || m.timer.isRunning) return; m.timer.isRunning = true; m.timer.lastStartTs = Date.now(); saveState(); render(); };
@@ -665,7 +729,13 @@ window.archiveSeason = function() {
 
 window.doArchiveSeason = function() {
     const parts = state.currentSeason.split('/');
-    let nextSeason = parts.length === 2 ? `${parseInt(parts[1])}/${parseInt(parts[1])+1}` : 'Nova Época';
+    let nextSeason = 'Nova Época';
+    if(state.seasonFormat === 'civil') {
+       nextSeason = String(parseInt(state.currentSeason) + 1);
+       if(isNaN(nextSeason)) nextSeason = String(new Date().getFullYear());
+    } else {
+       nextSeason = parts.length === 2 ? `${parseInt(parts[1])}/${parseInt(parts[1])+1}` : defaultSeason();
+    }
     state.currentSeason = nextSeason;
     state.schedule = [];
     state.trainings = [];
@@ -686,7 +756,7 @@ function renderModalHTML(){
          <div style="max-height:60vh; overflow-y:auto; padding-right:5px; margin-bottom:15px;">
              <div class="field" style="text-align:left;">
                 <label>${t('set_club')}</label>
-                <input type="text" placeholder="${t('set_club_ph')}" value="${state.myClubName||''}" onchange="state.myClubName=this.value; saveState();">
+                <input type="text" placeholder="${t('set_club_ph')}" value="${state.myClubName||''}" onchange="state.myClubName=escapeHTML(this.value); saveState();">
              </div>
 
              <div class="field" style="text-align:left; margin-top:14px;">
@@ -715,6 +785,18 @@ function renderModalHTML(){
                    <div style="background:#3b82f6; height:30px; border-radius:50%; border:2px solid ${state.teamColor==='#3b82f6'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.teamColor='#3b82f6'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
                    <div style="background:#FFFFFF; height:30px; border-radius:50%; border:2px solid ${state.teamColor==='#FFFFFF'?'var(--muted)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.teamColor='#FFFFFF'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
                    <div style="background:#111111; height:30px; border-radius:50%; border:2px solid ${state.teamColor==='#111111'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.teamColor='#111111'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
+                </div>
+             </div>
+
+             <div class="field" style="text-align:left; margin-top:14px;">
+                <label>${t('set_opp_kit')}</label>
+                <div class="grid-btns cols-6" style="margin-top:8px;">
+                   <div style="background:#D9A441; height:30px; border-radius:50%; border:2px solid ${state.oppColor==='#D9A441'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.oppColor='#D9A441'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
+                   <div style="background:#C8493F; height:30px; border-radius:50%; border:2px solid ${state.oppColor==='#C8493F'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.oppColor='#C8493F'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
+                   <div style="background:#4ade80; height:30px; border-radius:50%; border:2px solid ${state.oppColor==='#4ade80'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.oppColor='#4ade80'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
+                   <div style="background:#3b82f6; height:30px; border-radius:50%; border:2px solid ${state.oppColor==='#3b82f6'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.oppColor='#3b82f6'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
+                   <div style="background:#FFFFFF; height:30px; border-radius:50%; border:2px solid ${state.oppColor==='#FFFFFF'?'var(--muted)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.oppColor='#FFFFFF'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
+                   <div style="background:#111111; height:30px; border-radius:50%; border:2px solid ${state.oppColor==='#111111'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.oppColor='#111111'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
                 </div>
              </div>
              
@@ -749,7 +831,23 @@ function renderModalHTML(){
                   <div class="seg-btn ${!state.enableVideos?'active':''}" onclick="event.stopPropagation(); state.enableVideos=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div>
                 </div>
              </div>
+
+             <div class="field" style="text-align:left; margin-top:14px;">
+                <label>${t('set_leagues')}</label>
+                <div class="seg">
+                  <div class="seg-btn ${state.enableLeagues?'active':''}" onclick="event.stopPropagation(); state.enableLeagues=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div>
+                  <div class="seg-btn ${!state.enableLeagues?'active':''}" onclick="event.stopPropagation(); state.enableLeagues=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div>
+                </div>
+             </div>
              
+             <div class="field" style="text-align:left; margin-top:14px;">
+                <label>${t('set_season_format')}</label>
+                <div class="seg">
+                  <div class="seg-btn ${state.seasonFormat==='europeu'?'active':''}" onclick="event.stopPropagation(); state.seasonFormat='europeu'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_season_eu')}</div>
+                  <div class="seg-btn ${state.seasonFormat==='civil'?'active':''}" onclick="event.stopPropagation(); state.seasonFormat='civil'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_season_civ')}</div>
+                </div>
+             </div>
+
              <div style="margin-top:20px; text-align:left;">
                  <button class="btn btn-red" style="width:100%; font-size:12px;" onclick="event.stopPropagation(); archiveSeason();">${t('set_archive')}</button>
                  <div style="font-size:10px; color:var(--muted); margin-top:6px; line-height:1.4;">(Época Atual: ${state.currentSeason})</div>
@@ -760,6 +858,7 @@ function renderModalHTML(){
              </div>
          </div>
          <button class="btn btn-outline" style="width:100%;" onclick="closeModal()">${t('close')}</button>
+         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v2.6.4 | COACHFOLIO</div>
        </div>
      </div>`;
   }
@@ -825,7 +924,7 @@ function matchNarrativeHtml(m, isLocked = false){
   const h1_regular = h1.filter(e => !e.isHalftime); const h1_int = h1.filter(e => e.isHalftime);
 
   if(h1.length || tm.kickoff) { rows += `<div style="font-size:11px; color:var(--gold); font-family:-apple-system, sans-serif; text-transform:uppercase; margin:8px 0 4px; font-weight:600;">⏱️ ${t('match_half1')}</div>`; rows += h1_regular.map(e => e.type==='goal'?goalRow(e.data):(e.type==='card'?cardRow(e.data):subRow(e))).join(''); }
-  if(tm.halftime || h1_int.length > 0) { rows += `<div style="font-size:11px; color:var(--muted); font-family:-apple-system, sans-serif; text-transform:uppercase; margin:12px 0 8px; font-weight:600; text-align:center; border-top:1px dashed var(--line); border-bottom:1px dashed var(--line); padding:6px 0;">🏁 ${t('rep_end1')}</div>`; rows += h1_int.map(e => e.type==='goal'?goalRow(e.data):(e.type==='card'?cardRow(e.data):subRow(e))).join(''); }
+  if(tm.halftime || h1_int.length > 0) { rows += `<div style="font-size:11px; color:var(--muted); font-family:-apple-system, sans-serif; text-transform:uppercase; margin:12px 0 8px; font-weight:600; text-align:center; border-top:1px dashed var(--line); border-bottom:1px dashed var(--line); padding:6px 0;">⏸️ ${t('match_ht_lbl')}</div>`; rows += h1_int.map(e => e.type==='goal'?goalRow(e.data):(e.type==='card'?cardRow(e.data):subRow(e))).join(''); }
   if(h2.length || tm.secondHalfStart) { rows += `<div style="font-size:11px; color:var(--gold); font-family:-apple-system, sans-serif; text-transform:uppercase; margin:14px 0 4px; font-weight:600;">⏱️ ${t('match_half2')}</div>`; rows += h2.map(e => e.type==='goal'?goalRow(e.data):(e.type==='card'?cardRow(e.data):subRow(e))).join(''); }
   return rows || `<div class="empty">${t('res_none')}</div>`;
 }
@@ -856,7 +955,7 @@ function renderHome(){
         <div class="home-ball">${ballIconSvg()}</div>
         <h1>${t('home_title')}</h1>
         <div class="home-sub" style="margin-bottom:2px;">${t('home_sub')}</div>
-        <div style="font-size:10px; color:var(--gold); margin-bottom:16px; font-weight:normal; letter-spacing:0; text-transform:none;">by Pedro Silva</div>
+        <div style="font-size:10px; color:var(--gold); margin-bottom:16px; font-weight:normal; letter-spacing:0; text-transform:none;">v2.6.4 | by Pedro Silva</div>
         
         ${active ? `<button class="home-btn" style="margin-bottom:12px; border-color:var(--gold);" onclick="navigateToHub('jogo')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>${t('home_cont')}</button>` : ''}
         
@@ -919,6 +1018,7 @@ function renderTeamSubHeader() {
     <div class="seg" style="margin-bottom:14px;">
        <div class="seg-btn ${currentTab==='plantel'?'active':''}" onclick="navigateToTab('plantel')">${t('pl_title')}</div>
        <div class="seg-btn ${currentTab==='stats'?'active':''}" onclick="navigateToTab('stats')">${t('st_title')}</div>
+       ${state.enableLeagues ? `<div class="seg-btn ${currentTab==='classificacoes'?'active':''}" onclick="navigateToTab('classificacoes')">${t('lg_title')}</div>` : ''}
     </div>
   `;
 }
@@ -987,11 +1087,11 @@ function renderJogo(){
   if(needsLineup && !matchStarted) {
      lineupPanel = `
        <div class="panel" style="border-color:var(--gold);">
-         <div class="panel-title" style="color:var(--gold);">${t('match_start_xi')}</div>
+         <div class="panel-title" style="color:var(--gold);">${t('match_start_xi')} (${pendingLineupSet.length}/${state.tacticFormat})</div>
          <div class="grid-btns cols-4">
            ${eligiblePlayers().map(p => `<div class="chip chip-sm ${(pendingLineupSet).includes(p.id) ? 'active-green' : ''}" onclick="togglePendingLineup('${p.id}')">${playerLabel(p)}</div>`).join('')}
          </div>
-         <button class="btn btn-gold" style="width:100%; margin-top:10px;" onclick="confirmLineup('${m.id}')">${t('match_conf_xi')}</button>
+         <button class="btn btn-gold" style="width:100%; margin-top:10px;" ${pendingLineupSet.length !== state.tacticFormat ? 'disabled':''} onclick="confirmLineup('${m.id}')">${t('match_conf_xi')}</button>
        </div>
      `;
   }
@@ -1029,7 +1129,7 @@ function renderJogo(){
       ${dynamicPanel}
       ${lineupPanel}
     </div>
-    <div class="goal-list" style="border-top:none;">${matchNarrativeHtml(m, isMatchEnded)}</div>
+    <div class="goal-list" style="border-top:none;">${matchNarrativeHtml(m, m.finished)}</div>
     <div class="card" style="margin-top:16px;">${ratingsPanel}<div class="field" style="margin-bottom:0;"><label>${t('match_notes')}</label><textarea id="notes-input" placeholder="${t('match_notes_ph')}" onchange="updateMatchNotes('${m.id}', this.value)">${m.notes || ''}</textarea></div></div>
     <button class="btn ${finalBtnStyle}" style="width:100%; margin-top:6px;" onclick="uiFinishMatch()">${finalBtnLabel}</button>
   `;
@@ -1141,12 +1241,21 @@ function renderTatica(){
   
   const pieceBg = state.teamColor || '#D9A441';
   const pieceColor = getContrastColor(pieceBg);
+  const oppBg = state.oppColor || '#C8493F';
+  const oppColor = getContrastColor(oppBg);
+  const isHalf = state.tacticHalfPitch;
 
   return `
     ${topbarHtml(t('hub_strat_title'))}
     ${renderStratSubHeader()}
-    <div class="seg" style="margin-bottom:12px;">
-       <div class="seg-btn ${format===3?'active':''}" onclick="changeTacticFormat(3)">Fut 3</div><div class="seg-btn ${format===5?'active':''}" onclick="changeTacticFormat(5)">Fut 5</div><div class="seg-btn ${format===7?'active':''}" onclick="changeTacticFormat(7)">Fut 7</div><div class="seg-btn ${format===9?'active':''}" onclick="changeTacticFormat(9)">Fut 9</div><div class="seg-btn ${format===11?'active':''}" onclick="changeTacticFormat(11)">Fut 11</div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+       <div class="seg" style="margin-top:0; flex:1;">
+          <div class="seg-btn ${format===5?'active':''}" onclick="changeTacticFormat(5)">F5</div><div class="seg-btn ${format===7?'active':''}" onclick="changeTacticFormat(7)">F7</div><div class="seg-btn ${format===9?'active':''}" onclick="changeTacticFormat(9)">F9</div><div class="seg-btn ${format===11?'active':''}" onclick="changeTacticFormat(11)">F11</div>
+       </div>
+       <div class="seg" style="margin-top:0; margin-left:10px;">
+          <div class="seg-btn ${!isHalf?'active':''}" onclick="state.tacticHalfPitch=false; render();" title="Campo Inteiro">🏟️</div>
+          <div class="seg-btn ${isHalf?'active':''}" onclick="state.tacticHalfPitch=true; render();" title="Meio Campo">🥅</div>
+       </div>
     </div>
     
     <div class="seg" style="margin-bottom:12px;">
@@ -1165,15 +1274,29 @@ function renderTatica(){
     <div style="font-size:10px; color:var(--muted); text-align:center; margin-bottom:10px; text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">${t('tac_inst')}</div>
     `}
 
-    <div id="tactic-pitch" class="tactic-pitch-container">
-      <svg class="tactic-svg" viewBox="0 0 100 150" preserveAspectRatio="none"><line x1="0" y1="75" x2="100" y2="75" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/><circle cx="50" cy="75" r="15" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/><rect x="25" y="0" width="50" height="20" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/><rect x="35" y="0" width="30" height="8" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/><rect x="25" y="130" width="50" height="20" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/><rect x="35" y="142" width="30" height="8" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/></svg>
+    <div id="tactic-pitch" class="tactic-pitch-container" style="aspect-ratio: ${isHalf ? '4/3' : '2/3'};">
+      <svg class="tactic-svg" viewBox="${isHalf ? '0 0 100 75' : '0 0 100 150'}" preserveAspectRatio="none">
+         <line x1="0" y1="75" x2="100" y2="75" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/>
+         <circle cx="50" cy="75" r="15" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/>
+         <rect x="25" y="0" width="50" height="20" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/>
+         <rect x="35" y="0" width="30" height="8" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/>
+         ${!isHalf ? `
+         <rect x="25" y="130" width="50" height="20" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/>
+         <rect x="35" y="142" width="30" height="8" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/>
+         ` : ''}
+      </svg>
       <canvas id="tactic-canvas" style="position:absolute; inset:0; width:100%; height:100%; z-index:20; touch-action:none; pointer-events:${currentTacticMode==='draw' ? 'auto' : 'none'};"></canvas>
-      ${(state.tactics||[]).map(item => `<div class="tactic-piece ${item.kind}" data-id="${item.id}" ondblclick="removeTacticPiece('${item.id}')" style="left:${item.x}%; top:${item.y}%; ${item.kind==='own'?`background:${pieceBg}; color:${pieceColor};`:''} "><span>${item.label}</span></div>`).join('')}
+      ${(state.tactics||[]).map(item => {
+         let bg = ''; let clr = '';
+         if(item.kind==='own') { bg = pieceBg; clr = pieceColor; }
+         if(item.kind==='opp') { bg = oppBg; clr = oppColor; }
+         return `<div class="tactic-piece ${item.kind}" data-id="${item.id}" ondblclick="removeTacticPiece('${item.id}')" style="left:${item.x}%; top:${item.y}%; ${bg?`background:${bg}; color:${clr};`:''} "><span>${item.label}</span></div>`;
+      }).join('')}
     </div>
     <div class="panel" style="margin-top:0;">
        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;"><div class="panel-title" style="margin-bottom:0;">${t('tac_box')}</div><button class="quick-del" style="font-size:10px; border:1px solid var(--line); border-radius:4px; padding:4px 8px; font-weight:700; text-transform:uppercase;" onclick="askConfirm('${t('msg_clear_tac')}', ()=>{state.tactics=[]; saveState(); render();})">${t('tac_clear')}</button></div>
        <div class="seg" style="margin-bottom:16px;">
-          <button class="seg-btn" style="font-size:10px; color:var(--red); border:1px solid var(--red);" onclick="spawnTacticItem('opp', null)" ${currentOpp >= format ? 'disabled' : ''}>${t('tac_opp')} (${currentOpp}/${format})</button><button class="seg-btn" style="font-size:10px; color:var(--chalk); border:1px solid var(--line);" onclick="spawnTacticItem('ball', null)">${t('tac_ball')}</button>
+          <button class="seg-btn" style="font-size:10px; color:${oppBg}; border:1px solid ${oppBg};" onclick="spawnTacticItem('opp', null)" ${currentOpp >= format ? 'disabled' : ''}>${t('tac_opp')} (${currentOpp}/${format})</button><button class="seg-btn" style="font-size:10px; color:var(--chalk); border:1px solid var(--line);" onclick="spawnTacticItem('ball', null)">${t('tac_ball')}</button>
        </div>
        <div class="panel-title">${t('tac_own')} (${currentOwn}/${format})</div>
        <div class="seg">
@@ -1315,7 +1438,7 @@ window.shareVideoWhatsapp = function(id){
   const typeLabel = v.type==='treino' ? t('vid_type_train') : (v.type==='jogo' ? t('vid_type_match') : t('vid_type_setpiece'));
   let text = `🎬 *${v.title}* (${typeLabel})\n\n🔗 ${v.url}\n`;
   if(v.notes) text += `\n📝 *Notas:* ${v.notes}\n`;
-  navigator.clipboard.writeText(text).then(()=>showToast(t('msg_copied'))).catch(()=>showToast(t('msg_copy_err')));
+  window.shareContent(text);
 };
 
 function renderVideos(){
@@ -1368,7 +1491,7 @@ function renderJogos(){
   if(!state.matches.length) return `${topbarHtml(t('hub_match_title'))}${renderJogoSubHeader()}<div class="empty">${t('res_none')}</div>`;
   const seasons = getSeasonsList(); const query = matchSearchQuery.trim().toLowerCase();
   const filtered = state.matches.filter(m=> (seasonFilter==='todas' || (m.season||'Sem época')===seasonFilter) && (!query || m.opponent.toLowerCase().includes(query)));
-  return `${topbarHtml(t('hub_match_title'))}${renderJogoSubHeader()}<div class="field"><input id="match-search-input" type="text" placeholder="${t('res_search')}" value="${matchSearchQuery}" oninput="uiUpdateSearch(this.value)"></div>${seasons.length > 1 ? `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${seasonFilter==='todas'?'active':''}" onclick="seasonFilter='todas'; render()">${t('res_all')}</div>${seasons.map(s=>`<div class="seg-btn ${seasonFilter===s?'active':''}" onclick="seasonFilter='${s}'; render()">${s}</div>`).join('')}</div>` : ''}${filtered.length ? filtered.map(m=>{ const sc = m.goals.filter(g=>g.type==='scored').length; const co = m.goals.filter(g=>g.type==='conceded').length; const open = expandedMatch === m.id; let typeLabel = ''; if(m.type === 'campeonato') typeLabel = `${t('sch_champ')}${m.phase ? ' · '+m.phase : ''}${m.matchday ? ' (J:'+m.matchday+')' : ''}`; else if(m.type === 'torneio') typeLabel = `🏆 ${m.tournamentName||t('sch_tour')}${m.phase ? ' · '+m.phase : ''}${m.matchday ? ' (J:'+m.matchday+')' : ''}`; else typeLabel = t('sch_friendly'); const locLabel = (m.location||'casa') === 'casa' ? t('match_home') : t('match_away'); let ratingsHtml = ''; if(m.ratings && Object.keys(m.ratings).length > 0){ const ratedPlayers = Object.entries(m.ratings).map(([id, r])=>({name: playerName(id), r})).sort((a,b)=>b.r - a.r); ratingsHtml = `<div class="notes-readonly" style="margin-top:10px;"><b>⭐ ${t('match_rate_pls')}:</b><br>${ratedPlayers.map(p => `<span style="color:var(--gold);">${p.r}★</span> - ${p.name}`).join('<br>')}</div>`; } return `<div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('textarea')){ expandedMatch=expandedMatch==='${m.id}'?null:'${m.id}'; render(); }"><div class="match-head-row"><div class="match-head" style="flex:1;"><div><div class="opp">${m.opponent} ${!m.finished ? `<span class="badge-open">${t('res_ongoing')}</span>` : ''}<span class="badge-loc ${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home'?'casa':'fora'}">${locLabel}</span></div><div class="date">${m.date} <span class="badge-type">${typeLabel}</span></div></div><div class="match-score"><span class="s">${sc}</span> – <span class="c">${co}</span></div></div><button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_match')}', ()=>deleteMatch('${m.id}'))">🗑</button></div>${open ? `<div class="goal-list">${m.capitao ? `<div style="font-size:11px; color:var(--green); margin-bottom:8px; text-transform:uppercase; font-weight:700;">© Capitão: ${playerName(m.capitao)}</div>` : ''}${matchNarrativeHtml(m, true)}${ratingsHtml}${m.notes?`<div class="notes-readonly" style="margin-top:10px;">📝 ${m.notes}</div>`:''}<div class="btn-row" style="margin-top:12px;"><button class="btn btn-green" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); shareMatchdayCard('${m.id}')">${t('res_share_matchday')}</button>${m.finished ? `<button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); reopenMatch('${m.id}')">${t('res_edit')}</button>` : ''}</div></div>` : ''}</div>`; }).join('') : `<div class="empty">${t('res_none_search')}</div>`}`;
+  return `${topbarHtml(t('hub_match_title'))}${renderJogoSubHeader()}<div class="field"><input id="match-search-input" type="text" placeholder="${t('res_search')}" value="${matchSearchQuery}" oninput="uiUpdateSearch(this.value)"></div>${seasons.length > 1 ? `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${seasonFilter==='todas'?'active':''}" onclick="seasonFilter='todas'; render()">${t('res_all')}</div>${seasons.map(s=>`<div class="seg-btn ${seasonFilter===s?'active':''}" onclick="seasonFilter='${s}'; render()">${s}</div>`).join('')}</div>` : ''}${filtered.length ? filtered.map(m=>{ const sc = m.goals.filter(g=>g.type==='scored').length; const co = m.goals.filter(g=>g.type==='conceded').length; const open = expandedMatch === m.id; let typeLabel = ''; if(m.type === 'campeonato') typeLabel = `${t('sch_champ')}${m.phase ? ' · '+m.phase : ''}${m.matchday ? ' (J:'+m.matchday+')' : ''}`; else if(m.type === 'torneio') typeLabel = `🏆 ${m.tournamentName||t('sch_tour')}${m.phase ? ' · '+m.phase : ''}${m.matchday ? ' (J:'+m.matchday+')' : ''}`; else typeLabel = t('sch_friendly'); const locLabel = (m.location||'casa') === 'casa' ? t('match_home') : t('match_away'); let ratingsHtml = ''; if(m.ratings && Object.keys(m.ratings).length > 0){ const ratedPlayers = Object.entries(m.ratings).map(([id, r])=>({name: playerName(id), r})).sort((a,b)=>b.r - a.r); ratingsHtml = `<div class="notes-readonly" style="margin-top:10px;"><b>⭐ ${t('match_rate_pls')}:</b><br>${ratedPlayers.map(p => `<span style="color:var(--gold);">${p.r}★</span> - ${p.name}`).join('<br>')}</div>`; } return `<div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('textarea')){ expandedMatch=expandedMatch==='${m.id}'?null:'${m.id}'; render(); }"><div class="match-head-row"><div class="match-head" style="flex:1;"><div><div class="opp">${m.opponent} ${!m.finished ? `<span class="badge-open">${t('res_ongoing')}</span>` : ''}<span class="badge-loc ${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home'?'casa':'fora'}">${locLabel}</span></div><div class="date">${m.date} <span class="badge-type">${typeLabel}</span></div></div><div class="match-score"><span class="s">${sc}</span> – <span class="c">${co}</span></div></div><button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_match')}', ()=>deleteMatch('${m.id}'))">🗑</button></div>${open ? `<div class="goal-list">${m.capitao ? `<div style="font-size:11px; color:var(--green); margin-bottom:8px; text-transform:uppercase; font-weight:700;">© Capitão: ${playerName(m.capitao)}</div>` : ''}${matchNarrativeHtml(m, m.finished)}${ratingsHtml}${m.notes?`<div class="notes-readonly" style="margin-top:10px;">📝 ${m.notes}</div>`:''}<div class="btn-row" style="margin-top:12px;"><button class="btn btn-green" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); shareMatchdayCard('${m.id}')">${t('res_share_matchday')}</button>${m.finished ? `<button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); reopenMatch('${m.id}')">${t('res_edit')}</button>` : ''}</div></div>` : ''}</div>`; }).join('') : `<div class="empty">${t('res_none_search')}</div>`}`;
 }
 
 function computeStats(typeFilterVal, seasonFilterVal, phaseFilterVal){
@@ -1473,6 +1596,229 @@ function renderStats(){
   `;
 }
 
+// MOTOR DE CLASSIFICAÇÕES (LIGAS)
+window.uiSaveLeague = function() {
+    if(!leagueForm.name || !leagueForm.name.trim()) return;
+    state.leagues.push({ id: uid(), name: escapeHTML(leagueForm.name.trim()), teams: [], matches: [] });
+    leagueForm = null; saveState(); render();
+};
+window.deleteLeague = function(id) { state.leagues = state.leagues.filter(l => l.id !== id); saveState(); render(); };
+
+window.uiAddLeagueTeam = function(lgId) {
+    const input = document.getElementById('lg-team-input'); if(!input || !input.value.trim()) return;
+    const lg = state.leagues.find(l => l.id === lgId);
+    if(lg && !lg.teams.includes(input.value.trim())) { lg.teams.push(escapeHTML(input.value.trim())); saveState(); render(); }
+};
+
+window.uiRemoveLeagueTeam = function(lgId, index) {
+    const lg = state.leagues.find(l => l.id === lgId);
+    if(lg) { 
+        const tName = lg.teams[index];
+        lg.teams.splice(index, 1); 
+        lg.matches = lg.matches.filter(m => m.h !== tName && m.a !== tName); 
+        saveState(); render(); 
+    }
+};
+
+window.uiEditLeagueMatch = function(lgId, mId) {
+    const lg = state.leagues.find(l => l.id === lgId);
+    const m = lg.matches.find(x => x.id === mId);
+    if(m) {
+        editingLgMatch = { lgId, mId, md: m.md, h: m.h, a: m.a, hg: m.hg, ag: m.ag };
+        render();
+    }
+};
+
+window.uiCancelEditLeagueMatch = function() {
+    editingLgMatch = null;
+    render();
+};
+
+window.uiAddLeagueMatch = function(lgId) {
+    const lg = state.leagues.find(l => l.id === lgId); if(!lg) return;
+    const h = document.getElementById('lg-match-h').value; const a = document.getElementById('lg-match-a').value;
+    const hg = document.getElementById('lg-match-hg').value; const ag = document.getElementById('lg-match-ag').value;
+    let md = document.getElementById('lg-match-md').value;
+    
+    if(h && a && h !== a && hg !== '' && ag !== '') {
+        if (editingLgMatch && editingLgMatch.lgId === lgId) {
+            const m = lg.matches.find(x => x.id === editingLgMatch.mId);
+            if (m) {
+                m.md = escapeHTML(md); m.h = h; m.a = a; m.hg = parseInt(hg); m.ag = parseInt(ag);
+            }
+            editingLgMatch = null;
+        } else {
+            if(!md) md = '1';
+            lg.matches.push({ id: uid(), md: escapeHTML(md), h: h, a: a, hg: parseInt(hg), ag: parseInt(ag) });
+        }
+        saveState(); render();
+    } else {
+        showToast("Dados inválidos ou equipas repetidas.");
+    }
+};
+
+window.uiRemoveLeagueMatch = function(lgId, mId) {
+    const lg = state.leagues.find(l => l.id === lgId);
+    if(lg) { lg.matches = lg.matches.filter(m => m.id !== mId); saveState(); render(); }
+};
+
+window.filterLeagueTeams = function(lgId) {
+    const mdInput = document.getElementById('lg-match-md');
+    if(!mdInput) return;
+    const md = mdInput.value;
+    const lg = state.leagues.find(l=>l.id===lgId);
+    if(!lg) return;
+    
+    const played = lg.matches.filter(m => m.md === md && (!editingLgMatch || m.id !== editingLgMatch.mId)).flatMap(m => [m.h, m.a]);
+    
+    const selH = document.getElementById('lg-match-h');
+    const selA = document.getElementById('lg-match-a');
+    if(!selH || !selA) return;
+    
+    const valH = selH.value;
+    const valA = selA.value;
+    
+    let optsH = '<option value="" disabled ' + (!valH ? 'selected' : '') + '>Casa...</option>';
+    let optsA = '<option value="" disabled ' + (!valA ? 'selected' : '') + '>Fora...</option>';
+    
+    lg.teams.forEach(tName => {
+        if(!played.includes(tName) || tName === valH) {
+            optsH += '<option value="'+tName+'" '+(tName===valH?'selected':'')+'>'+tName+'</option>';
+        }
+        if(!played.includes(tName) || tName === valA) {
+            optsA += '<option value="'+tName+'" '+(tName===valA?'selected':'')+'>'+tName+'</option>';
+        }
+    });
+    selH.innerHTML = optsH;
+    selA.innerHTML = optsA;
+};
+
+function renderClassificacoes() {
+    if(leagueForm) {
+        return `
+          ${topbarHtml(t('lg_new'))}
+          ${renderTeamSubHeader()}
+          <div class="card">
+            <div class="field" style="margin-bottom:0;"><label>${t('lg_name')}</label><input type="text" placeholder="Ex: Liga Concelhia" value="${leagueForm.name||''}" oninput="leagueForm.name=this.value"></div>
+          </div>
+          <button class="btn btn-gold" style="width:100%; margin-bottom:10px;" onclick="uiSaveLeague()">${t('save')}</button>
+          <button class="btn btn-outline" style="width:100%;" onclick="leagueForm=null; render()">${t('cancel')}</button>
+        `;
+    }
+    
+    let html = `${topbarHtml(t('hub_team_title'))}${renderTeamSubHeader()}`;
+    html += `<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="leagueForm={name:''}; render()">${t('lg_new')}</button>`;
+    
+    if(!state.leagues || state.leagues.length === 0) {
+        html += `<div class="empty">Sem competições registadas.</div>`;
+    } else {
+        state.leagues.forEach(lg => {
+            const open = expandedLeague === lg.id;
+            html += `<div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('input') && !event.target.closest('select')){ expandedLeague=expandedLeague==='${lg.id}'?null:'${lg.id}'; editingLgMatch=null; render(); }">`;
+            html += `<div class="match-head-row"><div class="match-head" style="flex:1;"><div class="opp">🏆 ${lg.name}</div></div><button class="quick-del" onclick="event.stopPropagation(); askConfirm('Apagar competição?', ()=>deleteLeague('${lg.id}'))">🗑</button></div>`;
+            
+            if(open) {
+                // Computing Table
+                let table = {};
+                lg.teams.forEach(t => table[t] = { name: t, p:0, w:0, d:0, l:0, gf:0, ga:0, gd:0, pts:0 });
+                lg.matches.forEach(m => {
+                    if(!table[m.h] || !table[m.a]) return;
+                    table[m.h].p++; table[m.a].p++;
+                    table[m.h].gf += m.hg; table[m.h].ga += m.ag; table[m.h].gd += (m.hg - m.ag);
+                    table[m.a].gf += m.ag; table[m.a].ga += m.hg; table[m.a].gd += (m.ag - m.hg);
+                    if(m.hg > m.ag) { table[m.h].w++; table[m.h].pts += 3; table[m.a].l++; }
+                    else if(m.hg === m.ag) { table[m.h].d++; table[m.a].d++; table[m.h].pts += 1; table[m.a].pts += 1; }
+                    else { table[m.a].w++; table[m.a].pts += 3; table[m.h].l++; }
+                });
+                let sortedTable = Object.values(table).sort((a,b) => {
+                    if(b.pts !== a.pts) return b.pts - a.pts;
+                    if(b.gd !== a.gd) return b.gd - a.gd;
+                    return b.gf - a.gf;
+                });
+                
+                html += `<div style="border-top:1px solid var(--line); padding-top:12px; margin-top:12px; cursor:default;" onclick="event.stopPropagation();">`;
+                
+                // TABELA CLASSIFICATIVA
+                html += `<div class="panel-title">${t('lg_table')}</div>`;
+                if(sortedTable.length > 0) {
+                    html += `<table class="league-table"><tr><th style="width:20px;">#</th><th class="team-name">Equipa</th><th>P</th><th>V</th><th>E</th><th>D</th><th>GM</th><th>GS</th><th>DG</th><th>Pts</th></tr>`;
+                    sortedTable.forEach((row, idx) => {
+                        let isMyClub = row.name === getMyClub() || row.name === state.myClubName;
+                        html += `<tr style="${isMyClub?'background:var(--surface-2);':''}"><td style="color:var(--muted);">${idx+1}</td><td class="team-name" style="${isMyClub?'color:var(--gold);':''}">${row.name}</td><td>${row.p}</td><td>${row.w}</td><td>${row.d}</td><td>${row.l}</td><td>${row.gf}</td><td>${row.ga}</td><td>${row.gd>0?'+':''}${row.gd}</td><td><b style="color:var(--chalk);">${row.pts}</b></td></tr>`;
+                    });
+                    html += `</table>`;
+                } else { html += `<div class="empty" style="padding:10px;">Adiciona equipas abaixo.</div>`; }
+                
+                // GESTÃO DE EQUIPAS
+                html += `<div class="panel-title" style="margin-top:20px;">${t('lg_teams')}</div>`;
+                html += `<div class="seg" style="margin-bottom:10px;">${lg.teams.map((tName, idx) => `<div class="seg-btn" style="display:flex; justify-content:space-between; align-items:center;">${tName} <span style="color:var(--red); font-size:14px; margin-left:8px;" onclick="event.stopPropagation(); askConfirm('${t('msg_del_lg_team')}', ()=>uiRemoveLeagueTeam('${lg.id}', ${idx}))">✕</span></div>`).join('')}</div>`;
+                html += `<div class="add-row" style="margin-top:0;"><input id="lg-team-input" type="text" placeholder="Nome da Equipa"><button onclick="uiAddLeagueTeam('${lg.id}')">+</button></div>`;
+                
+                // JOGOS E RESULTADOS
+                if(lg.teams.length >= 2) {
+                    html += `<div class="panel-title" style="margin-top:20px;">${t('lg_matches')}</div>`;
+                    lg.matches.slice().reverse().forEach(m => {
+                       html += `<div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface-2); padding:8px 12px; border-radius:6px; margin-bottom:6px; font-size:12px;">
+                          <div style="flex:1;">${m.md ? `<b style="color:var(--gold); margin-right:6px;">J${m.md}</b>` : ''}${m.h} <b style="margin:0 4px;">${m.hg} - ${m.ag}</b> ${m.a}</div>
+                          <div style="display:flex; gap:8px;">
+                              <button class="quick-del" style="font-size:12px; color:var(--muted);" onclick="uiEditLeagueMatch('${lg.id}', '${m.id}')">✏️</button>
+                              <button class="quick-del" style="font-size:12px; color:var(--red);" onclick="askConfirm('${t('msg_del_lg_match')}', ()=>uiRemoveLeagueMatch('${lg.id}', '${m.id}'))">✕</button>
+                          </div>
+                       </div>`; 
+                    });
+                    
+                    let isEditingMatch = editingLgMatch && editingLgMatch.lgId === lg.id;
+                    let mdVal = isEditingMatch ? editingLgMatch.md : '';
+                    if(!isEditingMatch && !mdVal && lg.matches.length > 0) mdVal = lg.matches[lg.matches.length - 1].md;
+                    
+                    let playedTeamsInMd = lg.matches
+                        .filter(m => m.md === mdVal && (!isEditingMatch || m.id !== editingLgMatch.mId))
+                        .flatMap(m => [m.h, m.a]);
+                    
+                    let hVal = isEditingMatch ? editingLgMatch.h : '';
+                    let aVal = isEditingMatch ? editingLgMatch.a : '';
+                    let hgVal = isEditingMatch ? editingLgMatch.hg : '';
+                    let agVal = isEditingMatch ? editingLgMatch.ag : '';
+                    
+                    let teamOptsH = `<option value="" disabled ${!hVal?'selected':''}>Casa...</option>`;
+                    let teamOptsA = `<option value="" disabled ${!aVal?'selected':''}>Fora...</option>`;
+                    
+                    lg.teams.forEach(tName => {
+                        if(!playedTeamsInMd.includes(tName) || tName === hVal) {
+                            teamOptsH += `<option value="${tName}" ${tName===hVal?'selected':''}>${tName}</option>`;
+                        }
+                        if(!playedTeamsInMd.includes(tName) || tName === aVal) {
+                            teamOptsA += `<option value="${tName}" ${tName===aVal?'selected':''}>${tName}</option>`;
+                        }
+                    });
+
+                    html += `<div style="background:var(--surface-2); padding:10px; border-radius:8px; border:1px solid ${isEditingMatch?'var(--gold)':'var(--line)'}; margin-top:10px;">
+                       ${isEditingMatch ? `<div style="color:var(--gold); font-size:10px; font-weight:bold; text-transform:uppercase; margin-bottom:8px;">A editar resultado...</div>` : ''}
+                       <div style="display:flex; gap:6px; margin-bottom:6px;">
+                          <input type="text" id="lg-match-md" placeholder="Jornada" value="${mdVal}" oninput="filterLeagueTeams('${lg.id}')" style="width:70px; background:var(--surface); border:1px solid var(--line); color:var(--chalk); border-radius:6px; padding:6px; font-size:12px; text-align:center;">
+                          <select id="lg-match-h" style="flex:1; background:var(--surface); border:1px solid var(--line); color:var(--chalk); border-radius:6px; padding:6px; font-size:12px;">${teamOptsH}</select>
+                          <input type="number" id="lg-match-hg" placeholder="G" value="${hgVal}" style="width:40px; background:var(--surface); border:1px solid var(--line); color:var(--chalk); border-radius:6px; padding:6px; font-size:12px; text-align:center;">
+                       </div>
+                       <div style="display:flex; gap:6px; margin-bottom:8px;">
+                          <div style="width:70px; text-align:center; font-size:10px; color:var(--muted); line-height:2.5;">VS</div>
+                          <select id="lg-match-a" style="flex:1; background:var(--surface); border:1px solid var(--line); color:var(--chalk); border-radius:6px; padding:6px; font-size:12px;">${teamOptsA}</select>
+                          <input type="number" id="lg-match-ag" placeholder="G" value="${agVal}" style="width:40px; background:var(--surface); border:1px solid var(--line); color:var(--chalk); border-radius:6px; padding:6px; font-size:12px; text-align:center;">
+                       </div>
+                       <div style="display:flex; gap:6px;">
+                           ${isEditingMatch ? `<button class="btn btn-outline" style="flex:1; font-size:11px; padding:8px;" onclick="uiCancelEditLeagueMatch()">${t('cancel')}</button>` : ''}
+                           <button class="btn btn-outline" style="flex:1; font-size:11px; padding:8px; ${isEditingMatch?'border-color:var(--gold); color:var(--gold);':''}" onclick="uiAddLeagueMatch('${lg.id}')">${isEditingMatch ? t('save') : t('lg_add_match')}</button>
+                       </div>
+                    </div>`;
+                }
+                
+                html += `</div>`;
+            }
+            html += `</div>`;
+        });
+    }
+    return html;
+}
+
 window.exportCsv = function() {
   const roster = eligiblePlayers(); 
   let csv = "Nome_Name,Numero_Number,Posicao_Position,Idade_Age,Golos_Goals,Assistencias_Assists,Amarelos_Yellows,Vermelhos_Reds,FaltasTreino_TrainingAbsences,JogosTitular_Starts,MinutosJogados_MinutesPlayed,AvaliacaoMedia_AvgRating\n";
@@ -1503,6 +1849,15 @@ function renderPlantel(){
 
   let html = `${topbarHtml(t('hub_team_title'))}${renderTeamSubHeader()}<div class="card">`;
   
+  html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--line);">
+             <span style="font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:700;">Ordenar por:</span>
+             <select onchange="state.rosterSortBy=this.value; saveState(); render()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--chalk); border-radius:6px; padding:6px; font-size:11px; font-weight:bold; outline:none;">
+                <option value="numero" ${(state.rosterSortBy||'numero')==='numero'?'selected':''}>Número</option>
+                <option value="nome" ${state.rosterSortBy==='nome'?'selected':''}>Nome (A-Z)</option>
+                <option value="posicao" ${state.rosterSortBy==='posicao'?'selected':''}>Posição</option>
+             </select>
+           </div>`;
+
   if(activeRoster.length === 0) { html += `<div class="empty">${t('pl_none')}</div>`; } 
   else {
       activeRoster.forEach(p => {
@@ -1581,7 +1936,7 @@ window.updatePlayerPositions = function(id, val){ const p=state.roster.find(x=>x
 window.updatePlayerBirthDate = function(id, val){ const p=state.roster.find(x=>x.id===id); if(p){p.birthDate=val||null; saveState(); render();} };
 window.removePlayer = function(id){ const p=state.roster.find(x=>x.id===id); if(p){ p.active=false; saveState(); render(); } };
 window.exportData = function(){ state.lastBackupDate = Date.now(); const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `coachfolio-backup-${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); saveState(); render(); showToast(t('msg_bkp_exp')); };
-window.importData = function(input){ const file = input.files[0]; if(!file) return; const reader = new FileReader(); reader.onload = (e)=>{ try{ const p = JSON.parse(e.target.result); if(!p.roster || !p.matches) throw new Error('inv'); askConfirm(t('msg_overwrite'), ()=>{ state = p; if(!state.schedule) state.schedule = []; if(!state.trainings) state.trainings = []; if(!state.videos) state.videos = []; if(!state.diary) state.diary = []; if(!state.teamColor) state.teamColor = '#D9A441'; if(!state.currentSeason) state.currentSeason = defaultSeason(); if(state.trackSubs===undefined) state.trackSubs=true; state.lastBackupDate = Date.now(); saveState(); render(); showToast(t('msg_bkp_imp')); }); }catch(err){ showToast(t('msg_inv_file')); } }; reader.readAsText(file); input.value = ''; };
+window.importData = function(input){ const file = input.files[0]; if(!file) return; const reader = new FileReader(); reader.onload = (e)=>{ try{ const p = JSON.parse(e.target.result); if(!p.roster || !p.matches) throw new Error('inv'); askConfirm(t('msg_overwrite'), ()=>{ state = p; if(!state.schedule) state.schedule = []; if(!state.trainings) state.trainings = []; if(!state.videos) state.videos = []; if(!state.diary) state.diary = []; if(!state.leagues) state.leagues = []; if(!state.teamColor) state.teamColor = '#D9A441'; if(!state.oppColor) state.oppColor = '#C8493F'; if(!state.seasonFormat) state.seasonFormat = 'europeu'; if(!state.currentSeason) state.currentSeason = defaultSeason(); if(state.enableLeagues===undefined) state.enableLeagues=true; if(state.trackSubs===undefined) state.trackSubs=true; state.lastBackupDate = Date.now(); saveState(); render(); showToast(t('msg_bkp_imp')); }); }catch(err){ showToast(t('msg_inv_file')); } }; reader.readAsText(file); input.value = ''; };
 
 // GERADOR DE PDF NATIVO
 window.exportReportPDF = function(){
@@ -1653,7 +2008,6 @@ window.exportReportPDF = function(){
   const printArea = document.getElementById('print-area');
   printArea.innerHTML = html;
   
-  // Aciona a impressão nativa (que permite guardar em PDF)
   window.print();
 };
 
@@ -1683,6 +2037,7 @@ function render(){
      else if(currentTab==='videos') app.innerHTML = renderVideos();
      else if(currentTab==='plantel') app.innerHTML = renderPlantel();
      else if(currentTab==='stats') app.innerHTML = renderStats(); 
+     else if(currentTab==='classificacoes') app.innerHTML = renderClassificacoes(); 
   }
 }
 

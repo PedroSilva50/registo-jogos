@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Coachfolio">
 <meta name="theme-color" content="#0E211A">
-<title>COACHFOLIO v2.6.6</title>
+<title>COACHFOLIO v2.6.7</title>
 <style>
   :root{--bg:#0E211A;--surface:#153328;--surface-2:#1C4133;--chalk:#F3EFE6;--muted:#8FA79B;--gold:#D9A441;--gold-dim:#4A3E22;--red:#C8493F;--red-dim:#3F2320;--yellow:#E1C324;--green:#4ade80;--green-dim:#133320;--line:rgba(243,239,230,0.10);--btn-gold-txt:#241B08;--btn-red-txt:#2B0F0C;--btn-green-txt:#0E211A;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -401,8 +401,8 @@ function escapeHTML(str) { if(!str) return ''; return String(str).replace(/[&<>'
 function uid(){ return Math.random().toString(36).slice(2,10); }
 function showToast(msg){ const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(showToast._t); showToast._t = setTimeout(()=>el.classList.remove('show'), 3000); }
 function getMyClub() { return state.myClubName && state.myClubName.trim() !== '' ? state.myClubName : t('def_club'); }
-function getPlanSeasons() { return Array.from(new Set([...state.trainings, ...state.diary].map(x=>getEntitySeason(x)))).sort().reverse(); }
-function getSeasonsList() { return Array.from(new Set(state.matches.map(m=>getEntitySeason(m)))).sort().reverse(); }
+function getPlanSeasons() { return Array.from(new Set([state.currentSeason, ...state.trainings.map(x=>getEntitySeason(x)), ...state.diary.map(x=>getEntitySeason(x))])).sort().reverse(); }
+function getSeasonsList() { return Array.from(new Set([state.currentSeason, ...state.matches.map(m=>getEntitySeason(m))])).sort().reverse(); }
 
 window.shareContent = function(text) {
   if (navigator.share) { navigator.share({ title: 'Coachfolio', text: text }).then(()=>showToast(t('msg_copied'))).catch((e)=>{ if(e.name !== 'AbortError') fallbackCopy(text); }); } 
@@ -542,7 +542,9 @@ window.startScheduledMatch = function(schedId){
   const s = state.schedule.find(x => x.id === schedId); if(!s) return;
   if(getActiveMatch()) { showToast(t('msg_ongoing')); return; }
   const doStart = () => { state.matches.unshift({ id: uid(), opponent: s.opponent, date: s.date, type: s.type, phase: s.phase || '', matchday: s.matchday || '', season: s.season || state.currentSeason, location: s.location, originalSchedule: s, tournamentName: s.tournamentName || '', finished:false, goals: [], cards: [], subs: [], lineup: [], ratings: {}, capitao: null, timer: { isRunning:false, elapsedMs:0, lastStartTs:null } }); state.schedule = state.schedule.filter(x => x.id !== schedId); saveState(); navigateToTab('jogo'); };
-  if (state.schedule.length > 0 && state.schedule[0].id !== schedId) askConfirm(t('msg_warn_order'), doStart); else doStart();
+  
+  const currentSch = state.schedule.filter(x => (x.season || state.currentSeason) === state.currentSeason);
+  if (currentSch.length > 0 && currentSch[0].id !== schedId) askConfirm(t('msg_warn_order'), doStart); else doStart();
 };
 
 window.toggleCallup = function(schId, pId){ const s = state.schedule.find(x=>x.id===schId); if(s){ if(s.callup.includes(pId)) s.callup = s.callup.filter(x=>x!==pId); else s.callup.push(pId); saveState(); render(); } };
@@ -662,6 +664,14 @@ window.doArchiveSeason = function() {
     saveState(); closeModal(); showToast(t('msg_archive_done')); goHome();
 };
 
+window.wipeAllData = function() {
+    if(confirm("TEM A CERTEZA ABSOLUTA?\nIsto vai apagar completamente a app: planteis, jogos, histórico e definições. Não há como voltar atrás!")) {
+        localStorage.removeItem('coach-app-data-v1');
+        if(typeof window.storage !== 'undefined') window.storage.set('coach-app-data-v1', '');
+        window.location.reload();
+    }
+};
+
 function renderModalHTML(){
   if(!modalConfig) return '';
   if(modalConfig.type === 'settings') {
@@ -722,19 +732,22 @@ function renderModalHTML(){
                   <div class="seg-btn ${state.seasonFormat==='civil'?'active':''}" onclick="event.stopPropagation(); state.seasonFormat='civil'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_season_civ')}</div>
                 </div>
              </div>
-             
+
              <div style="margin-top:20px; padding:10px; background:var(--surface); border-radius:8px; border:1px solid var(--line);">
                <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--muted); text-transform:uppercase; font-weight:bold; margin-bottom:6px;"><span>Armazenamento</span><span>${sizeKB.toFixed(1)} KB / ~5 MB</span></div>
                <div style="height:6px; background:var(--surface-2); border-radius:3px; overflow:hidden;"><div style="height:100%; width:${pct}%; background:${strColor};"></div></div>
              </div>
 
-             <div style="margin-top:20px; text-align:left;"><button class="btn btn-red" style="width:100%; font-size:12px;" onclick="event.stopPropagation(); archiveSeason();">${t('set_archive')}</button></div>
+             <div style="margin-top:20px; text-align:left;">
+                <button class="btn btn-red" style="width:100%; font-size:12px; margin-bottom:10px;" onclick="event.stopPropagation(); wipeAllData();">🗑️ Limpar Todos os Dados (Reset)</button>
+                <button class="btn btn-outline" style="width:100%; font-size:12px;" onclick="event.stopPropagation(); archiveSeason();">${t('set_archive')}</button>
+             </div>
          </div>
          
-         <button class="btn" style="width:100%; margin-top:10px; background:#0E211A; color:#fff; border:none;" onclick="abrirCreditos()">🤝 Créditos & Parceiros</button>
+         <button class="btn" style="width:100%; margin-top:10px; background:#0E211A; color:#fff; border:1px solid var(--line);" onclick="abrirCreditos()">🤝 Créditos & Parceiros</button>
 
          <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="closeModal()">${t('close')}</button>
-         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v2.6.6 | COACHFOLIO</div>
+         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v2.6.7 | COACHFOLIO</div>
        </div>
      </div>`;
   }
@@ -780,7 +793,8 @@ function renderHome(){
       } else { msg = `🎂 Próximo aniversário: <b>${nextBday.player.name}</b>, faltam ${nextBday.days} dias.`; }
       bdayHtml = `<div style="background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:16px; font-size:12px; text-align:center;">${msg}</div>`;
   }
-  return `<div class="home-screen"><div class="home-pitch-bg"><svg preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%; max-width: 400px;" viewBox="0 0 400 600"><rect x="20" y="20" width="360" height="560" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><line x1="20" y1="300" x2="380" y2="300" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><circle cx="200" cy="300" r="62" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="85" y="20" width="230" height="95" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="140" y="20" width="120" height="38" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="85" y="485" width="230" height="95" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="140" y="542" width="120" height="38" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/></svg></div><div class="home-content">${backupWarning}<div class="topbar-settings" style="position:absolute; top:0; right:0;" onclick="openSettings()">⚙️</div><div class="home-ball">${ballIconSvg()}</div><h1>${t('home_title')}</h1><div class="home-sub" style="margin-bottom:2px;">${t('home_sub')}</div><div style="font-size:10px; color:var(--gold); margin-bottom:16px; font-weight:normal; letter-spacing:0; text-transform:none;">v2.6.6 | by Pedro Silva</div>${bdayHtml}${active ? `<button class="home-btn" style="margin-bottom:12px; border-color:var(--gold);" onclick="navigateToHub('jogo')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>${t('home_cont')}</button>` : ''}<div class="home-menu"><div class="home-hub-card" onclick="navigateToHub('planeamento')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><div class="home-hub-text"><h2>${t('hub_plan_title')}</h2><p>${t('hub_plan_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('jogo')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><div class="home-hub-text"><h2>${t('hub_match_title')}</h2><p>${t('hub_match_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('estrategia')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="3"/></svg></div><div class="home-hub-text"><h2>${t('hub_strat_title')}</h2><p>${t('hub_strat_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('equipa')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div><div class="home-hub-text"><h2>${t('hub_team_title')}</h2><p>${t('hub_team_desc')}</p></div></div></div></div></div>`;
+  
+  return `<div class="home-screen"><div class="home-pitch-bg"><svg preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%; max-width: 400px;" viewBox="0 0 400 600"><rect x="20" y="20" width="360" height="560" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><line x1="20" y1="300" x2="380" y2="300" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><circle cx="200" cy="300" r="62" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="85" y="20" width="230" height="95" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="140" y="20" width="120" height="38" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="85" y="485" width="230" height="95" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="140" y="542" width="120" height="38" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/></svg></div><div class="home-content">${backupWarning}<div class="topbar-settings" style="position:absolute; top:0; right:0;" onclick="openSettings()">⚙️</div><div class="home-ball">${ballIconSvg()}</div><h1>${t('home_title')}</h1><div class="home-sub" style="margin-bottom:2px;">${t('home_sub')}</div><div style="font-size:10px; color:var(--gold); margin-bottom:16px; font-weight:normal; letter-spacing:0; text-transform:none;">v2.6.7 | by Pedro Silva</div>${bdayHtml}${active ? `<button class="home-btn" style="margin-bottom:12px; border-color:var(--gold);" onclick="navigateToHub('jogo')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>${t('home_cont')}</button>` : ''}<div class="home-menu"><div class="home-hub-card" onclick="navigateToHub('planeamento')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><div class="home-hub-text"><h2>${t('hub_plan_title')}</h2><p>${t('hub_plan_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('jogo')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><div class="home-hub-text"><h2>${t('hub_match_title')}</h2><p>${t('hub_match_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('estrategia')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="3"/></svg></div><div class="home-hub-text"><h2>${t('hub_strat_title')}</h2><p>${t('hub_strat_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('equipa')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div><div class="home-hub-text"><h2>${t('hub_team_title')}</h2><p>${t('hub_team_desc')}</p></div></div></div></div></div>`;
 }
 
 function renderJogoSubHeader() { return `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${currentTab==='jogo'?'active':''}" onclick="navigateToTab('jogo')">${t('match_curr')}</div><div class="seg-btn ${currentTab==='jogos'?'active':''}" onclick="navigateToTab('jogos')">${t('res_title')}</div></div>`; }
@@ -1137,10 +1151,12 @@ function computeStats(typeFilterVal, seasonFilterVal, phaseFilterVal){
   return { scored, conceded, scoredHalf, concededHalf, scorers, assisters, wins, draws, losses, casaWins, casaDraws, casaLosses, foraWins, foraDraws, foraLosses, cardRanking, last6Matches, last5Form, availablePhases };
 }
 
-function calcularEstatisticaJogador(playerId) {
+window.statsSeasonFilter = undefined;
+
+function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason) {
   let golos = 0, assistencias = 0, amarelos = 0, vermelhos = 0, somaAvaliacoes = 0, numAvaliacoes = 0, faltasTreino = 0, jogosTitular = 0, minutos = 0, presencasTreino = 0, jogosConvocado = 0;
   
-  (state.matches || []).filter(m => getEntitySeason(m) === state.currentSeason).forEach(m => {
+  (state.matches || []).filter(m => targetSeason === 'TUDO' || getEntitySeason(m) === targetSeason).forEach(m => {
     let callup = m.originalSchedule ? m.originalSchedule.callup : m.lineup;
     if((m.lineup || []).includes(playerId) || (m.subs || []).some(s=>s.inId===playerId)) jogosConvocado++;
     if(state.trackSubs && m.finished) { if((m.lineup || []).includes(playerId)) jogosTitular++; minutos += calcPlayerMinutes(m, playerId); }
@@ -1150,7 +1166,7 @@ function calcularEstatisticaJogador(playerId) {
   });
   
   let totalTreinos = 0;
-  (state.trainings || []).filter(tr => getEntitySeason(tr) === state.currentSeason).forEach(tr => {
+  (state.trainings || []).filter(tr => targetSeason === 'TUDO' || getEntitySeason(tr) === targetSeason).forEach(tr => {
       totalTreinos++;
       if(tr.absences && tr.absences.includes(playerId)) faltasTreino++;
       else presencasTreino++;
@@ -1184,17 +1200,18 @@ function generateDonutChartSVG(presencas, faltas) {
 }
 
 window.exportStatsPlayersPDF = function() {
+    let activeSeason = window.statsSeasonFilter === 'todas' ? 'TUDO' : (window.statsSeasonFilter || state.currentSeason);
     const roster = eligiblePlayers().sort((a,b) => (a.name||'').localeCompare(b.name||''));
     let html = `
     <div class="print-card">
        <div class="print-header">
            <h1>Estatísticas Individuais de Plantel</h1>
-           <p>${t('rep_gen')} ${new Date().toLocaleDateString('pt-PT')} | Época: ${state.currentSeason} | ${getMyClub()}</p>
+           <p>${t('rep_gen')} ${new Date().toLocaleDateString('pt-PT')} | Época: ${activeSeason === 'TUDO' ? 'Histórico Total' : activeSeason} | ${getMyClub()}</p>
        </div>
        <table style="width:100%; border-collapse:collapse; text-align:center; font-size:12px;">
          <tr><th style="text-align:left;">Nome do Jogador</th><th>T</th><th>P(%)</th><th>J</th><th>Mins</th><th>G</th><th>A</th><th>🟨</th><th>🟥</th></tr>
          ${roster.map(p => {
-             const st = calcularEstatisticaJogador(p.id);
+             const st = calcularEstatisticaJogador(p.id, activeSeason);
              const pPct = st.totalTreinos > 0 ? Math.round((st.presencasTreino / st.totalTreinos)*100) : 0;
              return `<tr><td style="text-align:left; font-weight:bold;">${p.name}</td><td>${st.totalTreinos}</td><td>${pPct}%</td><td>${st.jogosConvocado}</td><td>${st.minutos}</td><td>${st.golos}</td><td>${st.assistencias}</td><td>${st.amarelos}</td><td>${st.vermelhos}</td></tr>`;
          }).join('')}
@@ -1204,15 +1221,22 @@ window.exportStatsPlayersPDF = function() {
 };
 
 function renderStats(){
-  const s = computeStats(statsFilter, state.currentSeason, statsPhaseFilter); 
+  const seasons = getSeasonsList();
+  let activeSeason = window.statsSeasonFilter === 'todas' ? 'TUDO' : (window.statsSeasonFilter || state.currentSeason);
+  
+  const s = computeStats(statsFilter, activeSeason, statsPhaseFilter); 
   let html = `${topbarHtml(t('hub_team_title'))}${renderTeamSubHeader()}
     <div class="seg" style="margin-bottom:12px;"><div class="seg-btn ${statsViewMode==='team'?'active':''}" onclick="statsViewMode='team'; render()">${t('st_team')}</div><div class="seg-btn ${statsViewMode==='players'?'active':''}" onclick="statsViewMode='players'; render()">${t('st_players')}</div></div>`;
+
+  let seasonFilterUI = seasons.length > 1 ? `<div style="margin-bottom:14px; overflow-x:auto; display:flex; gap:6px; padding-bottom:6px;"><div class="seg-btn ${activeSeason==='TUDO'?'active':''}" style="flex:none; padding:8px 12px; font-size:10px;" onclick="window.statsSeasonFilter='todas'; render()">Tudo</div>${seasons.map(season=>`<div class="seg-btn ${activeSeason===season?'active':''}" style="flex:none; padding:8px 12px; font-size:10px;" onclick="window.statsSeasonFilter='${season}'; render()">${season}</div>`).join('')}</div>` : '';
+  
+  html += seasonFilterUI;
 
   if (statsViewMode === 'players') {
       const roster = eligiblePlayers().sort((a,b) => (a.name||'').localeCompare(b.name||''));
       let tableHtml = `<div class="stats-table-wrapper"><table class="stats-table"><tr><th class="p-name">Nome</th><th>T</th><th>P(%)</th><th>J</th><th>Mins</th><th>G</th><th>A</th><th>🟨</th><th>🟥</th></tr>`;
       roster.forEach(p => {
-          const st = calcularEstatisticaJogador(p.id); const pPct = st.totalTreinos > 0 ? Math.round((st.presencasTreino / st.totalTreinos)*100) : 0;
+          const st = calcularEstatisticaJogador(p.id, activeSeason); const pPct = st.totalTreinos > 0 ? Math.round((st.presencasTreino / st.totalTreinos)*100) : 0;
           tableHtml += `<tr onclick="expandedPlayer='${p.id}'; navigateToTab('plantel');" style="cursor:pointer;"><td class="p-name">${p.name}</td><td>${st.totalTreinos}</td><td style="color:${pPct>=80?'var(--green)':(pPct>=50?'var(--yellow)':'var(--red)')};">${pPct}%</td><td>${st.jogosConvocado}</td><td style="color:var(--gold); font-weight:bold;">${st.minutos}</td><td>${st.golos}</td><td>${st.assistencias}</td><td>${st.amarelos}</td><td>${st.vermelhos}</td></tr>`;
       });
       tableHtml += `</table></div><div style="display:flex; gap:10px; margin-top:14px;"><button class="btn btn-outline" style="flex:1; border-style:dashed;" onclick="exportCsv()">${t('exp_csv')}</button><button class="btn btn-gold" style="flex:1;" onclick="exportStatsPlayersPDF()">📄 Exportar PDF</button></div>`;
@@ -1357,13 +1381,17 @@ window.togglePlayerPos = function(id, pos) {
 };
 
 window.exportCsv = function() {
+  let activeSeason = window.statsSeasonFilter === 'todas' ? 'TUDO' : (window.statsSeasonFilter || state.currentSeason);
   const roster = eligiblePlayers(); 
   let csv = "Nome_Name,Numero_Number,Posicao_Position,Idade_Age,Golos_Goals,Assistencias_Assists,Amarelos_Yellows,Vermelhos_Reds,FaltasTreino_TrainingAbsences,JogosTitular_Starts,MinutosJogados_MinutesPlayed,AvaliacaoMedia_AvgRating\n";
   roster.forEach(p => {
-     const st = calcularEstatisticaJogador(p.id); const idade = p.birthDate ? (computeAge(p.birthDate)||'') : ''; const nome = `"${(p.name||'').replace(/"/g, '""')}"`; const pos = `"${(p.positions||'').replace(/"/g, '""')}"`;
+     const st = calcularEstatisticaJogador(p.id, activeSeason); 
+     const idade = p.birthDate ? (computeAge(p.birthDate)||'') : ''; 
+     const nome = `"${(p.name||'').replace(/"/g, '""')}"`; 
+     const pos = `"${(p.positions||'').replace(/"/g, '""')}"`;
      csv += `${nome},${p.number||''},${pos},${idade},${st.golos},${st.assistencias},${st.amarelos},${st.vermelhos},${st.faltasTreino},${st.jogosTitular},${st.minutos},${st.media}\n`;
   });
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `coachfolio-estatisticas-jogadores-${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); showToast(t('msg_csv_exp'));
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `coachfolio-estatisticas-${activeSeason === 'TUDO' ? 'totais' : activeSeason.replace('/','-')}-${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); showToast(t('msg_csv_exp'));
 };
 
 function renderPlantel(){
@@ -1484,283 +1512,29 @@ setInterval(()=>{
   if(currentTab !== 'jogo') return; const m = getActiveMatch(); if(!m || !m.timer || !m.timer.isRunning) return;
   const el = document.getElementById('live-timer'); if(el) el.textContent = formatMatchTime(getMatchElapsedMs(m));
 }, 1000);
-// --- CORREÇÕES FINAIS (BOTÕES E CALENDÁRIO) ---
 
-// 1. Obriga os botões de Épocas a estarem sempre visíveis se houver histórico
-function getPlanSeasons() { return Array.from(new Set([state.currentSeason, ...state.trainings.map(x=>getEntitySeason(x)), ...state.diary.map(x=>getEntitySeason(x))])).sort().reverse(); }
-function getSeasonsList() { return Array.from(new Set([state.currentSeason, ...state.matches.map(m=>getEntitySeason(m))])).sort().reverse(); }
-
-// 2. Impede que jogos não realizados de épocas antigas bloqueiem os jogos da época nova
-window.startScheduledMatch = function(schedId){
-  const s = state.schedule.find(x => x.id === schedId); if(!s) return;
-  if(getActiveMatch()) { showToast(t('msg_ongoing')); return; }
-  const doStart = () => { state.matches.unshift({ id: uid(), opponent: s.opponent, date: s.date, type: s.type, phase: s.phase || '', matchday: s.matchday || '', season: s.season || state.currentSeason, location: s.location, originalSchedule: s, tournamentName: s.tournamentName || '', finished:false, goals: [], cards: [], subs: [], lineup: [], ratings: {}, capitao: null, timer: { isRunning:false, elapsedMs:0, lastStartTs:null } }); state.schedule = state.schedule.filter(x => x.id !== schedId); saveState(); navigateToTab('jogo'); };
-  
-  // A app agora só olha para a fila de jogos da ÉPOCA ATUAL antes de dar o aviso
-  const currentSch = state.schedule.filter(x => (x.season || state.currentSeason) === state.currentSeason);
-  if (currentSch.length > 0 && currentSch[0].id !== schedId) askConfirm(t('msg_warn_order'), doStart); else doStart();
-};
-// --- FILTRO DE ÉPOCAS NAS ESTATÍSTICAS (EQUIPA E JOGADORES) ---
-window.statsSeasonFilter = undefined;
-
-function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason) {
-  let golos = 0, assistencias = 0, amarelos = 0, vermelhos = 0, somaAvaliacoes = 0, numAvaliacoes = 0, faltasTreino = 0, jogosTitular = 0, minutos = 0, presencasTreino = 0, jogosConvocado = 0;
-  
-  (state.matches || []).filter(m => targetSeason === 'TUDO' || getEntitySeason(m) === targetSeason).forEach(m => {
-    let callup = m.originalSchedule ? m.originalSchedule.callup : m.lineup;
-    if((m.lineup || []).includes(playerId) || (m.subs || []).some(s=>s.inId===playerId)) jogosConvocado++;
-    if(state.trackSubs && m.finished) { if((m.lineup || []).includes(playerId)) jogosTitular++; minutos += calcPlayerMinutes(m, playerId); }
-    (m.goals || []).forEach(g => { if (g.type === 'scored' && g.scorerId === playerId) golos++; if (g.type === 'scored' && g.assistId === playerId) assistencias++; });
-    (m.cards || []).forEach(c => { if(c.playerId === playerId) { if(c.color === 'Amarelo') amarelos++; else vermelhos++; } });
-    if(m.ratings && m.ratings[playerId]) { somaAvaliacoes += m.ratings[playerId]; numAvaliacoes++; }
-  });
-  
-  let totalTreinos = 0;
-  (state.trainings || []).filter(tr => targetSeason === 'TUDO' || getEntitySeason(tr) === targetSeason).forEach(tr => {
-      totalTreinos++;
-      if(tr.absences && tr.absences.includes(playerId)) faltasTreino++;
-      else presencasTreino++;
-  });
-  
-  return { golos, assistencias, amarelos, vermelhos, media: numAvaliacoes>0 ? (somaAvaliacoes/numAvaliacoes).toFixed(1) : '-', faltasTreino, presencasTreino, totalTreinos, jogosTitular, jogosConvocado, minutos };
-}
-
-window.exportStatsPlayersPDF = function() {
-    let activeSeason = window.statsSeasonFilter === 'todas' ? 'TUDO' : (window.statsSeasonFilter || state.currentSeason);
-    const roster = eligiblePlayers().sort((a,b) => (a.name||'').localeCompare(b.name||''));
-    let html = `
-    <div class="print-card">
-       <div class="print-header">
-           <h1>Estatísticas Individuais de Plantel</h1>
-           <p>${t('rep_gen')} ${new Date().toLocaleDateString('pt-PT')} | Época: ${activeSeason === 'TUDO' ? 'Histórico Total' : activeSeason} | ${getMyClub()}</p>
-       </div>
-       <table style="width:100%; border-collapse:collapse; text-align:center; font-size:12px;">
-         <tr><th style="text-align:left;">Nome do Jogador</th><th>T</th><th>P(%)</th><th>J</th><th>Mins</th><th>G</th><th>A</th><th>🟨</th><th>🟥</th></tr>
-         ${roster.map(p => {
-             const st = calcularEstatisticaJogador(p.id, activeSeason);
-             const pPct = st.totalTreinos > 0 ? Math.round((st.presencasTreino / st.totalTreinos)*100) : 0;
-             return `<tr><td style="text-align:left; font-weight:bold;">${p.name}</td><td>${st.totalTreinos}</td><td>${pPct}%</td><td>${st.jogosConvocado}</td><td>${st.minutos}</td><td>${st.golos}</td><td>${st.assistencias}</td><td>${st.amarelos}</td><td>${st.vermelhos}</td></tr>`;
-         }).join('')}
-       </table>
-    </div>`;
-    const printArea = document.getElementById('print-area'); printArea.innerHTML = html; window.print();
-};
-
-window.exportCsv = function() {
-  let activeSeason = window.statsSeasonFilter === 'todas' ? 'TUDO' : (window.statsSeasonFilter || state.currentSeason);
-  const roster = eligiblePlayers(); 
-  let csv = "Nome_Name,Numero_Number,Posicao_Position,Idade_Age,Golos_Goals,Assistencias_Assists,Amarelos_Yellows,Vermelhos_Reds,FaltasTreino_TrainingAbsences,JogosTitular_Starts,MinutosJogados_MinutesPlayed,AvaliacaoMedia_AvgRating\n";
-  roster.forEach(p => {
-     const st = calcularEstatisticaJogador(p.id, activeSeason); 
-     const idade = p.birthDate ? (computeAge(p.birthDate)||'') : ''; 
-     const nome = `"${(p.name||'').replace(/"/g, '""')}"`; 
-     const pos = `"${(p.positions||'').replace(/"/g, '""')}"`;
-     csv += `${nome},${p.number||''},${pos},${idade},${st.golos},${st.assistencias},${st.amarelos},${st.vermelhos},${st.faltasTreino},${st.jogosTitular},${st.minutos},${st.media}\n`;
-  });
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `coachfolio-estatisticas-${activeSeason === 'TUDO' ? 'totais' : activeSeason.replace('/','-')}-${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); showToast(t('msg_csv_exp'));
-};
-
-function renderStats(){
-  const seasons = getSeasonsList();
-  let activeSeason = window.statsSeasonFilter === 'todas' ? 'TUDO' : (window.statsSeasonFilter || state.currentSeason);
-  
-  const s = computeStats(statsFilter, activeSeason, statsPhaseFilter); 
-  let html = `${topbarHtml(t('hub_team_title'))}${renderTeamSubHeader()}
-    <div class="seg" style="margin-bottom:12px;"><div class="seg-btn ${statsViewMode==='team'?'active':''}" onclick="statsViewMode='team'; render()">${t('st_team')}</div><div class="seg-btn ${statsViewMode==='players'?'active':''}" onclick="statsViewMode='players'; render()">${t('st_players')}</div></div>`;
-
-  let seasonFilterUI = seasons.length > 1 ? `<div style="margin-bottom:14px; overflow-x:auto; display:flex; gap:6px; padding-bottom:6px;"><div class="seg-btn ${activeSeason==='TUDO'?'active':''}" style="flex:none; padding:8px 12px; font-size:10px;" onclick="window.statsSeasonFilter='todas'; render()">Tudo</div>${seasons.map(season=>`<div class="seg-btn ${activeSeason===season?'active':''}" style="flex:none; padding:8px 12px; font-size:10px;" onclick="window.statsSeasonFilter='${season}'; render()">${season}</div>`).join('')}</div>` : '';
-  
-  html += seasonFilterUI;
-
-  if (statsViewMode === 'players') {
-      const roster = eligiblePlayers().sort((a,b) => (a.name||'').localeCompare(b.name||''));
-      let tableHtml = `<div class="stats-table-wrapper"><table class="stats-table"><tr><th class="p-name">Nome</th><th>T</th><th>P(%)</th><th>J</th><th>Mins</th><th>G</th><th>A</th><th>🟨</th><th>🟥</th></tr>`;
-      roster.forEach(p => {
-          const st = calcularEstatisticaJogador(p.id, activeSeason); const pPct = st.totalTreinos > 0 ? Math.round((st.presencasTreino / st.totalTreinos)*100) : 0;
-          tableHtml += `<tr onclick="expandedPlayer='${p.id}'; navigateToTab('plantel');" style="cursor:pointer;"><td class="p-name">${p.name}</td><td>${st.totalTreinos}</td><td style="color:${pPct>=80?'var(--green)':(pPct>=50?'var(--yellow)':'var(--red)')};">${pPct}%</td><td>${st.jogosConvocado}</td><td style="color:var(--gold); font-weight:bold;">${st.minutos}</td><td>${st.golos}</td><td>${st.assistencias}</td><td>${st.amarelos}</td><td>${st.vermelhos}</td></tr>`;
-      });
-      tableHtml += `</table></div><div style="display:flex; gap:10px; margin-top:14px;"><button class="btn btn-outline" style="flex:1; border-style:dashed;" onclick="exportCsv()">${t('exp_csv')}</button><button class="btn btn-gold" style="flex:1;" onclick="exportStatsPlayersPDF()">📄 Exportar PDF</button></div>`;
-      return html + tableHtml;
-  }
-
-  let bal1 = (s.scoredHalf[1] || 0) - (s.concededHalf[1] || 0); let color1 = bal1 > 0 ? 'var(--green)' : (bal1 < 0 ? 'var(--red)' : 'var(--muted)');
-  let bal2 = (s.scoredHalf[2] || 0) - (s.concededHalf[2] || 0); let color2 = bal2 > 0 ? 'var(--green)' : (bal2 < 0 ? 'var(--red)' : 'var(--muted)');
-  let formHtml = '';
-  if(s.last5Form && s.last5Form.length > 0) { formHtml = `<div class="section-title" style="margin-top:16px;">${t('st_form')}</div><div class="card"><div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:10px; font-weight:600;">${t('st_form_last', {n: s.last5Form.length})}</div><div class="chart-form-row"><div class="chart-form-line"></div>${s.last5Form.map(res => `<div class="form-dot ${res}" style="background:${res==='V'?'var(--green)':(res==='E'?'var(--yellow)':'var(--red)')}; color:#000; width:24px; height:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-weight:bold; font-size:12px; margin-right:8px;">${res}</div>`).join('')}</div></div>`; }
-  
-  let goalsChartHtml = '';
-  if(s.last6Matches && s.last6Matches.length > 0) {
-      let maxG = 1; s.last6Matches.forEach(m => { const sc = m.goals.filter(g=>g.type==='scored').length; const co = m.goals.filter(g=>g.type==='conceded').length; if(sc > maxG) maxG = sc; if(co > maxG) maxG = co; });
-      const barsHtml = s.last6Matches.map(m => {
-           const sc = m.goals.filter(g=>g.type==='scored').length; const co = m.goals.filter(g=>g.type==='conceded').length;
-           const scPct = (sc / maxG) * 100; const coPct = (co / maxG) * 100; const shortOpp = m.opponent.split(' ')[0];
-           const msg = m.location === 'casa' ? getMyClub() + ' ' + sc + ' - ' + co + ' ' + m.opponent : m.opponent + ' ' + co + ' - ' + sc + ' ' + getMyClub();
-           return `<div class="chart-bar-group" onclick="showToast('${escapeHTML(msg)}')" style="cursor:pointer;"><div class="chart-bars"><div class="chart-bar scored" style="height:${scPct}%;"></div><div class="chart-bar conceded" style="height:${coPct}%;"></div></div><div class="chart-x-label">${escapeHTML(shortOpp)}</div></div>`;
-       }).join('');
-      goalsChartHtml = `<div class="card" style="margin-top:10px;"><div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:4px; display:flex; justify-content:space-between; font-weight:600;"><span>${t('st_evol', {n:s.last6Matches.length})}</span><span><span style="color:var(--gold);">■ GM</span> <span style="color:var(--red); margin-left:4px;">■ GS</span></span></div><div class="chart-bar-container">${barsHtml}</div></div>`;
-  }
-  
-  return html + `
-    <div class="seg" style="margin-bottom: 8px;"><div class="seg-btn ${statsFilter==='todos'?'active':''}" onclick="statsFilter='todos'; statsPhaseFilter='todas'; render()">${t('st_all')}</div><div class="seg-btn ${statsFilter==='amigavel'?'active':''}" onclick="statsFilter='amigavel'; statsPhaseFilter='todas'; render()">${t('sch_friendly')}</div><div class="seg-btn ${statsFilter==='campeonato'?'active':''}" onclick="statsFilter='campeonato'; statsPhaseFilter='todas'; render()">${t('sch_champ')}</div><div class="seg-btn ${statsFilter==='torneio'?'active':''}" onclick="statsFilter='torneio'; statsPhaseFilter='todas'; render()">${t('sch_tour')}</div></div>
-    ${s.availablePhases.length > 0 ? `<div class="seg" style="margin-bottom: 16px;"><div class="seg-btn ${statsPhaseFilter==='todas'?'active':''}" onclick="statsPhaseFilter='todas'; render()" style="padding:6px; font-size:10px;">${t('st_all_phases')}</div>${s.availablePhases.map(ph => `<div class="seg-btn ${statsPhaseFilter===ph?'active':''}" onclick="statsPhaseFilter='${ph}'; render()" style="padding:6px; font-size:10px;">${ph}</div>`).join('')}</div>` : '<div style="margin-bottom:16px;"></div>'}
-    <div class="section-title" style="margin-top:0;">${t('st_global')}</div>
-    <div class="stat-grid" style="grid-template-columns:1fr 1fr 1fr;"><div class="stat-box"><div class="num" style="color:var(--gold)">${s.wins}</div><div class="lbl">${t('st_wins')}</div></div><div class="stat-box"><div class="num" style="color:var(--chalk)">${s.draws}</div><div class="lbl">${t('st_draws')}</div></div><div class="stat-box"><div class="num" style="color:var(--red)">${s.losses}</div><div class="lbl">${t('st_losses')}</div></div></div>
-    <div class="stat-grid" style="grid-template-columns:1fr 1fr; gap:6px;"><div class="stat-box" style="padding:10px;"><div class="lbl">${t('match_home')}</div><div class="num mono" style="font-size:16px; margin-top:4px; color:var(--chalk);">${s.casaWins}V &nbsp;${s.casaDraws}E &nbsp;${s.casaLosses}D</div></div><div class="stat-box" style="padding:10px;"><div class="lbl">${t('match_away')}</div><div class="num mono" style="font-size:16px; margin-top:4px; color:var(--chalk);">${s.foraWins}V &nbsp;${s.foraDraws}E &nbsp;${s.foraLosses}D</div></div></div>
-    <div class="section-title">${t('st_ga')}</div>
-    <div class="card"><div style="display:flex; justify-content:space-between;"><span style="color:var(--gold); font-weight:bold;">⚽ ${s.scored} ${t('match_scored')}</span><span style="color:var(--red); font-weight:bold;">🥅 ${s.conceded} ${t('match_conc')}</span></div></div>
-    <div style="display:flex; gap:10px;">
-       <div class="card" style="flex:1;"><div style="margin-bottom:10px; color:var(--muted); font-size:11px; text-transform:uppercase; font-weight:700;">${t('st_top_s')}</div>${s.scorers.slice(0,5).map((sc,i)=>`<div class="scorer-row" style="padding:6px 0;"><span><span style="color:var(--muted); font-size:10px;">${i+1}</span> ${sc.name}</span><span class="n mono">${sc.count} ⚽</span></div>`).join('') || `<div class="empty">${t('st_no_goals')}</div>`}</div>
-       <div class="card" style="flex:1;"><div style="margin-bottom:10px; color:var(--muted); font-size:11px; text-transform:uppercase; font-weight:700;">${t('st_top_a')}</div>${s.assisters.slice(0,5).map((a,i)=>`<div class="scorer-row" style="padding:6px 0;"><span><span style="color:var(--muted); font-size:10px;">${i+1}</span> ${a.name}</span><span class="n mono">${a.count} 🎯</span></div>`).join('') || `<div class="empty">${t('st_no_assists')}</div>`}</div>
-    </div>
-    <div class="section-title" style="margin-top:16px;">${t('st_half')}</div>
-    <div class="card">
-      <div style="display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--line);"><div><b style="color:var(--chalk); font-size:13px;">${t('match_half1')}</b><br><span style="font-size:11px; color:var(--muted);">${s.scoredHalf[1]||0} ${t('match_scored')} | ${s.concededHalf[1]||0} ${t('match_conc')}</span></div><div style="text-align:right;"><span style="font-size:10px; color:var(--muted); text-transform:uppercase;">${t('st_bal')}</span><br><b style="font-size:16px; color:${color1}; font-family:ui-monospace, monospace;">${bal1>0?'+':''}${bal1}</b></div></div>
-      <div style="display:flex; justify-content:space-between;"><div><b style="color:var(--chalk); font-size:13px;">${t('match_half2')}</b><br><span style="font-size:11px; color:var(--muted);">${s.scoredHalf[2]||0} ${t('match_scored')} | ${s.concededHalf[2]||0} ${t('match_conc')}</span></div><div style="text-align:right;"><span style="font-size:10px; color:var(--muted); text-transform:uppercase;">${t('st_bal')}</span><br><b style="font-size:16px; color:${color2}; font-family:ui-monospace, monospace;">${bal2>0?'+':''}${bal2}</b></div></div>
-    </div>
-    ${formHtml}
-    ${goalsChartHtml}
-  `;
-}
-// --- RESET TOTAL ---
-
-// 1. Função para Limpar Tudo (Factory Reset)
-window.wipeAllData = function() {
-    if(confirm("TEM A CERTEZA ABSOLUTA?\nIsto vai apagar completamente a app: planteis, jogos, histórico e definições. Não há como voltar atrás!")) {
-        localStorage.removeItem('coach-app-data-v1');
-        if(typeof window.storage !== 'undefined') window.storage.set('coach-app-data-v1', '');
-        window.location.reload();
-    }
-};
-
-// 2. Ecrã inicial limpo (sem os textos de créditos provisórios)
-function renderHome(){
-  const active = getActiveMatch(); let backupWarning = '';
-  if(state.lastBackupDate && state.matches.length > 0) { const daysSince = (Date.now() - state.lastBackupDate) / (1000 * 60 * 60 * 24); if(daysSince > 7) backupWarning = `<div class="warning-banner" style="background:var(--red); padding:10px; border-radius:8px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between;"><span>⚠️ <b>Backup Atrasado</b></span><button class="btn btn-gold" style="padding: 6px 10px; font-size: 10px; flex:none;" onclick="exportData()">Exportar Agora</button></div>`; }
-  let bdayHtml = ''; const nextBday = getNextBirthday();
-  if(nextBday) {
-      let msg = '';
-      if(nextBday.days === 0) {
-          let encodedText = encodeURIComponent(`🎉 Parabéns, ${nextBday.player.name}! 🎉\nDesejamos-te um dia muito feliz! 🎂⚽`);
-          msg = `🎂 Hoje é o aniversário de <b>${nextBday.player.name}</b>! <a class="card-mini-btn active-green" href="https://wa.me/?text=${encodedText}" target="_blank" style="text-decoration:none; display:inline-block; margin-left:6px; padding:2px 6px;">WhatsApp ↗</a>`;
-      } else { msg = `🎂 Próximo aniversário: <b>${nextBday.player.name}</b>, faltam ${nextBday.days} dias.`; }
-      bdayHtml = `<div style="background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:16px; font-size:12px; text-align:center;">${msg}</div>`;
-  }
-  
-  return `<div class="home-screen"><div class="home-pitch-bg"><svg preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%; max-width: 400px;" viewBox="0 0 400 600"><rect x="20" y="20" width="360" height="560" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><line x1="20" y1="300" x2="380" y2="300" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><circle cx="200" cy="300" r="62" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="85" y="20" width="230" height="95" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="140" y="20" width="120" height="38" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="85" y="485" width="230" height="95" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="140" y="542" width="120" height="38" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/></svg></div><div class="home-content">${backupWarning}<div class="topbar-settings" style="position:absolute; top:0; right:0;" onclick="openSettings()">⚙️</div><div class="home-ball">${ballIconSvg()}</div><h1>${t('home_title')}</h1><div class="home-sub" style="margin-bottom:2px;">${t('home_sub')}</div><div style="font-size:10px; color:var(--gold); margin-bottom:16px; font-weight:normal; letter-spacing:0; text-transform:none;">v2.6.6 | by Pedro Silva</div>${bdayHtml}${active ? `<button class="home-btn" style="margin-bottom:12px; border-color:var(--gold);" onclick="navigateToHub('jogo')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>${t('home_cont')}</button>` : ''}<div class="home-menu"><div class="home-hub-card" onclick="navigateToHub('planeamento')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><div class="home-hub-text"><h2>${t('hub_plan_title')}</h2><p>${t('hub_plan_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('jogo')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><div class="home-hub-text"><h2>${t('hub_match_title')}</h2><p>${t('hub_match_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('estrategia')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="3"/></svg></div><div class="home-hub-text"><h2>${t('hub_strat_title')}</h2><p>${t('hub_strat_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('equipa')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div><div class="home-hub-text"><h2>${t('hub_team_title')}</h2><p>${t('hub_team_desc')}</p></div></div></div></div></div>`;
-}
-
-// 3. Modal de definições limpo de campos de texto, mantendo o botão de Reset
-function renderModalHTML(){
-  if(!modalConfig) return '';
-  if(modalConfig.type === 'settings') {
-     const sizeKB = (JSON.stringify(state).length / 1024); const maxKB = 5120; const pct = Math.min(100, (sizeKB/maxKB)*100);
-     let strColor = pct > 90 ? 'var(--red)' : (pct > 70 ? 'var(--yellow)' : 'var(--green)');
-     return `
-     <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
-       <div class="modal-card" style="padding-bottom:10px;">
-         <h3 style="margin-top:0; color:var(--gold);">${t('set_title')}</h3>
-         <div style="max-height:65vh; overflow-y:auto; padding-right:5px; margin-bottom:15px;">
-             
-             <div class="field" style="text-align:left;">
-                <label>${t('set_club')}</label>
-                <div style="display:flex; gap:8px;">
-                   <input id="club-name-input" type="text" placeholder="${t('set_club_ph')}" value="${state.myClubName||''}" ${state.myClubName ? 'disabled style="opacity:0.6;"' : ''} onchange="state.myClubName=escapeHTML(this.value); saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();">
-                   <button class="btn btn-outline" style="flex:none; padding:0 14px;" onclick="event.stopPropagation(); const inp = document.getElementById('club-name-input'); inp.disabled = !inp.disabled; inp.style.opacity = inp.disabled ? '0.6' : '1'; if(!inp.disabled) inp.focus();">
-                      ${state.myClubName ? '🔒' : '✏️'}
-                   </button>
-                </div>
-             </div>
-
-             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_lang')}</label><div class="seg"><div class="seg-btn ${state.lang==='pt'?'active':''}" onclick="event.stopPropagation(); setLanguage('pt')">Português</div><div class="seg-btn ${state.lang==='en'?'active':''}" onclick="event.stopPropagation(); setLanguage('en')">English</div></div></div>
-             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_theme')}</label><div class="seg"><div class="seg-btn ${state.theme==='original'?'active':''}" onclick="event.stopPropagation(); setTheme('original')">${t('set_theme_orig')}</div><div class="seg-btn ${state.theme==='luzsolar'?'active':''}" onclick="event.stopPropagation(); setTheme('luzsolar')">${t('set_theme_sun')}</div><div class="seg-btn ${state.theme==='oceanonoturno'?'active':''}" onclick="event.stopPropagation(); setTheme('oceanonoturno')">${t('set_theme_ocean')}</div></div></div>
-             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_kit')}</label><div class="grid-btns cols-6" style="margin-top:8px;">
-                   <div style="background:#D9A441; height:30px; border-radius:50%; border:2px solid ${state.teamColor==='#D9A441'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.teamColor='#D9A441'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
-                   <div style="background:#C8493F; height:30px; border-radius:50%; border:2px solid ${state.teamColor==='#C8493F'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.teamColor='#C8493F'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
-                   <div style="background:#4ade80; height:30px; border-radius:50%; border:2px solid ${state.teamColor==='#4ade80'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.teamColor='#4ade80'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
-                   <div style="background:#3b82f6; height:30px; border-radius:50%; border:2px solid ${state.teamColor==='#3b82f6'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.teamColor='#3b82f6'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
-                   <div style="background:#FFFFFF; height:30px; border-radius:50%; border:2px solid ${state.teamColor==='#FFFFFF'?'var(--muted)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.teamColor='#FFFFFF'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
-                   <div style="background:#111111; height:30px; border-radius:50%; border:2px solid ${state.teamColor==='#111111'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.teamColor='#111111'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
-             </div></div>
-             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_opp_kit')}</label><div class="grid-btns cols-6" style="margin-top:8px;">
-                   <div style="background:#D9A441; height:30px; border-radius:50%; border:2px solid ${state.oppColor==='#D9A441'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.oppColor='#D9A441'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
-                   <div style="background:#C8493F; height:30px; border-radius:50%; border:2px solid ${state.oppColor==='#C8493F'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.oppColor='#C8493F'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
-                   <div style="background:#4ade80; height:30px; border-radius:50%; border:2px solid ${state.oppColor==='#4ade80'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.oppColor='#4ade80'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
-                   <div style="background:#3b82f6; height:30px; border-radius:50%; border:2px solid ${state.oppColor==='#3b82f6'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.oppColor='#3b82f6'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
-                   <div style="background:#FFFFFF; height:30px; border-radius:50%; border:2px solid ${state.oppColor==='#FFFFFF'?'var(--muted)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.oppColor='#FFFFFF'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
-                   <div style="background:#111111; height:30px; border-radius:50%; border:2px solid ${state.oppColor==='#111111'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.oppColor='#111111'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
-             </div></div>
-             
-             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_subs')}</label><div class="seg"><div class="seg-btn ${state.trackSubs?'active':''}" onclick="event.stopPropagation(); state.trackSubs=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.trackSubs?'active':''}" onclick="event.stopPropagation(); state.trackSubs=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
-             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_fairplay')}</label><div class="seg"><div class="seg-btn ${state.showFairPlay?'active':''}" onclick="event.stopPropagation(); state.showFairPlay=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.showFairPlay?'active':''}" onclick="event.stopPropagation(); state.showFairPlay=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
-             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_fines')}</label><div class="seg"><div class="seg-btn ${state.enableFines?'active':''}" onclick="event.stopPropagation(); state.enableFines=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.enableFines?'active':''}" onclick="event.stopPropagation(); state.enableFines=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
-             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_birthdays')}</label><div class="seg"><div class="seg-btn ${state.enableBirthdays?'active':''}" onclick="event.stopPropagation(); state.enableBirthdays=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.enableBirthdays?'active':''}" onclick="event.stopPropagation(); state.enableBirthdays=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
-             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_diary')}</label><div class="seg"><div class="seg-btn ${state.enableDiary?'active':''}" onclick="event.stopPropagation(); state.enableDiary=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.enableDiary?'active':''}" onclick="event.stopPropagation(); state.enableDiary=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
-             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_videos')}</label><div class="seg"><div class="seg-btn ${state.enableVideos?'active':''}" onclick="event.stopPropagation(); state.enableVideos=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.enableVideos?'active':''}" onclick="event.stopPropagation(); state.enableVideos=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
-             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_leagues')}</label><div class="seg"><div class="seg-btn ${state.enableLeagues?'active':''}" onclick="event.stopPropagation(); state.enableLeagues=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.enableLeagues?'active':''}" onclick="event.stopPropagation(); state.enableLeagues=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
-
-             <div style="background:var(--surface); border:1px solid var(--gold); border-radius:8px; padding:10px; margin-top:24px; margin-bottom:14px;">
-                 <div style="font-size:10px; color:var(--muted); text-transform:uppercase; font-weight:bold;">Época Atual</div>
-                 <div style="display:flex; justify-content:center; align-items:center; gap:14px; margin-top:6px;">
-                    <button class="btn btn-outline" style="padding:4px 10px; border-radius:6px; font-size:16px;" onclick="event.stopPropagation(); shiftSeason(-1)">-</button>
-                    <div style="font-size:18px; font-weight:bold; color:var(--chalk);">${state.currentSeason}</div>
-                    <button class="btn btn-outline" style="padding:4px 10px; border-radius:6px; font-size:16px;" onclick="event.stopPropagation(); shiftSeason(1)">+</button>
-                 </div>
-                 <div class="seg" style="margin-top:10px;">
-                  <div class="seg-btn ${state.seasonFormat==='europeu'?'active':''}" onclick="event.stopPropagation(); state.seasonFormat='europeu'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_season_eu')}</div>
-                  <div class="seg-btn ${state.seasonFormat==='civil'?'active':''}" onclick="event.stopPropagation(); state.seasonFormat='civil'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_season_civ')}</div>
-                </div>
-             </div>
-
-             <div style="margin-top:20px; padding:10px; background:var(--surface); border-radius:8px; border:1px solid var(--line);">
-               <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--muted); text-transform:uppercase; font-weight:bold; margin-bottom:6px;"><span>Armazenamento</span><span>${sizeKB.toFixed(1)} KB / ~5 MB</span></div>
-               <div style="height:6px; background:var(--surface-2); border-radius:3px; overflow:hidden;"><div style="height:100%; width:${pct}%; background:${strColor};"></div></div>
-             </div>
-
-             <div style="margin-top:20px; text-align:left;">
-                <button class="btn btn-red" style="width:100%; font-size:12px; margin-bottom:10px;" onclick="event.stopPropagation(); wipeAllData();">🗑️ Limpar Todos os Dados (Reset)</button>
-                <button class="btn btn-outline" style="width:100%; font-size:12px;" onclick="event.stopPropagation(); archiveSeason();">${t('set_archive')}</button>
-             </div>
-         </div>
-         <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="closeModal()">${t('close')}</button>
-         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v2.6.6 | COACHFOLIO</div>
-       </div>
-     </div>`;
-  }
-  if(modalConfig.type === 'archiveSeason') {
-     return `<div class="modal-overlay"><div class="modal-card"><h3 style="margin-top:0; color:var(--red);">${t('archive_title')}</h3><p style="font-size:13px; text-align:left; color:var(--chalk);">${t('archive_desc')}</p><div style="background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:20px;"><p style="font-size:12px; font-weight:bold; color:var(--gold); margin-top:0; margin-bottom:10px;">${t('archive_warn')}</p><div style="display:flex; flex-direction:column; gap:8px;"><button class="btn btn-ghost" style="font-size:12px;" onclick="exportReportPDF()">📄 ${t('exp_pdf')}</button><button class="btn btn-ghost" style="font-size:12px;" onclick="exportData()">💾 ${t('exp_json')}</button></div></div><div style="display:flex; gap:10px;"><button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button><button class="btn btn-red" onclick="doArchiveSeason()">${t('archive_btn')}</button></div></div></div>`;
-  }
-  if(modalConfig.type === 'finishMatch') { return `<div class="modal-overlay"><div class="modal-card"><p style="font-weight:600; font-size:16px;">${t('msg_not_started')}</p><p style="font-size:13px;">${t('msg_not_started_desc')}</p><div style="display:flex; flex-direction:column; gap:10px;"><button class="btn btn-gold" onclick="confirmFinishMatch('save')">${t('msg_save_game')}</button><button class="btn btn-red" style="flex-direction:column; gap:2px; padding:10px;" onclick="confirmFinishMatch('discard')"><span>${t('msg_exit_nosave')}</span><span style="font-size:10px; font-weight:normal; text-transform:none; letter-spacing:0; opacity:0.8;">${t('msg_exit_desc')}</span></button><button class="btn btn-outline" onclick="confirmFinishMatch('cancel')">${t('cancel')}</button></div></div></div>`; }
-  if(modalConfig.type === 'askRatings') { return `<div class="modal-overlay"><div class="modal-card"><p style="font-weight:600; font-size:16px;">${t('msg_match_ended')}</p><p style="font-size:13px;">${t('msg_ask_rate')}</p><div style="display:flex; flex-direction:column; gap:10px;"><button class="btn btn-gold" onclick="closeModal(); pendingRatings=true; render();">${t('msg_yes_rate')}</button><button class="btn btn-outline" onclick="closeModal(); doFinishMatch();">${t('msg_no_rate')}</button></div></div></div>`; }
-  return `<div class="modal-overlay"><div class="modal-card"><p>${modalConfig.message}</p><div style="display:flex; gap:10px;"><button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button><button class="btn btn-red" onclick="confirmModal()">${t('confirm')}</button></div></div></div>`;
-}
 // --- BLINDAGEM CONTRA FECHO ACIDENTAL E TECLA VOLTAR ---
-
-// 1. Armadilha da tecla "Voltar" (Especialmente para Android)
 window.history.pushState({ page: 1 }, "", "");
 
 window.addEventListener('popstate', function(event) {
-    // Se não estivermos no ecrã inicial, o botão voltar apenas nos leva para o ecrã inicial
     if(currentHub !== 'home' || currentTab !== 'home') {
         goHome();
-        // Volta a armar a ratoeira para o próximo toque
         window.history.pushState({ page: 1 }, "", "");
     } else {
-        // Se já estivermos no ecrã inicial, deixamos o telemóvel fechar a app normalmente
         window.history.back();
     }
 });
 
-// 2. Prevenir Fecho Acidental (Refresh ou fechar a aba do browser)
 window.addEventListener('beforeunload', function (e) {
-    // Só mostramos o aviso de perigo se houver um jogo a decorrer neste momento
     const activeMatch = getActiveMatch();
     if (activeMatch) {
         e.preventDefault();
-        e.returnValue = ''; // O browser mostrará a sua própria mensagem de segurança
+        e.returnValue = '';
     }
 });
 loadState();
 </script>
+
 <!-- MODAL DE CRÉDITOS E PARCEIROS -->
 <div id="modalCreditos" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center;">
   <div style="background: #fff; width: 90%; max-width: 400px; padding: 20px; border-radius: 10px; text-align: center; color: #333; font-family: sans-serif;">

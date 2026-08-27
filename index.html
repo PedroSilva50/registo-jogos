@@ -1555,8 +1555,23 @@ function renderStats(){
       const roster = eligiblePlayers().sort((a,b) => (a.name||'').localeCompare(b.name||''));
       let tableHtml = `<div class="stats-table-wrapper"><table class="stats-table"><tr><th class="p-name">Nome</th><th>T</th><th>P(%)</th><th>J</th><th>Mins</th><th>G</th><th>A</th><th>🟨</th><th>🟥</th></tr>`;
       roster.forEach(p => {
-          const st = calcularEstatisticaJogador(p.id, activeSeason); const pPct = st.totalTreinos > 0 ? Math.round((st.presencasTreino / st.totalTreinos)*100) : 0;
-          tableHtml += `<tr onclick="expandedPlayer='${p.id}'; navigateToTab('plantel');" style="cursor:pointer;"><td class="p-name">${p.name}</td><td>${st.totalTreinos}</td><td style="color:${pPct>=80?'var(--green)':(pPct>=50?'var(--yellow)':'var(--red)')};">${pPct}%</td><td>${st.jogosConvocado}</td><td style="color:var(--gold); font-weight:bold;">${st.minutos}</td><td>${st.golos}</td><td>${st.assistencias}</td><td>${st.amarelos}</td><td>${st.vermelhos}</td></tr>`;
+          const st = calcularEstatisticaJogador(p.id, activeSeason); 
+          
+          // CÁLCULO CORRIGIDO: Baseado nos minutos reais cumpridos vs minutos totais da equipa
+          // Substituir esta linha no PDF:
+		  const pPct = st.minutosTreinoTotais > 0 ? Math.round((st.minutosTreinoCumpridos / st.minutosTreinoTotais)*100) : 0;
+
+          tableHtml += `<tr onclick="expandedPlayer='${p.id}'; navigateToTab('plantel');" style="cursor:pointer;">
+            <td class="p-name">${p.name}</td>
+            <td>${st.totalTreinos}</td>
+            <td style="color:${pPct>=80?'var(--green)':(pPct>=50?'var(--yellow)':'var(--red)')};">${pPct}%</td>
+            <td>${st.jogosConvocado}</td>
+            <td style="color:var(--gold); font-weight:bold;">${st.minutos}</td>
+            <td>${st.golos}</td>
+            <td>${st.assistencias}</td>
+            <td>${st.amarelos}</td>
+            <td>${st.vermelhos}</td>
+          </tr>`;
       });
       tableHtml += `</table></div><div style="display:flex; gap:10px; margin-top:14px;"><button class="btn btn-outline" style="flex:1; border-style:dashed;" onclick="exportCsv()">${t('exp_csv')}</button><button class="btn btn-gold" style="flex:1;" onclick="exportStatsPlayersPDF()">📄 Exportar PDF</button></div>`;
       return html + tableHtml;

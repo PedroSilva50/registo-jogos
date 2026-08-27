@@ -655,16 +655,16 @@ window.setRating = function(matchId, playerId, rating){
   if(m.ratings[playerId] === rating) delete m.ratings[playerId];
   else m.ratings[playerId] = rating;
   
-  // Captura a posição exata da página antes do re-render
-  const scrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
+  // Captura a posição nos dois motores (window e document)
+  const scrollY = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
   
   saveState();
   render();
   
-  // Força o navegador a manter a posição onde o utilizador estava a clicar
-  requestAnimationFrame(() => {
-    window.scrollTo(0, scrollY);
-  });
+  // Aplica o scroll duplo para garantir compatibilidade com o Safari iOS
+  window.scrollTo(0, scrollY);
+  document.documentElement.scrollTop = scrollY;
+  document.body.scrollTop = scrollY;
 };
 window.askConfirm = function(message, onConfirm){ modalConfig = { message, onConfirm }; document.getElementById('modal-root').innerHTML = renderModalHTML(); };
 window.closeModal = function(){ modalConfig = null; document.getElementById('modal-root').innerHTML = ''; };
@@ -1102,14 +1102,24 @@ window.exportMatchPDF = function(mId){
   const dateStr = m.date.split('-').reverse().join('/');
   let locLabel = (m.location||'casa') === 'casa' ? t('match_home') : t('match_away');
   
-  // 1. Reúne TODOS os jogadores associados ao jogo
-  let squadIds = [];
+  // 1. Determina a duração REAL total do jogo em minutos (ex: 6', 30', 60', 90')
+  let totalMatchMins = 0;
+  if (m.timer && (m.timer.half1DurationMs || m.timer.half2DurationMs || m.timer.elapsedMs)) {
+    let totalMs = (m.timer.half1DurationMs || 0) + (m.timer.half2DurationMs || 0);
+    if (totalMs === 0) totalMs = m.timer.elapsedMs || 0;
+    totalMatchMins = Math.round(totalMs / 60000);
+  }
   
-  // Procura na convocatória original do calendário
+  // Se não houver registo direto no cronómetro, deteta pelo minuto atual ou assume padrão
+  if (totalMatchMins === 0) {
+    totalMatchMins = getMatchMinute(m) || 60;
+  }
+
+  // 2. Reúne TODOS os jogadores associados a este jogo
+  let squadIds = [];
   if(m.originalSchedule && m.originalSchedule.callup && m.originalSchedule.callup.length > 0) {
     squadIds = [...m.originalSchedule.callup];
   } else {
-    // Se não houver convocatória guardada, junta os do XI inicial, os que entraram/saíram e quem tem avaliação
     squadIds = [...new Set([
       ...(m.lineup||[]), 
       ...(m.subs||[]).map(s=>s.inId), 
@@ -1118,21 +1128,34 @@ window.exportMatchPDF = function(mId){
     ])];
   }
 
-  // Se mesmo assim a lista estiver vazia, carrega todos os jogadores ativos do plantel
   if(squadIds.length === 0) {
     squadIds = eligiblePlayers().map(p => p.id);
   }
 
-  let lineupHtml = '';
   // Ordena os jogadores por posição/número
   const sortedSquad = sortPlayerObjs(squadIds.map(id => state.roster.find(p=>p.id===id)).filter(Boolean));
 
+  let lineupHtml = '';
   sortedSquad.forEach(p => {
     const isStarter = (m.lineup||[]).includes(p.id);
     const wasSubbedIn = (m.subs||[]).some(s => s.inId === p.id);
-    const mins = calcPlayerMinutes(m, p.id);
-    const r = (m.ratings && m.ratings[p.id]) ? `${m.ratings[p.id]}★` : '-';
     
+    // Tenta calcular os minutos exatos pelo cronómetro
+    let mins = calcPlayerMinutes(m, p.id);
+    
+    // FALLBACK DINÂMICO para jogos sem cronómetro ativo ou testes curtos
+    if (mins === 0 && (isStarter || wasSubbedIn)) {
+      if (isStarter) {
+        const subOut = (m.subs||[]).find(s => s.outId === p.id);
+        mins = subOut ? (subOut.minute || Math.round(totalMatchMins / 2)) : totalMatchMins;
+      } else if (wasSubbedIn) {
+        const subIn = (m.subs||[]).find(s => s.inId === p.id);
+        const entryMin = subIn ? (subIn.minute || Math.round(totalMatchMins / 2)) : 0;
+        mins = Math.max(0, totalMatchMins - entryMin);
+      }
+    }
+
+    const r = (m.ratings && m.ratings[p.id]) ? `${m.ratings[p.id]}★` : '-';
     let statusLabel = isStarter ? '<b>(XI)</b>' : (wasSubbedIn ? '(Sup)' : '(NC)');
     
     lineupHtml += `<tr>

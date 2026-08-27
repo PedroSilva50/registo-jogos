@@ -1334,39 +1334,52 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
   let golos = 0, assistencias = 0, amarelos = 0, vermelhos = 0, somaAvaliacoes = 0, numAvaliacoes = 0, faltasTreino = 0, jogosTitular = 0, minutos = 0, presencasTreino = 0, jogosConvocado = 0;
   let minutosTreinoCumpridos = 0, minutosTreinoTotais = 0;
   
-  (state.matches || []).filter(m => targetSeason === 'TUDO' || getEntitySeason(m) === targetSeason).forEach(m => {
-    let callup = m.originalSchedule ? m.originalSchedule.callup : m.lineup;
-    if((m.lineup || []).includes(playerId) || (m.subs || []).some(s=>s.inId===playerId)) jogosConvocado++;
-    if(state.trackSubs && m.finished) { if((m.lineup || []).includes(playerId)) jogosTitular++; minutos += calcPlayerMinutes(m, playerId); }
-    (m.goals || []).forEach(g => { if (g.type === 'scored' && g.scorerId === playerId) golos++; if (g.type === 'scored' && g.assistId === playerId) assistencias++; });
-    (m.cards || []).forEach(c => { if(c.playerId === playerId) { if(c.color === 'Amarelo') amarelos++; else vermelhos++; } });
-    if(m.ratings && m.ratings[playerId]) { somaAvaliacoes += m.ratings[playerId]; numAvaliacoes++; }
+  if (!state || !playerId) {
+    return { golos:0, assistencias:0, amarelos:0, vermelhos:0, media:'-', faltasTreino:0, presencasTreino:0, totalTreinos:0, minutosTreinoCumpridos:0, minutosTreinoTotais:0, jogosTitular:0, jogosConvocado:0, minutos:0 };
+  }
+
+  (state.matches || []).filter(m => m && (targetSeason === 'TUDO' || getEntitySeason(m) === targetSeason)).forEach(m => {
+    if ((m.lineup || []).includes(playerId) || (m.subs || []).some(s => s && s.inId === playerId)) jogosConvocado++;
+    if (state.trackSubs && m.finished) { 
+      if ((m.lineup || []).includes(playerId)) jogosTitular++; 
+      if (typeof calcPlayerMinutes === 'function') minutos += calcPlayerMinutes(m, playerId); 
+    }
+    (m.goals || []).forEach(g => { 
+      if (g && g.type === 'scored' && g.scorerId === playerId) golos++; 
+      if (g && g.type === 'scored' && g.assistId === playerId) assistencias++; 
+    });
+    (m.cards || []).forEach(c => { 
+      if (c && c.playerId === playerId) { 
+        if (c.color === 'Amarelo') amarelos++; else vermelhos++; 
+      } 
+    });
+    if (m.ratings && m.ratings[playerId]) { somaAvaliacoes += m.ratings[playerId]; numAvaliacoes++; }
   });
   
   let totalTreinos = 0;
-  (state.trainings || []).filter(tr => targetSeason === 'TUDO' || getEntitySeason(tr) === targetSeason).forEach(tr => {
-      totalTreinos++;
-      const dur = tr.duration || 90;
-      minutosTreinoTotais += dur;
+  (state.trainings || []).filter(tr => tr && (targetSeason === 'TUDO' || getEntitySeason(tr) === targetSeason)).forEach(tr => {
+    totalTreinos++;
+    const dur = parseInt(tr.duration, 10) || 90;
+    minutosTreinoTotais += dur;
 
-      let isAbsent = false;
-      if (Array.isArray(tr.absences)) {
-        isAbsent = tr.absences.includes(playerId);
-      } else if (tr.absences && tr.absences[playerId]) {
-        isAbsent = true;
-      }
+    let isAbsent = false;
+    if (Array.isArray(tr.absences)) {
+      isAbsent = tr.absences.includes(playerId);
+    } else if (tr.absences && typeof tr.absences === 'object' && tr.absences[playerId]) {
+      isAbsent = true;
+    }
 
-      if(isAbsent) {
-        faltasTreino++;
-      } else {
-        presencasTreino++;
-        minutosTreinoCumpridos += dur;
-      }
+    if (isAbsent) {
+      faltasTreino++;
+    } else {
+      presencasTreino++;
+      minutosTreinoCumpridos += dur;
+    }
   });
   
   return { 
     golos, assistencias, amarelos, vermelhos, 
-    media: numAvaliacoes>0 ? (somaAvaliacoes/numAvaliacoes).toFixed(1) : '-', 
+    media: numAvaliacoes > 0 ? (somaAvaliacoes / numAvaliacoes).toFixed(1) : '-', 
     faltasTreino, presencasTreino, totalTreinos, 
     minutosTreinoCumpridos, minutosTreinoTotais,
     jogosTitular, jogosConvocado, minutos 

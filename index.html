@@ -648,7 +648,20 @@ window.deleteCard = function(matchId, cardId){ const m = state.matches.find(m=>m
 window.confirmSub = function(mId) { const m = state.matches.find(x=>x.id===mId); if(!m) return; if(!m.subs) m.subs = []; const currentH = window.currentHalfFromTimeline(m); const isHT = currentH === 'halftime'; m.subs.push({ id: uid(), outId: pendingSub.outId, inId: pendingSub.inId, half: isHT ? 1 : (currentH || 1), isHalftime: isHT, minute: isHT ? null : getMatchMinute(m) }); pendingSub = null; saveState(); render(); };
 window.deleteSub = function(mId, subId) { const m = state.matches.find(x=>x.id===mId); if(!m) return; m.subs = m.subs.filter(s => s.id !== subId); saveState(); render(); };
 window.setCaptain = function(matchId, playerId){ const m = state.matches.find(m=>m.id===matchId); if(m){ m.capitao = playerId; saveState(); } pendingCaptain = false; render(); };
-window.setRating = function(matchId, playerId, rating){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; if(!m.ratings) m.ratings = {}; if(m.ratings[playerId] === rating) delete m.ratings[playerId]; else m.ratings[playerId] = rating; saveState(); render(); };
+window.setRating = function(matchId, playerId, rating){
+  const m = state.matches.find(m=>m.id===matchId);
+  if(!m) return;
+  if(!m.ratings) m.ratings = {};
+  if(m.ratings[playerId] === rating) delete m.ratings[playerId];
+  else m.ratings[playerId] = rating;
+  
+  // Guarda a posição do scroll antes de renderizar
+  const scrollPos = window.scrollY || document.documentElement.scrollTop;
+  saveState();
+  render();
+  // Restaura a posição do scroll imediatamente
+  window.scrollTo(0, scrollPos);
+};
 window.askConfirm = function(message, onConfirm){ modalConfig = { message, onConfirm }; document.getElementById('modal-root').innerHTML = renderModalHTML(); };
 window.closeModal = function(){ modalConfig = null; document.getElementById('modal-root').innerHTML = ''; };
 window.confirmModal = function(){ const cb = modalConfig ? modalConfig.onConfirm : null; window.closeModal(); if(cb) cb(); };
@@ -1080,35 +1093,71 @@ function renderVideos(){
 
 window.exportMatchPDF = function(mId){
   const m = state.matches.find(x=>x.id===mId); if(!m) return;
-  const sc = m.goals.filter(g=>g.type==='scored').length; const co = m.goals.filter(g=>g.type==='conceded').length;
+  const sc = m.goals.filter(g=>g.type==='scored').length; 
+  const co = m.goals.filter(g=>g.type==='conceded').length;
   const dateStr = m.date.split('-').reverse().join('/');
+  let locLabel = (m.location||'casa') === 'casa' ? t('match_home') : t('match_away');
+  
+  // Recolhe todos os jogadores que participaram ou foram convocados
+  let allPlayers = [...new Set([...(m.lineup||[]), ...(m.subs||[]).map(s=>s.inId), ...(m.subs||[]).map(s=>s.outId)])];
+  if(allPlayers.length === 0 && m.originalSchedule && m.originalSchedule.callup) {
+    allPlayers = [...m.originalSchedule.callup];
+  }
+  
   let lineupHtml = '';
-  (m.lineup||[]).forEach(pId => {
+  allPlayers.forEach(pId => {
+    const isStarter = (m.lineup||[]).includes(pId);
     const mins = calcPlayerMinutes(m, pId);
     const r = (m.ratings && m.ratings[pId]) ? `${m.ratings[pId]}★` : '-';
-    lineupHtml += `<tr><td style="text-align:left;">${playerName(pId)}</td><td>${mins}'</td><td>${r}</td></tr>`;
+    lineupHtml += `<tr><td style="text-align:left;">${playerName(pId)} ${isStarter ? '<b>(XI)</b>' : '(Sup)'}</td><td>${mins}'</td><td>${r}</td></tr>`;
   });
+
   let subsHtml = '';
   (m.subs||[]).forEach(s => {
-    subsHtml += `<tr><td>${s.isHalftime ? 'INT' : s.minute+"'"}</td><td style="color:#C8493F; text-align:left;">↓ ${playerName(s.outId)}</td><td style="color:#16A34A; text-align:left;">↑ ${playerName(s.inId)}</td></tr>`;
+    subsHtml += `<tr><td>${s.isHalftime ? 'INT' : (s.minute != null ? s.minute+"'" : '-')}</td><td style="color:#C8493F; text-align:left;">↓ ${playerName(s.outId)}</td><td style="color:#16A34A; text-align:left;">↑ ${playerName(s.inId)}</td></tr>`;
   });
+
   let goalsHtml = '';
   (m.goals||[]).forEach(g => {
      let desc = g.type==='scored' ? `⚽ ${playerName(g.scorerId)} ${g.assistId&&g.assistId!=='none'? '(Ast: '+playerName(g.assistId)+')':''}` : `🥅 Golo Sofrido`;
      let min = g.minute != null ? g.minute+"'" : (g.half===1?"1ªP":"2ªP");
      goalsHtml += `<tr><td>${min}</td><td style="text-align:left; font-weight:bold;">${desc}</td></tr>`;
   });
-  let html = `<div class="print-card"><div class="print-header"><h1>Relatório de Jogo</h1><p style="font-size:18px; font-weight:bold;">${getMyClub()} ${sc} - ${co} ${m.opponent}</p><p>${dateStr} | Época: ${m.season||state.currentSeason}</p></div>
-  <div style="display:flex; gap:20px; margin-bottom:20px;">
-    <div style="flex:1;"><h3>11 Inicial e Minutos</h3><table><tr><th style="text-align:left;">Jogador</th><th>Min</th><th>Aval</th></tr>${lineupHtml||'<tr><td colspan="3">Sem registo</td></tr>'}</table></div>
-    <div style="flex:1;"><h3>Substituições</h3><table><tr><th>Min</th><th style="text-align:left;">Saiu</th><th style="text-align:left;">Entrou</th></tr>${subsHtml||'<tr><td colspan="3">Sem registo</td></tr>'}</table></div>
-  </div>
-  <h3>Eventos de Jogo</h3>
-  <table><tr><th style="width:50px;">Min</th><th style="text-align:left;">Evento</th></tr>${goalsHtml||'<tr><td colspan="2">Sem registo</td></tr>'}</table>
-  <h3>Notas do Treinador</h3>
-  <p style="white-space:pre-wrap; border:1px solid #CCC; padding:10px; border-radius:6px; background:#FFF; min-height:60px;">${m.notes||'Nenhuma nota registada neste jogo.'}</p>
+
+  let cardsHtml = '';
+  (m.cards||[]).forEach(c => {
+    cardsHtml += `<tr><td>${c.minute != null ? c.minute+"'" : '-'}</td><td style="text-align:left;">${c.color==='Amarelo'?'🟨':'🟥'} ${playerName(c.playerId)}</td></tr>`;
+  });
+
+  let html = `<div class="print-card">
+    <div class="print-header">
+      <h1>Relatório de Jogo</h1>
+      <p style="font-size:18px; font-weight:bold;">${getMyClub()} ${sc} - ${co} ${m.opponent} (${locLabel})</p>
+      <p>${dateStr} | Época: ${m.season||state.currentSeason} ${m.capitao ? ' | © Capitão: ' + playerName(m.capitao) : ''}</p>
+    </div>
+    
+    <div style="display:flex; gap:20px; margin-bottom:20px; align-items:flex-start;">
+      <div style="flex:1.2;">
+        <h3>Plantel e Desempenho (${allPlayers.length} Jogadores)</h3>
+        <table><tr><th style="text-align:left;">Jogador</th><th>Min</th><th>Aval</th></tr>${lineupHtml||'<tr><td colspan="3">Sem registo</td></tr>'}</table>
+      </div>
+      <div style="flex:1;">
+        <h3>Substituições</h3>
+        <table><tr><th>Min</th><th style="text-align:left;">Saiu</th><th style="text-align:left;">Entrou</th></tr>${subsHtml||'<tr><td colspan="3">Sem registo</td></tr>'}</table>
+        <h3 style="margin-top:15px;">Cartões</h3>
+        <table><tr><th>Min</th><th style="text-align:left;">Jogador</th></tr>${cardsHtml||'<tr><td colspan="2">Sem registo</td></tr>'}</table>
+      </div>
+    </div>
+    
+    <h3>Golos e Ocorrências</h3>
+    <table><tr><th style="width:50px;">Min</th><th style="text-align:left;">Evento</th></tr>${goalsHtml||'<tr><td colspan="2">Sem registo</td></tr>'}</table>
+    
+    <h3>Notas do Treinador</h3>
+    <p style="white-space:pre-wrap; border:1px solid #CCC; padding:10px; border-radius:6px; background:#FFF; min-height:60px;">${m.notes||'Nenhuma nota registada neste jogo.'}</p>
   </div>`;
-  document.getElementById('print-area').innerHTML = html; window.print();
+
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
 };
 
 function renderJogos(){

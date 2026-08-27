@@ -997,25 +997,100 @@ function renderCalendario(){
   return `${topbarHtml(t('hub_plan_title'))}${renderPlanSubHeader()}<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="schForm={isBatch:false, opp:'', date:'', time:'09:00', type:'amigavel', loc:'casa', phase:'', matchday:'', tournamentName:'', games:[]}; editingSchId=null; schedulingNew=true; render()">${t('sch_new')}</button>${currentSch.length ? currentSch.map(s => { const open = expandedSchedule === s.id; const locLabel = s.location === 'casa' ? t('match_home') : t('match_away'); return `<div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('.chip')) { expandedSchedule = expandedSchedule==='${s.id}' ? null : '${s.id}'; render(); }"><div class="match-head-row"><div class="match-head" style="flex:1;"><div><div class="opp">${s.type==='torneio'?`<span style="color:var(--gold); font-size:11px; display:block; text-transform:uppercase; margin-bottom:2px;">🏆 ${s.tournamentName}${s.phase?' - '+s.phase:''}${s.matchday?' (Jornada '+s.matchday+')':''}</span>`:''}${s.type==='campeonato'&&s.phase?`<span style="color:var(--gold); font-size:11px; display:block; text-transform:uppercase; margin-bottom:2px;">🏆 ${s.phase}${s.matchday?' (Jornada '+s.matchday+')':''}</span>`:''}${s.opponent} <span class="badge-loc ${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home'?'casa':'fora'}">${locLabel}</span></div><div class="date">${s.date.split('-').reverse().join('/')} às ${s.time}</div></div></div><div style="display:flex; gap:6px;"><button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); editSchedule('${s.id}')" title="${t('edit')}"><svg style="width:16px; height:16px; transform:translateY(2px);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); duplicateSchedule('${s.id}')" title="Duplicar">📑</button><button class="quick-del" style="color:var(--gold);" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')" title="Iniciar">▶</button><button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sch')}', () => deleteSchedule('${s.id}'))" title="${t('del')}">🗑</button></div></div>${open ? `<div class="goal-list"><div class="panel-title" style="margin-bottom:8px;">${t('sch_callup')} (${s.callup.length})</div><div class="grid-btns cols-4">${eligiblePlayers().map(p=>`<div class="chip chip-sm ${s.callup.includes(p.id)?'active-green':''}" onclick="event.stopPropagation(); window.toggleCallup('${s.id}', '${p.id}')">${playerLabel(p)}</div>`).join('')}</div><div class="btn-row" style="margin-top:12px;"><button class="btn btn-green" style="font-size:12px; padding:10px;" onclick="event.stopPropagation(); window.copyCallup('${s.id}')">WhatsApp 📋</button><button class="btn btn-ghost" style="font-size:12px; padding:10px;" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')">${t('sch_start')}</button></div></div>` : ''}</div>`; }).join('') : `<div class="empty">${t('sch_none')}</div>`}`;
 }
 
-window.uiSaveTraining = function(){ state.trainings.unshift({ id: uid(), date: trainingForm.date, season: state.currentSeason, notes: escapeHTML(trainingForm.notes||''), absences: [...trainingForm.absences] }); trainingForm = null; saveState(); render(); showToast(t('msg_tr_saved')); };
-window.toggleTrAbsence = function(id){ if(trainingForm.absences.includes(id)) trainingForm.absences = trainingForm.absences.filter(x=>x!==id); else trainingForm.absences.push(id); render(); };
+window.uiSaveTraining = function(){ 
+  if(!trainingForm.duration || isNaN(trainingForm.duration) || trainingForm.duration <= 0){
+    showToast('Insere a duração do treino em minutos!'); return;
+  }
+  state.trainings.unshift({ 
+    id: uid(), 
+    date: trainingForm.date, 
+    duration: parseInt(trainingForm.duration, 10),
+    season: state.currentSeason, 
+    notes: escapeHTML(trainingForm.notes||''), 
+    absences: { ...trainingForm.absences } // Guarda objeto { playerId: motivo }
+  }); 
+  trainingForm = null; saveState(); render(); showToast(t('msg_tr_saved')); 
+};
+
+window.setAbsenceReason = function(pId, reason){
+  if(!trainingForm.absences) trainingForm.absences = {};
+  if(reason === 'presente' || trainingForm.absences[pId] === reason){
+    delete trainingForm.absences[pId]; // Se escolher presente ou repetir o motivo, limpa a falta
+  } else {
+    trainingForm.absences[pId] = reason;
+  }
+  render();
+};
 window.deleteTraining = function(id){ state.trainings = state.trainings.filter(t=>t.id!==id); saveState(); render(); };
 
 function renderTreinos(){
   if(trainingForm){ 
+    const reasons = [
+      { id: 'injustificada', label: '🔴 Injustificada', color: 'var(--red)' },
+      { id: 'justificada', label: '🟡 Justificada', color: 'var(--yellow)' },
+      { id: 'lesao', label: '🩹 Lesão / Médico', color: '#3b82f6' },
+      { id: 'castigo', label: '🟥 Castigo', color: '#9333ea' },
+      { id: 'dispensado', label: '⚪ Dispensado', color: 'var(--muted)' }
+    ];
+
     return `${topbarHtml(t('tr_new'))}${renderPlanSubHeader()}
       <div class="card">
-        <div class="field"><label>${t('sch_date')}</label><input id="tr-date-input" type="date" value="${trainingForm.date}" oninput="trainingForm.date=this.value"></div>
-        <div class="field" style="margin-bottom:0;"><label>${t('tr_notes')}</label><textarea id="tr-notes-input" placeholder="${t('tr_notes_ph')}" oninput="trainingForm.notes=this.value">${trainingForm.notes || ''}</textarea></div>
+        <div class="grid-btns">
+          <div class="field" style="margin-bottom:0;"><label>${t('sch_date')}</label><input id="tr-date-input" type="date" value="${trainingForm.date}" oninput="trainingForm.date=this.value"></div>
+          <div class="field" style="margin-bottom:0;"><label>Duração (Minutos)</label><input type="number" min="15" step="5" placeholder="Ex: 90" value="${trainingForm.duration||90}" oninput="trainingForm.duration=this.value"></div>
+        </div>
+        <div class="field" style="margin-top:12px; margin-bottom:0;"><label>${t('tr_notes')}</label><textarea id="tr-notes-input" placeholder="${t('tr_notes_ph')}" oninput="trainingForm.notes=this.value">${trainingForm.notes || ''}</textarea></div>
       </div>
       <div class="card">
-        <div class="panel-title" style="margin-bottom:6px;">${t('tr_abs')}</div>
-        <div style="font-size:12px; color:var(--muted); margin-bottom:10px;">${t('tr_abs_desc')}</div>
-        ${eligiblePlayers().length ? `<div class="grid-btns cols-4">${eligiblePlayers().map(p=>`<div class="chip chip-sm ${trainingForm.absences.includes(p.id)?'absent':''}" onclick="toggleTrAbsence('${p.id}')">${playerLabel(p)}</div>`).join('')}</div>` : `<div class="empty">${t('pl_none')}</div>`}
+        <div class="panel-title" style="margin-bottom:6px;">Registo de Presenças / Faltas</div>
+        <div style="font-size:11px; color:var(--muted); margin-bottom:12px;">Todos estão 🟢 Presentes por defeito. Toca no jogador para mudar o estado.</div>
+        ${eligiblePlayers().length ? `<div style="display:flex; flex-direction:column; gap:8px;">${eligiblePlayers().map(p => {
+          const currentReason = (trainingForm.absences && trainingForm.absences[p.id]) || 'presente';
+          return `<div style="display:flex; align-items:center; justify-content:space-between; background:var(--surface-2); padding:8px 12px; border-radius:8px;">
+            <span style="font-size:13px; font-weight:bold;">${playerLabel(p)}</span>
+            <select style="width:auto; padding:4px 8px; font-size:11px; font-weight:bold; background:var(--surface); border:1px solid var(--line); color:var(--chalk); border-radius:6px;" onchange="setAbsenceReason('${p.id}', this.value)">
+              <option value="presente" ${currentReason==='presente'?'selected':''}>🟢 Presente</option>
+              ${reasons.map(r => `<option value="${r.id}" ${currentReason===r.id?'selected':''}>${r.label}</option>`).join('')}
+            </select>
+          </div>`;
+        }).join('')}</div>` : `<div class="empty">${t('pl_none')}</div>`}
       </div>
       <button class="btn btn-gold" style="width:100%; margin-bottom:10px;" onclick="uiSaveTraining()">${t('tr_save')}</button>
       <button class="btn btn-outline" style="width:100%;" onclick="trainingForm=null; render()">${t('cancel')}</button>`; 
   }
+  
+  const seasons = getPlanSeasons();
+  let activeFilter = window.planSeasonFilter === 'todas' ? state.currentSeason : (window.planSeasonFilter || state.currentSeason);
+  let filterUI = seasons.length > 1 ? `<div style="margin-bottom:14px; overflow-x:auto; display:flex; gap:6px; padding-bottom:6px;"><div class="seg-btn ${activeFilter==='TUDO'?'active':''}" style="flex:none; padding:8px 12px; font-size:10px;" onclick="window.planSeasonFilter='TUDO'; render()">Todas</div>${seasons.map(s=>`<div class="seg-btn ${activeFilter===s?'active':''}" style="flex:none; padding:8px 12px; font-size:10px;" onclick="window.planSeasonFilter='${s}'; render()">${s}</div>`).join('')}</div>` : '';
+  const filtered = state.trainings.filter(t => activeFilter==='TUDO' || getEntitySeason(t) === activeFilter);
+
+  return `${topbarHtml(t('hub_plan_title'))}${renderPlanSubHeader()}<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="trainingForm={absences:{}, notes:'', duration:90, date: new Date().toISOString().slice(0,10)}; render()">${t('tr_new')}</button>${filterUI}
+    ${filtered.length ? filtered.map(tr=>{ 
+      const open = expandedTraining === tr.id; 
+      const duration = tr.duration || 90;
+      
+      // Compatibilidade com treinos antigos (array) e novos (objeto)
+      let absObj = {};
+      if (Array.isArray(tr.absences)) {
+        tr.absences.forEach(id => absObj[id] = 'injustificada');
+      } else {
+        absObj = tr.absences || {};
+      }
+      
+      const absKeys = Object.keys(absObj);
+      const presCount = eligiblePlayers().length - absKeys.length;
+      
+      return `<div class="card match-item" onclick="if(!event.target.closest('button')){ expandedTraining=expandedTraining==='${tr.id}'?null:'${tr.id}'; render(); }"><div class="match-head-row"><div class="match-head" style="flex:1;"><div><div class="opp">${tr.date} <span class="badge-type" style="color:var(--gold);">${duration} Min</span></div><div class="date">${presCount} presentes · ${absKeys.length} ausentes</div></div></div><button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_tr')}', ()=>deleteTraining('${tr.id}'))">🗑</button></div>${open ? `<div class="goal-list">${tr.notes ? `<div class="notes-readonly">📝 ${tr.notes}</div>` : ''}<div style="font-size:12px; margin-top:8px; color:var(--muted);"><b style="color:var(--chalk);">${t('tr_abs')}:</b><br>${absKeys.length ? absKeys.map(id => {
+        const reason = absObj[id];
+        let label = '🔴 Injustificada';
+        if(reason === 'justificada') label = '🟡 Justificada';
+        if(reason === 'lesao') label = '🩹 Lesão';
+        if(reason === 'castigo') label = '🟥 Castigo';
+        if(reason === 'dispensado') label = '⚪ Dispensado';
+        return `<span style="font-size:11px; display:inline-block; margin-top:4px;">• ${playerName(id)} (${label})</span>`;
+      }).join('<br>') : t('match_nobody')}</div></div>` : ''}</div>`; 
+    }).join('') : `<div class="empty">${t('tr_none')}</div>`}`;
+}
   
   const seasons = getPlanSeasons();
   let activeFilter = window.planSeasonFilter === 'todas' ? state.currentSeason : (window.planSeasonFilter || state.currentSeason);
@@ -1257,6 +1332,7 @@ window.statsSeasonFilter = undefined;
 
 function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason) {
   let golos = 0, assistencias = 0, amarelos = 0, vermelhos = 0, somaAvaliacoes = 0, numAvaliacoes = 0, faltasTreino = 0, jogosTitular = 0, minutos = 0, presencasTreino = 0, jogosConvocado = 0;
+  let minutosTreinoCumpridos = 0, minutosTreinoTotais = 0;
   
   (state.matches || []).filter(m => targetSeason === 'TUDO' || getEntitySeason(m) === targetSeason).forEach(m => {
     let callup = m.originalSchedule ? m.originalSchedule.callup : m.lineup;
@@ -1270,11 +1346,31 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
   let totalTreinos = 0;
   (state.trainings || []).filter(tr => targetSeason === 'TUDO' || getEntitySeason(tr) === targetSeason).forEach(tr => {
       totalTreinos++;
-      if(tr.absences && tr.absences.includes(playerId)) faltasTreino++;
-      else presencasTreino++;
+      const dur = tr.duration || 90;
+      minutosTreinoTotais += dur;
+
+      let isAbsent = false;
+      if (Array.isArray(tr.absences)) {
+        isAbsent = tr.absences.includes(playerId);
+      } else if (tr.absences && tr.absences[playerId]) {
+        isAbsent = true;
+      }
+
+      if(isAbsent) {
+        faltasTreino++;
+      } else {
+        presencasTreino++;
+        minutosTreinoCumpridos += dur;
+      }
   });
   
-  return { golos, assistencias, amarelos, vermelhos, media: numAvaliacoes>0 ? (somaAvaliacoes/numAvaliacoes).toFixed(1) : '-', faltasTreino, presencasTreino, totalTreinos, jogosTitular, jogosConvocado, minutos };
+  return { 
+    golos, assistencias, amarelos, vermelhos, 
+    media: numAvaliacoes>0 ? (somaAvaliacoes/numAvaliacoes).toFixed(1) : '-', 
+    faltasTreino, presencasTreino, totalTreinos, 
+    minutosTreinoCumpridos, minutosTreinoTotais,
+    jogosTitular, jogosConvocado, minutos 
+  };
 }
 
 function generatePlayerBarsHTML(stats, maxStats) {

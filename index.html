@@ -1701,7 +1701,7 @@ window.exportCsv = function() {
 function renderPlantel(){
   const activeRoster = eligiblePlayers();
   let totalMins = 0; let totalPlayersWithMins = 0;
-  if(state.showFairPlay) { activeRoster.forEach(p => { const st = calcularEstatisticaJogador(p.id); if(st.minutos > 0) { totalMins += st.minutos; totalPlayersWithMIns++; } }); }
+  if(state.showFairPlay) { activeRoster.forEach(p => { const st = calcularEstatisticaJogador(p.id); if(st.minutos > 0) { totalMins += st.minutos; totalPlayersWithMins++; } }); }
   const avgMins = totalPlayersWithMins > 0 ? (totalMins / totalPlayersWithMins) : 0;
 
   let html = `${topbarHtml(t('hub_team_title'))}${renderTeamSubHeader()}<div class="card">`;
@@ -1719,12 +1719,35 @@ function renderPlantel(){
             else fpBadge = `<span title="${t('fp_low')}" style="font-size:12px; margin-left:6px;">🔴</span>`;
          }
 
-         html += `<div class="player-item" onclick="if(!event.target.closest('button') && !event.target.closest('input')){ expandedPlayer=expandedPlayer==='${p.id}'?null:'${p.id}'; editingPlayerId=null; render(); }"><div class="player-row" style="border-bottom:none; padding-bottom:${open?'10px':'10px'}; display:flex; align-items:center;"><span style="flex:1;">${p.number ? `<span class="mono" style="color:var(--gold);">#${p.number}</span> ` : ''}<strong style="font-size:15px;">${p.name||t('pl_no_name')}</strong>${p.positions ? `<span style="font-size:9px; color:var(--gold); border:1px solid var(--gold-dim); padding:1px 4px; border-radius:4px; margin-left:6px; font-weight:700;">${p.positions}</span>` : ''}${fpBadge} ${p.birthDate ? ` <span style="color:var(--muted); font-size:12px;">- ${computeAge(p.birthDate)} ${t('pl_yrs')}</span>` : ''}</span></div>`;
+         html += `<div class="player-item" onclick="if(!event.target.closest('button') && !event.target.closest('input') && !event.target.closest('select')){ expandedPlayer=expandedPlayer==='${p.id}'?null:'${p.id}'; editingPlayerId=null; render(); }"><div class="player-row" style="border-bottom:none; padding-bottom:${open?'10px':'10px'}; display:flex; align-items:center;"><span style="flex:1;">${p.number ? `<span class="mono" style="color:var(--gold);">#${p.number}</span> ` : ''}<strong style="font-size:15px;">${p.name||t('pl_no_name')}</strong>${p.positions ? `<span style="font-size:9px; color:var(--gold); border:1px solid var(--gold-dim); padding:1px 4px; border-radius:4px; margin-left:6px; font-weight:700;">${p.positions}</span>` : ''}${fpBadge} ${p.birthDate ? ` <span style="color:var(--muted); font-size:12px;">- ${computeAge(p.birthDate)} ${t('pl_yrs')}</span>` : ''}</span></div>`;
          
          if(open) {
              html += `<div style="padding-bottom:12px;">`;
              if(!isEditing) {
-                 html += `<div class="profile-stats-grid"><div class="profile-stat"><div class="val">${st.golos}</div><div class="lbl">${t('pl_goals')}</div></div><div class="profile-stat"><div class="val">${st.assistencias}</div><div class="lbl">${t('pl_assists')}</div></div><div class="profile-stat"><div class="val" style="color:var(--gold);">${st.media}</div><div class="lbl">${t('pl_avg')}</div></div>${state.trackSubs ? `<div class="profile-stat"><div class="val" style="color:var(--chalk);">${st.minutos}</div><div class="lbl">${t('pl_mins')}</div></div><div class="profile-stat"><div class="val" style="color:var(--chalk);">${st.jogosTitular}</div><div class="lbl">${t('pl_start')}</div></div>` : ''}<div class="profile-stat"><div class="val" style="color:var(--red);">${st.faltasTreino}</div><div class="lbl">${t('pl_tr_abs')}</div></div></div><div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface-2); padding:10px; border-radius:8px; margin-bottom:16px;"><span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:700;">${t('pl_disc')}</span><span class="mono" style="font-size:14px;">🟨 ${st.amarelos} &nbsp; 🟥 ${st.vermelhos}</span></div><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-top:1px solid var(--line); padding-top:16px; gap:16px;"><div style="flex:1.5;">${generatePlayerBarsHTML(st, {minutos: Math.max(avgMins*1.5, 90), golos: 15, assist: 10, jogos: state.matches.filter(m=>(m.season||state.currentSeason)===state.currentSeason).length || 1})}</div><div style="flex:1; text-align:center;">${generateDonutChartSVG(st.presencasTreino, st.faltasTreino)}<div style="font-size:9px; color:var(--muted); font-weight:bold; margin-top:8px;">ASSIDUIDADE</div></div></div><button class="btn btn-outline" style="width:100%; font-size:12px; padding:10px;" onclick="event.stopPropagation(); editingPlayerId='${p.id}'; render();">${t('pl_edit')}</button>`;
+                 html += `
+                 <div class="profile-stats-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;">
+                   <div class="profile-stat"><div class="val" style="color:var(--gold);">${st.minutos}'</div><div class="lbl">Min. Jogo</div></div>
+                   <div class="profile-stat"><div class="val" style="color:#3b82f6;">${st.minutosTreinoCumpridos}'</div><div class="lbl">Min. Treino</div></div>
+                   <div class="profile-stat"><div class="val">${st.golos}</div><div class="lbl">${t('pl_goals')}</div></div>
+                   <div class="profile-stat"><div class="val">${st.assistencias}</div><div class="lbl">${t('pl_assists')}</div></div>
+                 </div>
+                 
+                 <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface-2); padding:10px; border-radius:8px; margin-bottom:16px;">
+                   <span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:700;">Forma & Faltas</span>
+                   <span class="mono" style="font-size:13px;">⭐ ${st.media} | 📉 ${st.faltasTreino} Faltas | 🟨 ${st.amarelos} 🟥 ${st.vermelhos}</span>
+                 </div>
+                 
+                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-top:1px solid var(--line); padding-top:16px; gap:16px;">
+                   <div style="flex:1.5;">
+                     ${generatePlayerBarsHTML(st, {minutos: Math.max(avgMins*1.5, 90), golos: 15, assist: 10, jogos: state.matches.filter(m=>(m.season||state.currentSeason)===state.currentSeason).length || 1})}
+                   </div>
+                   <div style="flex:1; text-align:center;">
+                     ${generateDonutChartSVG(st.presencasTreino, st.faltasTreino)}
+                     <div style="font-size:9px; color:var(--muted); font-weight:bold; margin-top:8px;">ASSIDUIDADE TREINO</div>
+                   </div>
+                 </div>
+                 
+                 <button class="btn btn-outline" style="width:100%; font-size:12px; padding:10px;" onclick="event.stopPropagation(); editingPlayerId='${p.id}'; render();">${t('pl_edit')}</button>`;
              } else {
                  html += `<div style="display:flex; flex-direction:column; gap:10px; background:var(--surface-2); padding:12px; border-radius:12px; border:1px solid var(--line);"><div class="panel-title" style="margin-bottom:0; color:var(--gold);">${t('pl_mode')}</div><div class="field" style="margin-bottom:0;"><label>${t('pl_name')}</label><input type="text" onchange="updatePlayerName('${p.id}', this.value)" value="${p.name||''}"></div><div class="field" style="margin-bottom:0;"><label>${t('pl_num')}</label><input type="number" min="1" max="99" onchange="updatePlayerNumber('${p.id}', this.value)" value="${p.number||''}"></div>
                  

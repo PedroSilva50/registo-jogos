@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Coachfolio">
 <meta name="theme-color" content="#0E211A">
-<title>COACHFOLIO v2.6.8</title>
+<title>COACHFOLIO v2.6.9.1</title>
 <style>
   :root{--bg:#0E211A;--surface:#153328;--surface-2:#1C4133;--chalk:#F3EFE6;--muted:#8FA79B;--gold:#D9A441;--gold-dim:#4A3E22;--red:#C8493F;--red-dim:#3F2320;--yellow:#E1C324;--green:#4ade80;--green-dim:#133320;--line:rgba(243,239,230,0.10);--btn-gold-txt:#241B08;--btn-red-txt:#2B0F0C;--btn-green-txt:#0E211A;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -307,7 +307,7 @@ const dict = {
 };
 
 let state = { 
-  roster: [], matches: [], trainings: [], schedule: [], tactics: [], tacticPaths: [], videos: [], diary: [], leagues: [], fines: [],
+  roster: [], matches: [], trainings: [], schedule: [], tactics: [], tacticPaths: [], tacticalNotebook: [], videos: [], diary: [], leagues: [], fines: [],
   tacticFormat: 11, lastBackupDate: null, trackSubs: true, theme: 'original', lang: 'pt', myClubName: '',
   showFairPlay: true, enableVideos: true, enableDiary: true, enableLeagues: true, enableFines: false, enableBirthdays: false, teamColor: '#D9A441', oppColor: '#C8493F', currentSeason: '', seasonFormat: 'europeu',
   tacticHalfPitch: false, rosterSortBy: 'posicao'
@@ -375,7 +375,7 @@ async function loadState(){
     if(res && res.value) {
        state = JSON.parse(res.value);
        if(!state.roster) state.roster = []; if(!state.matches) state.matches = []; if(!state.trainings) state.trainings = []; if(!state.schedule) state.schedule = [];
-       if(!state.tactics) state.tactics = []; if(!state.tacticPaths) state.tacticPaths = []; if(!state.videos) state.videos = []; if(!state.diary) state.diary = []; if(!state.leagues) state.leagues = []; if(!state.fines) state.fines = [];
+       if(!state.tactics) state.tactics = []; if(!state.tacticPaths) state.tacticPaths = []; if(!state.tacticalNotebook) state.tacticalNotebook = []; if(!state.videos) state.videos = []; if(!state.diary) state.diary = []; if(!state.leagues) state.leagues = []; if(!state.fines) state.fines = [];
        if(!state.tacticFormat) state.tacticFormat = 11;
        if(state.trackSubs === undefined) state.trackSubs = true;
        if(state.showFairPlay === undefined) state.showFairPlay = true;
@@ -748,7 +748,7 @@ function renderModalHTML(){
          <button class="btn" style="width:100%; margin-top:10px; background:#0E211A; color:#fff; border:1px solid var(--line);" onclick="abrirCreditos()">🤝 Créditos & Parceiros</button>
 
          <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="closeModal()">${t('close')}</button>
-         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v2.6.8 | COACHFOLIO</div>
+         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v2.6.9.1 | COACHFOLIO</div>
        </div>
      </div>`;
   }
@@ -771,7 +771,7 @@ function matchNarrativeHtml(m, isLocked = false){
     const goals = m.goals.filter(g=>g.half===half).map(g=>({ type:'goal', minute:g.minute, data:g })); const cds = cards.filter(c=>c.half===half).map(c=>({ type:'card', minute:c.minute, data:c })); const sbs = subs.filter(s=>s.half===half || (half===1 && s.isHalftime)).map(s=>({ type:'sub', minute:s.isHalftime?'INT':s.minute, data:s, isHalftime: s.isHalftime }));
     return [...goals, ...cds, ...sbs].sort((a,b)=>{ if(a.isHalftime && !b.isHalftime) return 1; if(!a.isHalftime && b.isHalftime) return -1; return (a.minute==null?999:a.minute)-(b.minute==null?999:b.minute); });
   };
-  const goalRow = (g) => `<div class="goal-row"><span>${g.minute!=null?`<span class="mono" style="color:var(--gold);">${g.minute}'</span> `:''}${g.type==='scored'?'⚽ '+playerName(g.scorerId)+(g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''):'🥅 '+t('rep_conc')}</span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_goal')}', ()=>deleteGoal('${m.id}', '${g.id}'))">✕</button>` : ''}</div>`;
+  const goalRow = (g) => `<div class="goal-row"><span>${g.minute!=null?`<span class="mono" style="color:var(--gold);">${g.minute}'</span> `:''}${g.type==='scored'?'⚽ '+playerName(g.scorerId)+(g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''):'角 '+t('rep_conc')}</span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_goal')}', ()=>deleteGoal('${m.id}', '${g.id}'))">✕</button>` : ''}</div>`;
   const cardRow = (c) => `<div class="goal-row"><span>${c.minute!=null?`<span class="mono" style="color:var(--gold);">${c.minute}'</span> `:''}${c.color==='Amarelo'?'🟨':'🟥'} ${playerName(c.playerId)}</span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_card')}', ()=>deleteCard('${m.id}', '${c.id}'))">✕</button>` : ''}</div>`;
   const subRow = (s) => `<div class="goal-row"><span><span class="mono" style="color:var(--gold);">${s.isHalftime ? 'INT' : (s.minute!=null?s.minute+"'":"")}</span> 🔄 <span style="color:var(--red)">↓ ${playerName(s.data.outId)}</span> <span style="color:var(--green)">↑ ${playerName(s.data.inId)}</span></span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sub')}', ()=>deleteSub('${m.id}', '${s.data.id}'))">✕</button>` : ''}</div>`;
 
@@ -795,12 +795,12 @@ function renderHome(){
       bdayHtml = `<div style="background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:16px; font-size:12px; text-align:center;">${msg}</div>`;
   }
   
-  return `<div class="home-screen"><div class="home-pitch-bg"><svg preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%; max-width: 400px;" viewBox="0 0 400 600"><rect x="20" y="20" width="360" height="560" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><line x1="20" y1="300" x2="380" y2="300" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><circle cx="200" cy="300" r="62" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="85" y="20" width="230" height="95" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="140" y="20" width="120" height="38" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="85" y="485" width="230" height="95" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="140" y="542" width="120" height="38" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/></svg></div><div class="home-content">${backupWarning}<div class="topbar-settings" style="position:absolute; top:0; right:0;" onclick="openSettings()">⚙️</div><div class="home-ball">${ballIconSvg()}</div><h1>${t('home_title')}</h1><div class="home-sub" style="margin-bottom:2px;">${t('home_sub')}</div><div style="font-size:10px; color:var(--gold); margin-bottom:16px; font-weight:normal; letter-spacing:0; text-transform:none;">v2.6.8 | by Pedro Silva</div>${bdayHtml}${active ? `<button class="home-btn" style="margin-bottom:12px; border-color:var(--gold);" onclick="navigateToHub('jogo')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>${t('home_cont')}</button>` : ''}<div class="home-menu"><div class="home-hub-card" onclick="navigateToHub('planeamento')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><div class="home-hub-text"><h2>${t('hub_plan_title')}</h2><p>${t('hub_plan_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('jogo')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><div class="home-hub-text"><h2>${t('hub_match_title')}</h2><p>${t('hub_match_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('estrategia')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="3"/></svg></div><div class="home-hub-text"><h2>${t('hub_strat_title')}</h2><p>${t('hub_strat_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('equipa')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div><div class="home-hub-text"><h2>${t('hub_team_title')}</h2><p>${t('hub_team_desc')}</p></div></div></div></div></div>`;
+  return `<div class="home-screen"><div class="home-pitch-bg"><svg preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%; max-width: 400px;" viewBox="0 0 400 600"><rect x="20" y="20" width="360" height="560" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><line x1="20" y1="300" x2="380" y2="300" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><circle cx="200" cy="300" r="62" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="85" y="20" width="230" height="95" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="140" y="20" width="120" height="38" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="85" y="485" width="230" height="95" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="140" y="542" width="120" height="38" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/></svg></div><div class="home-content">${backupWarning}<div class="topbar-settings" style="position:absolute; top:0; right:0;" onclick="openSettings()">⚙️</div><div class="home-ball">${ballIconSvg()}</div><h1>${t('home_title')}</h1><div class="home-sub" style="margin-bottom:2px;">${t('home_sub')}</div><div style="font-size:10px; color:var(--gold); margin-bottom:16px; font-weight:normal; letter-spacing:0; text-transform:none;">v2.6.9.1 | by Pedro Silva</div>${bdayHtml}${active ? `<button class="home-btn" style="margin-bottom:12px; border-color:var(--gold);" onclick="navigateToHub('jogo')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>${t('home_cont')}</button>` : ''}<div class="home-menu"><div class="home-hub-card" onclick="navigateToHub('planeamento')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><div class="home-hub-text"><h2>${t('hub_plan_title')}</h2><p>${t('hub_plan_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('jogo')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><div class="home-hub-text"><h2>${t('hub_match_title')}</h2><p>${t('hub_match_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('estrategia')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="3"/></svg></div><div class="home-hub-text"><h2>${t('hub_strat_title')}</h2><p>${t('hub_strat_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('equipa')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div><div class="home-hub-text"><h2>${t('hub_team_title')}</h2><p>${t('hub_team_desc')}</p></div></div></div></div></div>`;
 }
 
 function renderJogoSubHeader() { return `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${currentTab==='jogo'?'active':''}" onclick="navigateToTab('jogo')">${t('match_curr')}</div><div class="seg-btn ${currentTab==='jogos'?'active':''}" onclick="navigateToTab('jogos')">${t('res_title')}</div></div>`; }
 function renderPlanSubHeader() { return `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${currentTab==='calendario'?'active':''}" onclick="navigateToTab('calendario')">${t('sch_title')}</div><div class="seg-btn ${currentTab==='treinos'?'active':''}" onclick="navigateToTab('treinos')">${t('tr_title')}</div>${state.enableDiary ? `<div class="seg-btn ${currentTab==='diario'?'active':''}" onclick="navigateToTab('diario')">${t('diary_title')}</div>` : ''}</div>`; }
-function renderStratSubHeader() { return `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${currentTab==='tatica'?'active':''}" onclick="navigateToTab('tatica')">${t('tac_title')}</div>${state.enableVideos ? `<div class="seg-btn ${currentTab==='videos'?'active':''}" onclick="navigateToTab('videos')">${t('vid_title')}</div>` : ''}</div>`; }
+function renderStratSubHeader() { return `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${currentTab==='tatica'?'active':''}" onclick="navigateToTab('tatica')">${t('tac_title')}</div><div class="seg-btn ${currentTab==='caderno'?'active':''}" onclick="navigateToTab('caderno')">📋 Caderno</div>${state.enableVideos ? `<div class="seg-btn ${currentTab==='videos'?'active':''}" onclick="navigateToTab('videos')">${t('vid_title')}</div>` : ''}</div>`; }
 function renderTeamSubHeader() { return `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${currentTab==='plantel'?'active':''}" onclick="navigateToTab('plantel')" style="font-size:9px; padding:8px 4px;">${t('pl_title')}</div><div class="seg-btn ${currentTab==='stats'?'active':''}" onclick="navigateToTab('stats')" style="font-size:9px; padding:8px 4px;">${t('st_title')}</div>${state.enableFines ? `<div class="seg-btn ${currentTab==='caixinha'?'active':''}" onclick="navigateToTab('caixinha')" style="font-size:9px; padding:8px 4px;">${t('fine_title')}</div>` : ''}${state.enableLeagues ? `<div class="seg-btn ${currentTab==='classificacoes'?'active':''}" onclick="navigateToTab('classificacoes')" style="font-size:9px; padding:8px 4px;">${t('lg_title')}</div>` : ''}</div>`; }
 
 function renderJogo(){
@@ -907,6 +907,48 @@ window.setTacticMode = function(mode) { currentTacticMode = mode; render(); };
 window.setDrawColor = function(color) { currentDrawColor = color; render(); };
 window.clearCanvasLines = function() { state.tacticPaths = []; saveState(); render(); };
 
+window.saveTacticalPlay = function() {
+  if((!state.tactics || state.tactics.length === 0) && (!state.tacticPaths || state.tacticPaths.length === 0)) {
+    showToast('O quadro está vazio!'); return;
+  }
+  const playName = prompt('Nome do esquema tático (ex: Canto Defensivo):');
+  if(!playName || !playName.trim()) return;
+  if(!state.tacticalNotebook) state.tacticalNotebook = [];
+
+  state.tacticalNotebook.unshift({
+    id: uid(),
+    name: escapeHTML(playName.trim()),
+    format: state.tacticFormat || 11,
+    halfPitch: !!state.tacticHalfPitch,
+    tactics: JSON.parse(JSON.stringify(state.tactics || [])),
+    tacticPaths: JSON.parse(JSON.stringify(state.tacticPaths || []))
+  });
+
+  saveState();
+  render();
+  showToast('Jogada guardada no Caderno! 📋');
+};
+
+window.loadTacticalPlay = function(id) {
+  const play = (state.tacticalNotebook || []).find(x => x.id === id);
+  if(!play) return;
+  state.tacticFormat = play.format || 11;
+  state.tacticHalfPitch = !!play.halfPitch;
+  state.tactics = JSON.parse(JSON.stringify(play.tactics || []));
+  state.tacticPaths = JSON.parse(JSON.stringify(play.tacticPaths || []));
+  saveState();
+  currentTab = 'tatica';
+  render();
+  showToast(`Carregado: ${play.name}`);
+};
+
+window.deleteTacticalPlay = function(id) {
+  state.tacticalNotebook = (state.tacticalNotebook || []).filter(x => x.id !== id);
+  saveState();
+  render();
+  showToast('Jogada eliminada.');
+};
+
 function initTacticCanvas() {
     const cvs = document.getElementById('tactic-canvas'); if(!cvs) return;
     canvasRect = cvs.getBoundingClientRect(); cvs.width = canvasRect.width; cvs.height = canvasRect.height;
@@ -937,7 +979,8 @@ function renderTatica(){
   return `
     ${topbarHtml(t('hub_strat_title'))}
     ${renderStratSubHeader()}
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;"><div class="seg" style="margin-top:0; flex:1;"><div class="seg-btn ${format===5?'active':''}" onclick="changeTacticFormat(5)">F5</div><div class="seg-btn ${format===7?'active':''}" onclick="changeTacticFormat(7)">F7</div><div class="seg-btn ${format===9?'active':''}" onclick="changeTacticFormat(9)">F9</div><div class="seg-btn ${format===11?'active':''}" onclick="changeTacticFormat(11)">F11</div></div><div class="seg" style="margin-top:0; margin-left:10px;"><div class="seg-btn ${!isHalf?'active':''}" onclick="state.tacticHalfPitch=false; render();" title="Campo Inteiro">🏟️</div><div class="seg-btn ${isHalf?'active':''}" onclick="state.tacticHalfPitch=true; render();" title="Meio Campo">🥅</div></div></div>
+    <button class="btn btn-gold" style="width:100%; margin-bottom:12px; font-size:11px;" onclick="saveTacticalPlay()">💾 Guardar no Caderno Tático</button>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;"><div class="seg" style="margin-top:0; flex:1;"><div class="seg-btn ${format===5?'active':''}" onclick="changeTacticFormat(5)">F5</div><div class="seg-btn ${format===7?'active':''}" onclick="changeTacticFormat(7)">F7</div><div class="seg-btn ${format===9?'active':''}" onclick="changeTacticFormat(9)">F9</div><div class="seg-btn ${format===11?'active':''}" onclick="changeTacticFormat(11)">F11</div></div><div class="seg" style="margin-top:0; margin-left:10px;"><div class="seg-btn ${!isHalf?'active':''}" onclick="state.tacticHalfPitch=false; render();" title="Campo Inteiro">🏟️</div><div class="seg-btn ${isHalf?'active':''}" onclick="state.tacticHalfPitch=true; render();" title="Meio Campo">力</div></div></div>
     <div class="seg" style="margin-bottom:12px;"><div class="seg-btn ${currentTacticMode==='move'?'active':''}" onclick="setTacticMode('move')">✋ Mover</div><div class="seg-btn ${currentTacticMode==='draw'?'active':''}" onclick="setTacticMode('draw')">✏️ Desenhar</div></div>
     ${currentTacticMode === 'draw' ? `<div style="display:flex; justify-content:center; gap:12px; margin-bottom:12px; align-items:center;"><div style="width:24px; height:24px; border-radius:50%; background:#FFFFFF; border:2px solid ${currentDrawColor==='#FFFFFF'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#FFFFFF')"></div><div style="width:24px; height:24px; border-radius:50%; background:var(--yellow); border:2px solid ${currentDrawColor==='#E1C324'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#E1C324')"></div><div style="width:24px; height:24px; border-radius:50%; background:var(--red); border:2px solid ${currentDrawColor==='#C8493F'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#C8493F')"></div><button class="quick-del" style="border:1px solid var(--line); border-radius:4px; font-size:10px; padding:4px 8px; margin-left:10px;" onclick="clearCanvasLines()">🧹 Limpar Risco</button></div>` : `<div style="font-size:10px; color:var(--muted); text-align:center; margin-bottom:10px; text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">${t('tac_inst')}</div>`}
     <div id="tactic-pitch" class="tactic-pitch-container" style="aspect-ratio: ${isHalf ? '4/3' : '2/3'};">
@@ -952,6 +995,30 @@ function renderTatica(){
        <div class="seg">${availablePlayers.length ? availablePlayers.map(p => `<div class="seg-btn" style="flex:auto; font-size:10px; ${currentOwn >= format ? 'opacity:0.4;' : ''}" onclick="spawnTacticItem('own', '${p.id}')">${playerLabel(p)}</div>`).join('') : `<div class="empty" style="width:100%; padding:10px;">${t('tac_no_pls')}</div>`}</div>
     </div>
   `;
+}
+
+function renderCaderno() {
+  const notebook = state.tacticalNotebook || [];
+  let html = `${topbarHtml(t('hub_strat_title'))}${renderStratSubHeader()}`;
+  if(notebook.length === 0) {
+    html += `<div class="empty">Nenhum esquema guardado no Caderno.<br>Cria um esquema no Quadro Tático e clica em "Guardar no Caderno Tático".</div>`;
+  } else {
+    html += `<div style="display:flex; flex-direction:column; gap:10px;">`;
+    notebook.forEach(play => {
+      html += `<div class="card" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <strong style="font-size:14px; color:var(--chalk); display:block;">${play.name}</strong>
+          <span style="font-size:10px; color:var(--muted);">F${play.format} · ${play.halfPitch ? 'Meio Campo' : 'Campo Inteiro'}</span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-gold" style="padding:6px 12px; font-size:11px;" onclick="loadTacticalPlay('${play.id}')">▶ Carregar</button>
+          <button class="quick-del" style="color:var(--red);" onclick="askConfirm('Apagar jogada?', ()=>deleteTacticalPlay('${play.id}'))">🗑</button>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  return html;
 }
 
 let dragObj = { dragging: false, id: null, el: null, pitchRect: null };
@@ -985,24 +1052,66 @@ window.uiSaveTraining = function(){
   if(!trainingForm.duration || isNaN(trainingForm.duration) || trainingForm.duration <= 0){
     showToast('Insere a duração do treino em minutos!'); return;
   }
-  state.trainings.unshift({ 
-    id: uid(), 
+  
+  const trData = {
+    id: trainingForm.id || uid(), 
     date: trainingForm.date, 
     duration: parseInt(trainingForm.duration, 10),
     season: state.currentSeason, 
     notes: escapeHTML(trainingForm.notes||''), 
-    absences: { ...trainingForm.absences }
-  }); 
+    absences: { ...trainingForm.absences },
+    customMinutes: { ...trainingForm.customMinutes }
+  };
+
+  if(trainingForm.id) {
+    const idx = state.trainings.findIndex(t => t.id === trainingForm.id);
+    if(idx !== -1) state.trainings[idx] = trData;
+  } else {
+    state.trainings.unshift(trData);
+  }
+
   trainingForm = null; saveState(); render(); showToast(t('msg_tr_saved')); 
 };
 
 window.setAbsenceReason = function(pId, reason){
   if(!trainingForm.absences) trainingForm.absences = {};
-  if(reason === 'presente' || trainingForm.absences[pId] === reason){
+  if(!trainingForm.customMinutes) trainingForm.customMinutes = {};
+
+  if(reason === 'presente'){
     delete trainingForm.absences[pId];
+    delete trainingForm.customMinutes[pId];
   } else {
     trainingForm.absences[pId] = reason;
   }
+  render();
+};
+
+window.setPlayerCustomMinutes = function(pId, mins){
+  if(!trainingForm.customMinutes) trainingForm.customMinutes = {};
+  const parsed = parseInt(mins, 10);
+  if(isNaN(parsed) || parsed < 0) delete trainingForm.customMinutes[pId];
+  else trainingForm.customMinutes[pId] = parsed;
+};
+
+window.editTraining = function(id) {
+  const tr = state.trainings.find(t => t.id === id);
+  if(!tr) return;
+  
+  let absObj = {};
+  if (Array.isArray(tr.absences)) {
+    tr.absences.forEach(pId => absObj[pId] = 'injustificada');
+  } else {
+    absObj = { ...(tr.absences || {}) };
+  }
+
+  trainingForm = {
+    id: tr.id,
+    date: tr.date,
+    duration: tr.duration || 90,
+    notes: tr.notes || '',
+    absences: absObj,
+    customMinutes: { ...(tr.customMinutes || {}) }
+  };
   render();
 };
 
@@ -1018,25 +1127,37 @@ function renderTreinos(){
       { id: 'dispensado', label: '⚪ Dispensado' }
     ];
 
-    return `${topbarHtml(t('tr_new'))}${renderPlanSubHeader()}
+    const baseDuration = parseInt(trainingForm.duration, 10) || 90;
+
+    return `${topbarHtml(trainingForm.id ? '✏️ Editar Treino' : t('tr_new'))}${renderPlanSubHeader()}
       <div class="card">
         <div class="grid-btns">
           <div class="field" style="margin-bottom:0;"><label>${t('sch_date')}</label><input id="tr-date-input" type="date" value="${trainingForm.date}" oninput="trainingForm.date=this.value"></div>
-          <div class="field" style="margin-bottom:0;"><label>Duração (Min)</label><input type="number" min="15" step="5" placeholder="Ex: 90" value="${trainingForm.duration||90}" oninput="trainingForm.duration=this.value"></div>
+          <div class="field" style="margin-bottom:0;"><label>Duração Total (Min)</label><input type="number" min="15" step="5" placeholder="Ex: 90" value="${trainingForm.duration||90}" oninput="trainingForm.duration=this.value; render();"></div>
         </div>
         <div class="field" style="margin-top:12px; margin-bottom:0;"><label>${t('tr_notes')}</label><textarea id="tr-notes-input" placeholder="${t('tr_notes_ph')}" oninput="trainingForm.notes=this.value">${trainingForm.notes || ''}</textarea></div>
       </div>
       <div class="card">
-        <div class="panel-title" style="margin-bottom:6px;">Registo de Presenças / Faltas</div>
-        <div style="font-size:11px; color:var(--muted); margin-bottom:12px;">Todos estão 🟢 Presentes por defeito. Altera se houver falta.</div>
+        <div class="panel-title" style="margin-bottom:6px;">Registo de Presenças & Tempo Efetivo</div>
+        <div style="font-size:11px; color:var(--muted); margin-bottom:12px;">Podes ajustar os minutos cumpridos se o jogador foi dispensado/lesionado a meio.</div>
         ${eligiblePlayers().length ? `<div style="display:flex; flex-direction:column; gap:8px;">${eligiblePlayers().map(p => {
           const currentReason = (trainingForm.absences && trainingForm.absences[p.id]) || 'presente';
-          return `<div style="display:flex; align-items:center; justify-content:space-between; background:var(--surface-2); padding:8px 12px; border-radius:8px;">
-            <span style="font-size:13px; font-weight:bold;">${playerLabel(p)}</span>
-            <select style="width:auto; padding:4px 8px; font-size:11px; font-weight:bold; background:var(--surface); border:1px solid var(--line); color:var(--chalk); border-radius:6px;" onchange="setAbsenceReason('${p.id}', this.value)">
-              <option value="presente" ${currentReason==='presente'?'selected':''}>🟢 Presente</option>
-              ${reasons.map(r => `<option value="${r.id}" ${currentReason===r.id?'selected':''}>${r.label}</option>`).join('')}
-            </select>
+          const hasCustomMins = currentReason === 'dispensado' || currentReason === 'lesao' || currentReason === 'castigo';
+          const playerMins = (trainingForm.customMinutes && trainingForm.customMinutes[p.id] != null) ? trainingForm.customMinutes[p.id] : (currentReason === 'presente' ? baseDuration : 0);
+
+          return `<div style="display:flex; flex-direction:column; background:var(--surface-2); padding:10px 12px; border-radius:8px; gap:6px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <span style="font-size:13px; font-weight:bold;">${playerLabel(p)}</span>
+              <select style="width:auto; padding:4px 8px; font-size:11px; font-weight:bold; background:var(--surface); border:1px solid var(--line); color:var(--chalk); border-radius:6px;" onchange="setAbsenceReason('${p.id}', this.value)">
+                <option value="presente" ${currentReason==='presente'?'selected':''}>🟢 Presente</option>
+                ${reasons.map(r => `<option value="${r.id}" ${currentReason===r.id?'selected':''}>${r.label}</option>`).join('')}
+              </select>
+            </div>
+            ${hasCustomMins ? `<div style="display:flex; align-items:center; justify-content:flex-end; gap:8px; font-size:11px; color:var(--muted); border-top:1px stroke var(--line); padding-top:4px;">
+              <span>Minutos cumpridos antes da saída:</span>
+              <input type="number" min="0" max="${baseDuration}" value="${playerMins}" style="width:65px; padding:2px 6px; font-size:11px; text-align:center; background:var(--surface); border:1px solid var(--gold); color:var(--gold); font-weight:bold; border-radius:4px;" oninput="setPlayerCustomMinutes('${p.id}', this.value)">
+              <span>/ ${baseDuration}'</span>
+            </div>` : ''}
           </div>`;
         }).join('')}</div>` : `<div class="empty">${t('pl_none')}</div>`}
       </div>
@@ -1049,7 +1170,7 @@ function renderTreinos(){
   let filterUI = seasons.length > 1 ? `<div style="margin-bottom:14px; overflow-x:auto; display:flex; gap:6px; padding-bottom:6px;"><div class="seg-btn ${activeFilter==='TUDO'?'active':''}" style="flex:none; padding:8px 12px; font-size:10px;" onclick="window.planSeasonFilter='TUDO'; render()">Todas</div>${seasons.map(s=>`<div class="seg-btn ${activeFilter===s?'active':''}" style="flex:none; padding:8px 12px; font-size:10px;" onclick="window.planSeasonFilter='${s}'; render()">${s}</div>`).join('')}</div>` : '';
   const filtered = state.trainings.filter(t => activeFilter==='TUDO' || getEntitySeason(t) === activeFilter);
 
-  return `${topbarHtml(t('hub_plan_title'))}${renderPlanSubHeader()}<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="trainingForm={absences:{}, notes:'', duration:90, date: new Date().toISOString().slice(0,10)}; render()">${t('tr_new')}</button>${filterUI}
+  return `${topbarHtml(t('hub_plan_title'))}${renderPlanSubHeader()}<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="trainingForm={absences:{}, customMinutes:{}, notes:'', duration:90, date: new Date().toISOString().slice(0,10)}; render()">${t('tr_new')}</button>${filterUI}
     ${filtered.length ? filtered.map(tr=>{ 
       const open = expandedTraining === tr.id; 
       const duration = tr.duration || 90;
@@ -1064,14 +1185,30 @@ function renderTreinos(){
       const absKeys = Object.keys(absObj);
       const presCount = eligiblePlayers().length - absKeys.length;
       
-      return `<div class="card match-item" onclick="if(!event.target.closest('button')){ expandedTraining=expandedTraining==='${tr.id}'?null:'${tr.id}'; render(); }"><div class="match-head-row"><div class="match-head" style="flex:1;"><div><div class="opp">${tr.date} <span class="badge-type" style="color:var(--gold);">${duration} Min</span></div><div class="date">${presCount} presentes · ${absKeys.length} ausentes</div></div></div><button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_tr')}', ()=>deleteTraining('${tr.id}'))">🗑</button></div>${open ? `<div class="goal-list">${tr.notes ? `<div class="notes-readonly">📝 ${tr.notes}</div>` : ''}<div style="font-size:12px; margin-top:8px; color:var(--muted);"><b style="color:var(--chalk);">${t('tr_abs')}:</b><br>${absKeys.length ? absKeys.map(id => {
+      return `<div class="card match-item" onclick="if(!event.target.closest('button')){ expandedTraining=expandedTraining==='${tr.id}'?null:'${tr.id}'; render(); }">
+        <div class="match-head-row">
+          <div class="match-head" style="flex:1;">
+            <div>
+              <div class="opp">${tr.date} <span class="badge-type" style="color:var(--gold);">${duration} Min</span></div>
+              <div class="date">${presCount} presentes · ${absKeys.length} ausentes/parciais</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); editTraining('${tr.id}')" title="Editar">✏️</button>
+            <button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_tr')}', ()=>deleteTraining('${tr.id}'))">🗑</button>
+          </div>
+        </div>
+        ${open ? `<div class="goal-list">${tr.notes ? `<div class="notes-readonly">📝 ${tr.notes}</div>` : ''}<div style="font-size:12px; margin-top:8px; color:var(--muted);"><b style="color:var(--chalk);">${t('tr_abs')}:</b><br>${absKeys.length ? absKeys.map(id => {
         const reason = absObj[id];
+        const customMins = tr.customMinutes && tr.customMinutes[id] != null ? tr.customMinutes[id] : null;
         let label = '🔴 Injustificada';
         if(reason === 'justificada') label = '🟡 Justificada';
         if(reason === 'lesao') label = '🩹 Lesão';
         if(reason === 'castigo') label = '🟥 Castigo';
         if(reason === 'dispensado') label = '⚪ Dispensado';
-        return `<span style="font-size:11px; display:inline-block; margin-top:4px;">• ${playerName(id)} (${label})</span>`;
+        
+        let minText = customMins != null ? ` (${customMins}'/${duration}')` : '';
+        return `<span style="font-size:11px; display:inline-block; margin-top:4px;">• ${playerName(id)} — ${label}${minText}</span>`;
       }).join('<br>') : t('match_nobody')}</div></div>` : ''}</div>`; 
     }).join('') : `<div class="empty">${t('tr_none')}</div>`}`;
 }
@@ -1313,14 +1450,20 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
     minutosTreinoTotais += dur;
 
     let isAbsent = false;
+    let reason = 'presente';
     if (Array.isArray(tr.absences)) {
       isAbsent = tr.absences.includes(playerId);
-    } else if (tr.absences && typeof tr.absences === 'object' && tr.absences[playerId]) {
+      if(isAbsent) reason = 'injustificada';
+    } else if (tr.absences && tr.absences[playerId]) {
       isAbsent = true;
+      reason = tr.absences[playerId];
     }
 
     if (isAbsent) {
       faltasTreino++;
+      if (tr.customMinutes && tr.customMinutes[playerId] != null) {
+        minutosTreinoCumpridos += parseInt(tr.customMinutes[playerId], 10);
+      }
     } else {
       presencasTreino++;
       minutosTreinoCumpridos += dur;
@@ -1558,7 +1701,7 @@ window.exportCsv = function() {
 function renderPlantel(){
   const activeRoster = eligiblePlayers();
   let totalMins = 0; let totalPlayersWithMins = 0;
-  if(state.showFairPlay) { activeRoster.forEach(p => { const st = calcularEstatisticaJogador(p.id); if(st.minutos > 0) { totalMins += st.minutos; totalPlayersWithMins++; } }); }
+  if(state.showFairPlay) { activeRoster.forEach(p => { const st = calcularEstatisticaJogador(p.id); if(st.minutos > 0) { totalMins += st.minutos; totalPlayersWithMIns++; } }); }
   const avgMins = totalPlayersWithMins > 0 ? (totalMins / totalPlayersWithMins) : 0;
 
   let html = `${topbarHtml(t('hub_team_title'))}${renderTeamSubHeader()}<div class="card">`;
@@ -1652,7 +1795,7 @@ function render(){
       if(currentHub === 'home'){ nav.style.display = 'none'; app.innerHTML = renderHome(); } 
       else { 
          nav.style.display = 'flex'; 
-         if(currentTab==='jogo') app.innerHTML = renderJogo(); else if(currentTab==='jogos') app.innerHTML = renderJogos(); else if(currentTab==='calendario') app.innerHTML = renderCalendario(); else if(currentTab==='treinos') app.innerHTML = renderTreinos(); else if(currentTab==='diario') app.innerHTML = renderDiario(); else if(currentTab==='tatica') { app.innerHTML = renderTatica(); setTimeout(initTacticCanvas, 0); } else if(currentTab==='videos') app.innerHTML = renderVideos(); else if(currentTab==='plantel') app.innerHTML = renderPlantel(); else if(currentTab==='stats') app.innerHTML = renderStats(); else if(currentTab==='classificacoes') app.innerHTML = renderClassificacoes(); else if(currentTab==='caixinha') app.innerHTML = renderCaixinha(); 
+         if(currentTab==='jogo') app.innerHTML = renderJogo(); else if(currentTab==='jogos') app.innerHTML = renderJogos(); else if(currentTab==='calendario') app.innerHTML = renderCalendario(); else if(currentTab==='treinos') app.innerHTML = renderTreinos(); else if(currentTab==='diario') app.innerHTML = renderDiario(); else if(currentTab==='tatica') { app.innerHTML = renderTatica(); setTimeout(initTacticCanvas, 0); } else if(currentTab==='caderno') app.innerHTML = renderCaderno(); else if(currentTab==='videos') app.innerHTML = renderVideos(); else if(currentTab==='plantel') app.innerHTML = renderPlantel(); else if(currentTab==='stats') app.innerHTML = renderStats(); else if(currentTab==='classificacoes') app.innerHTML = renderClassificacoes(); else if(currentTab==='caixinha') app.innerHTML = renderCaixinha(); 
       }
   } catch (error) {
       console.error(error);
@@ -1701,7 +1844,7 @@ loadState();
   <div style="background: #fff; width: 90%; max-width: 400px; padding: 20px; border-radius: 10px; text-align: center; color: #333; font-family: sans-serif;">
     
     <h2 style="margin-top: 0; color: #0E211A; margin-bottom: 5px;">⚽ Coachfolio</h2>
-    <p style="font-size: 0.9em; color: #666; margin: 0;">Versão 2.6.8</p>
+    <p style="font-size: 0.9em; color: #666; margin: 0;">Versão 2.6.9.1</p>
     <p style="font-size: 0.9em; font-style: italic; color: #555; margin-top: 5px;">"Feito por treinadores, para treinadores."</p>
     
     <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">

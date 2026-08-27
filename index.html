@@ -1772,7 +1772,7 @@ function renderPlantel(){
                      ${generatePlayerBarsHTML(st, {minutos: Math.max(avgMins*1.5, 90), golos: 15, assist: 10, jogos: state.matches.filter(m=>(m.season||state.currentSeason)===state.currentSeason).length || 1})}
                    </div>
                    <div style="flex:1; text-align:center;">
-                     ${generateDonutChartSVG(st.presencasTreino, st.faltasTreino)}
+                     ${generateDonutChartSVG(st.minutosTreinoCumpridos, Math.max(0, st.minutosTreinoTotais - st.minutosTreinoCumpridos))}
                      <div style="font-size:9px; color:var(--muted); font-weight:bold; margin-top:8px;">ASSIDUIDADE TREINO</div>
                    </div>
                  </div>

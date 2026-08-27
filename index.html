@@ -452,8 +452,8 @@ window.shiftSeason = function(dir) {
 };
 
 function getPosRank(pos) {
-    if(!pos) return 99;
-    // Puxa apenas a primeira posição antes da vírgula
+    if(!pos || pos.trim() === '') return 99;
+    // Extrai unicamente a primeira posição (antes da primeira vírgula)
     let firstPos = pos.split(',')[0].trim().toUpperCase();
     
     if(firstPos.includes('GR') || firstPos.includes('GK')) return 1;
@@ -471,7 +471,7 @@ function sortPlayerObjs(arr) {
      } 
      else if(sortBy === 'posicao') { 
        const rA = getPosRank(a.positions); 
-       const rB = getPosRank(a.positions); 
+       const rB = getPosRank(b.positions); // <- AGORA SIM! Compara 'a' com 'b'
        if(rA !== rB) return rA - rB; 
        return (a.name||'').localeCompare(b.name||''); 
      } 

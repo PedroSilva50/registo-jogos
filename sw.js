@@ -1,4 +1,4 @@
-const CACHE_NAME = 'coachfolio-v2.6.7.4';
+const CACHE_NAME = 'coachfolio-v2.6.7.5';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

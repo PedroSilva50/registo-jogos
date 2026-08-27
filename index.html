@@ -21,7 +21,7 @@
   :root{--bg:#0E211A;--surface:#153328;--surface-2:#1C4133;--chalk:#F3EFE6;--muted:#8FA79B;--gold:#D9A441;--gold-dim:#4A3E22;--red:#C8493F;--red-dim:#3F2320;--yellow:#E1C324;--green:#4ade80;--green-dim:#133320;--line:rgba(243,239,230,0.10);--btn-gold-txt:#241B08;--btn-red-txt:#2B0F0C;--btn-green-txt:#0E211A;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html{min-height:100%;}
-  body{margin:0;background:var(--bg);color:var(--chalk);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;padding-bottom:76px;padding-top:env(safe-area-inset-top);min-height:100vh;-webkit-font-smoothing:antialiased;}
+  body{margin:0;background:var(--bg);color:var(--chalk);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;padding-bottom:120px;padding-top:env(safe-area-inset-top);min-height:100vh;-webkit-font-smoothing:antialiased;}
   h1,h2,h3,.disp,.btn,.panel-title,.home-sub,.home-btn,.section-title,.score-label,.badge-type,.badge-loc,.badge-open,.seg-btn,.card-mini-btn,.toast,.chrono-sub{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;text-transform:uppercase;letter-spacing:0.03em;font-weight:600;}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;}
   .app{max-width:520px;margin:0 auto;padding:24px 16px 8px;}
@@ -452,20 +452,35 @@ window.shiftSeason = function(dir) {
 };
 
 function getPosRank(pos) {
-    if(!pos) return 99; let p = pos.toUpperCase();
-    if(p.includes('GR') || p.includes('GK')) return 1;
-    if(p.includes('DEF') || p.includes('LAT') || p.includes('CB') || p.includes('LB') || p.includes('RB') || p.includes('DC')) return 2;
-    if(p.includes('MED') || p.includes('MD') || p.includes('MC') || p.includes('MO') || p.includes('MDC')) return 3;
-    if(p.includes('PL') || p.includes('AV') || p.includes('EXT') || p.includes('ST') || p.includes('RW') || p.includes('LW') || p.includes('EE') || p.includes('ED')) return 4;
+    if(!pos) return 99;
+    // Puxa apenas a primeira posição antes da vírgula
+    let firstPos = pos.split(',')[0].trim().toUpperCase();
+    
+    if(firstPos.includes('GR') || firstPos.includes('GK')) return 1;
+    if(['DC','DE','DD','DEF','LAT','CB','LB','RB'].some(x => firstPos.includes(x))) return 2;
+    if(['MDC','MC','MOC','ME','MD','MED','MO'].some(x => firstPos.includes(x))) return 3;
+    if(['PL','AV','EXT','EE','ED','ST','RW','LW'].some(x => firstPos.includes(x))) return 4;
     return 99;
 }
 
 function sortPlayerObjs(arr) { 
    const sortBy = state.rosterSortBy || 'posicao';
    return arr.sort((a, b) => { 
-     if(sortBy === 'nome') { return (a.name||'').localeCompare(b.name||''); } 
-     else if(sortBy === 'posicao') { const rA = getPosRank(a.positions); const rB = getPosRank(b.positions); if(rA !== rB) return rA - rB; return (a.name||'').localeCompare(b.name||''); } 
-     else { const numA = (a.number !== null && a.number !== '' && !isNaN(a.number)) ? parseInt(a.number) : 9999; const numB = (b.number !== null && b.number !== '' && !isNaN(b.number)) ? parseInt(b.number) : 9999; if (numA !== numB) return numA - numB; return (a.name||'').localeCompare(b.name||''); }
+     if(sortBy === 'nome') { 
+       return (a.name||'').localeCompare(b.name||''); 
+     } 
+     else if(sortBy === 'posicao') { 
+       const rA = getPosRank(a.positions); 
+       const rB = getPosRank(a.positions); 
+       if(rA !== rB) return rA - rB; 
+       return (a.name||'').localeCompare(b.name||''); 
+     } 
+     else { 
+       const numA = (a.number !== null && a.number !== '' && !isNaN(a.number)) ? parseInt(a.number) : 9999; 
+       const numB = (b.number !== null && b.number !== '' && !isNaN(b.number)) ? parseInt(b.number) : 9999; 
+       if (numA !== numB) return numA - numB; 
+       return (a.name||'').localeCompare(b.name||''); 
+     }
    }); 
 }
 
@@ -771,7 +786,7 @@ function matchNarrativeHtml(m, isLocked = false){
     const goals = m.goals.filter(g=>g.half===half).map(g=>({ type:'goal', minute:g.minute, data:g })); const cds = cards.filter(c=>c.half===half).map(c=>({ type:'card', minute:c.minute, data:c })); const sbs = subs.filter(s=>s.half===half || (half===1 && s.isHalftime)).map(s=>({ type:'sub', minute:s.isHalftime?'INT':s.minute, data:s, isHalftime: s.isHalftime }));
     return [...goals, ...cds, ...sbs].sort((a,b)=>{ if(a.isHalftime && !b.isHalftime) return 1; if(!a.isHalftime && b.isHalftime) return -1; return (a.minute==null?999:a.minute)-(b.minute==null?999:b.minute); });
   };
-  const goalRow = (g) => `<div class="goal-row"><span>${g.minute!=null?`<span class="mono" style="color:var(--gold);">${g.minute}'</span> `:''}${g.type==='scored'?'⚽ '+playerName(g.scorerId)+(g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''):'角 '+t('rep_conc')}</span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_goal')}', ()=>deleteGoal('${m.id}', '${g.id}'))">✕</button>` : ''}</div>`;
+  const goalRow = (g) => `<div class="goal-row"><span>${g.minute!=null?`<span class="mono" style="color:var(--gold);">${g.minute}'</span> `:''}${g.type==='scored'?'⚽ '+playerName(g.scorerId)+(g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''):'🥅 '+t('rep_conc')}</span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_goal')}', ()=>deleteGoal('${m.id}', '${g.id}'))">✕</button>` : ''}</div>`;
   const cardRow = (c) => `<div class="goal-row"><span>${c.minute!=null?`<span class="mono" style="color:var(--gold);">${c.minute}'</span> `:''}${c.color==='Amarelo'?'🟨':'🟥'} ${playerName(c.playerId)}</span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_card')}', ()=>deleteCard('${m.id}', '${c.id}'))">✕</button>` : ''}</div>`;
   const subRow = (s) => `<div class="goal-row"><span><span class="mono" style="color:var(--gold);">${s.isHalftime ? 'INT' : (s.minute!=null?s.minute+"'":"")}</span> 🔄 <span style="color:var(--red)">↓ ${playerName(s.data.outId)}</span> <span style="color:var(--green)">↑ ${playerName(s.data.inId)}</span></span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sub')}', ()=>deleteSub('${m.id}', '${s.data.id}'))">✕</button>` : ''}</div>`;
 
@@ -980,7 +995,7 @@ function renderTatica(){
     ${topbarHtml(t('hub_strat_title'))}
     ${renderStratSubHeader()}
     <button class="btn btn-gold" style="width:100%; margin-bottom:12px; font-size:11px;" onclick="saveTacticalPlay()">💾 Guardar no Caderno Tático</button>
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;"><div class="seg" style="margin-top:0; flex:1;"><div class="seg-btn ${format===5?'active':''}" onclick="changeTacticFormat(5)">F5</div><div class="seg-btn ${format===7?'active':''}" onclick="changeTacticFormat(7)">F7</div><div class="seg-btn ${format===9?'active':''}" onclick="changeTacticFormat(9)">F9</div><div class="seg-btn ${format===11?'active':''}" onclick="changeTacticFormat(11)">F11</div></div><div class="seg" style="margin-top:0; margin-left:10px;"><div class="seg-btn ${!isHalf?'active':''}" onclick="state.tacticHalfPitch=false; render();" title="Campo Inteiro">🏟️</div><div class="seg-btn ${isHalf?'active':''}" onclick="state.tacticHalfPitch=true; render();" title="Meio Campo">力</div></div></div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;"><div class="seg" style="margin-top:0; flex:1;"><div class="seg-btn ${format===5?'active':''}" onclick="changeTacticFormat(5)">F5</div><div class="seg-btn ${format===7?'active':''}" onclick="changeTacticFormat(7)">F7</div><div class="seg-btn ${format===9?'active':''}" onclick="changeTacticFormat(9)">F9</div><div class="seg-btn ${format===11?'active':''}" onclick="changeTacticFormat(11)">F11</div></div><div class="seg" style="margin-top:0; margin-left:10px;"><div class="seg-btn ${!isHalf?'active':''}" onclick="state.tacticHalfPitch=false; render();" title="Campo Inteiro">🏟️</div><div class="seg-btn ${isHalf?'active':''}" onclick="state.tacticHalfPitch=true; render();" title="Meio Campo">🥅</div></div></div>
     <div class="seg" style="margin-bottom:12px;"><div class="seg-btn ${currentTacticMode==='move'?'active':''}" onclick="setTacticMode('move')">✋ Mover</div><div class="seg-btn ${currentTacticMode==='draw'?'active':''}" onclick="setTacticMode('draw')">✏️ Desenhar</div></div>
     ${currentTacticMode === 'draw' ? `<div style="display:flex; justify-content:center; gap:12px; margin-bottom:12px; align-items:center;"><div style="width:24px; height:24px; border-radius:50%; background:#FFFFFF; border:2px solid ${currentDrawColor==='#FFFFFF'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#FFFFFF')"></div><div style="width:24px; height:24px; border-radius:50%; background:var(--yellow); border:2px solid ${currentDrawColor==='#E1C324'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#E1C324')"></div><div style="width:24px; height:24px; border-radius:50%; background:var(--red); border:2px solid ${currentDrawColor==='#C8493F'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#C8493F')"></div><button class="quick-del" style="border:1px solid var(--line); border-radius:4px; font-size:10px; padding:4px 8px; margin-left:10px;" onclick="clearCanvasLines()">🧹 Limpar Risco</button></div>` : `<div style="font-size:10px; color:var(--muted); text-align:center; margin-bottom:10px; text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">${t('tac_inst')}</div>`}
     <div id="tactic-pitch" class="tactic-pitch-container" style="aspect-ratio: ${isHalf ? '4/3' : '2/3'};">

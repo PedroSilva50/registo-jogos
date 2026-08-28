@@ -437,18 +437,24 @@ window.setLanguage = function(lang) { state.lang = lang; saveState(); render(); 
 
 window.shiftSeason = function(dir) {
     if(!state.currentSeason) state.currentSeason = defaultSeason();
+    let targetSeason = '';
+    
     if(state.seasonFormat === 'civil') {
         let y = parseInt(state.currentSeason.split('/')[0]); 
         if(isNaN(y)) y = new Date().getFullYear();
-        state.currentSeason = String(y + dir);
+        targetSeason = String(y + dir);
     } else {
         let parts = state.currentSeason.split('/');
-        if(parts.length === 2) { state.currentSeason = `${parseInt(parts[0])+dir}/${parseInt(parts[1])+dir}`; } 
-        else { let y = parseInt(state.currentSeason); if(isNaN(y)) y = new Date().getFullYear(); state.currentSeason = `${y+dir}/${y+dir+1}`; }
+        if(parts.length === 2) { targetSeason = `${parseInt(parts[0])+dir}/${parseInt(parts[1])+dir}`; } 
+        else { let y = parseInt(state.currentSeason); if(isNaN(y)) y = new Date().getFullYear(); targetSeason = `${y+dir}/${y+dir+1}`; }
     }
-    window.matchSeasonFilter = state.currentSeason;
-    window.planSeasonFilter = state.currentSeason;
-    saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();
+
+    if(confirm('Tem a certeza que deseja alterar a Época para ' + targetSeason + '?')) {
+        state.currentSeason = targetSeason;
+        window.matchSeasonFilter = state.currentSeason;
+        window.planSeasonFilter = state.currentSeason;
+        saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();
+    }
 };
 
 function getPosRank(pos) {
@@ -744,8 +750,8 @@ function renderModalHTML(){
                     <button class="btn btn-outline" style="padding:4px 10px; border-radius:6px; font-size:16px;" onclick="event.stopPropagation(); shiftSeason(1)">+</button>
                  </div>
                  <div class="seg" style="margin-top:10px;">
-                  <div class="seg-btn ${state.seasonFormat==='europeu'?'active':''}" onclick="event.stopPropagation(); state.seasonFormat='europeu'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_season_eu')}</div>
-                  <div class="seg-btn ${state.seasonFormat==='civil'?'active':''}" onclick="event.stopPropagation(); state.seasonFormat='civil'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_season_civ')}</div>
+                  <div class="seg-btn ${state.seasonFormat==='europeu'?'active':''}" onclick="event.stopPropagation(); if(state.seasonFormat!=='europeu' && confirm('Alterar o formato para Época Europeia (ex: 26/27)?')) { state.seasonFormat='europeu'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render(); }">${t('set_season_eu')}</div>
+<div class="seg-btn ${state.seasonFormat==='civil'?'active':''}" onclick="event.stopPropagation(); if(state.seasonFormat!=='civil' && confirm('Alterar o formato para Ano Civil (ex: 2026)?')) { state.seasonFormat='civil'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); }">${t('set_season_civ')}</div>
                 </div>
              </div>
 

@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Coachfolio">
 <meta name="theme-color" content="#0E211A">
-<title>COACHFOLIO v2.6.9.1</title>
+<title>COACHFOLIO v2.7</title>
 <style>
   :root{--bg:#0E211A;--surface:#153328;--surface-2:#1C4133;--chalk:#F3EFE6;--muted:#8FA79B;--gold:#D9A441;--gold-dim:#4A3E22;--red:#C8493F;--red-dim:#3F2320;--yellow:#E1C324;--green:#4ade80;--green-dim:#133320;--line:rgba(243,239,230,0.10);--btn-gold-txt:#241B08;--btn-red-txt:#2B0F0C;--btn-green-txt:#0E211A;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -397,8 +397,27 @@ async function loadState(){
   applyTheme(state.theme || 'original'); render();
 }
 
-async function saveState(){ try { await storageAdapter.set(STORAGE_KEY, JSON.stringify(state)); } catch(e) { if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || (e.message && e.message.includes('quota'))) { alert(t('msg_quota')); } else { console.error("Erro:", e); } } }
-function escapeHTML(str) { if(!str) return ''; return String(str).replace(/[&<>'"]/g, match => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[match])); }
+async function saveState(){ 
+  try { 
+    state.lastBackupDate = Date.now();
+    await storageAdapter.set(STORAGE_KEY, JSON.stringify(state)); 
+  } catch(e) { 
+    if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || (e.message && e.message.includes('quota'))) { 
+      alert(t('msg_quota')); 
+    } else { 
+      console.error("Erro:", e); 
+    } 
+  } 
+}
+
+function getAutoSaveStatusHTML() {
+  if (!state.lastBackupDate) return '';
+  const d = new Date(state.lastBackupDate);
+  const dateStr = d.toLocaleDateString('pt-PT') + ' às ' + d.toLocaleTimeString('pt-PT', {hour: '2-digit', minute:'2-digit'});
+  return `<div style="font-size:11px; color:var(--muted); margin-top:8px; text-align:center; line-height: 1.3;">
+    🟢 <strong>Dados gravados no dispositivo:</strong> ${dateStr}
+  </div>`;
+}function escapeHTML(str) { if(!str) return ''; return String(str).replace(/[&<>'"]/g, match => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[match])); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
 function showToast(msg){ const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(showToast._t); showToast._t = setTimeout(()=>el.classList.remove('show'), 3000); }
 function getMyClub() { return state.myClubName && state.myClubName.trim() !== '' ? state.myClubName : t('def_club'); }
@@ -769,7 +788,7 @@ function renderModalHTML(){
          <button class="btn" style="width:100%; margin-top:10px; background:#0E211A; color:#fff; border:1px solid var(--line);" onclick="abrirCreditos()">🤝 Créditos & Parceiros</button>
 
          <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="closeModal()">${t('close')}</button>
-         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v2.6.9.1 | COACHFOLIO</div>
+         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v2.7 | COACHFOLIO</div>
        </div>
      </div>`;
   }
@@ -804,19 +823,157 @@ function matchNarrativeHtml(m, isLocked = false){
 }
 
 function renderHome(){
-  const active = getActiveMatch(); let backupWarning = '';
-  if(state.lastBackupDate && state.matches.length > 0) { const daysSince = (Date.now() - state.lastBackupDate) / (1000 * 60 * 60 * 24); if(daysSince > 7) backupWarning = `<div class="warning-banner" style="background:var(--red); padding:10px; border-radius:8px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between;"><span>⚠️ <b>Backup Atrasado</b></span><button class="btn btn-gold" style="padding: 6px 10px; font-size: 10px; flex:none;" onclick="exportData()">Exportar Agora</button></div>`; }
-  let bdayHtml = ''; const nextBday = getNextBirthday();
-  if(nextBday) {
-      let msg = '';
-      if(nextBday.days === 0) {
-          let encodedText = encodeURIComponent(`🎉 Parabéns, ${nextBday.player.name}! 🎉\nDesejamos-te um dia muito feliz! 🎂⚽`);
-          msg = `🎂 Hoje é o aniversário de <b>${nextBday.player.name}</b>! <a class="card-mini-btn active-green" href="https://wa.me/?text=${encodedText}" target="_blank" style="text-decoration:none; display:inline-block; margin-left:6px; padding:2px 6px;">WhatsApp ↗</a>`;
-      } else { msg = `🎂 Próximo aniversário: <b>${nextBday.player.name}</b>, faltam ${nextBday.days} dias.`; }
-      bdayHtml = `<div style="background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:16px; font-size:12px; text-align:center;">${msg}</div>`;
+  const active = getActiveMatch(); 
+  let backupWarning = '';
+
+  // 1. Alerta de Backup Atrasado
+  if(state.lastBackupDate && state.matches.length > 0) { 
+    const daysSince = (Date.now() - state.lastBackupDate) / (1000 * 60 * 60 * 24); 
+    if(daysSince > 7) {
+      backupWarning = `<div class="warning-banner" style="background:var(--red); color:var(--btn-red-txt); padding:10px 14px; border-radius:10px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; font-size:11px;">
+        <span>⚠️ <b>Backup Atrasado (+7 dias)</b></span>
+        <button class="btn btn-gold" style="padding: 4px 8px; font-size: 10px; flex:none;" onclick="exportData()">Exportar Já</button>
+      </div>`; 
+    }
   }
-  
-  return `<div class="home-screen"><div class="home-pitch-bg"><svg preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%; max-width: 400px;" viewBox="0 0 400 600"><rect x="20" y="20" width="360" height="560" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><line x1="20" y1="300" x2="380" y2="300" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><circle cx="200" cy="300" r="62" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="85" y="20" width="230" height="95" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="140" y="20" width="120" height="38" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="85" y="485" width="230" height="95" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/><rect x="140" y="542" width="120" height="38" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/></svg></div><div class="home-content">${backupWarning}<div class="topbar-settings" style="position:absolute; top:0; right:0;" onclick="openSettings()">⚙️</div><div class="home-ball">${ballIconSvg()}</div><h1>${t('home_title')}</h1><div class="home-sub" style="margin-bottom:2px;">${t('home_sub')}</div><div style="font-size:10px; color:var(--gold); margin-bottom:16px; font-weight:normal; letter-spacing:0; text-transform:none;">v2.6.9.1 | by Pedro Silva</div>${bdayHtml}${active ? `<button class="home-btn" style="margin-bottom:12px; border-color:var(--gold);" onclick="navigateToHub('jogo')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>${t('home_cont')}</button>` : ''}<div class="home-menu"><div class="home-hub-card" onclick="navigateToHub('planeamento')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><div class="home-hub-text"><h2>${t('hub_plan_title')}</h2><p>${t('hub_plan_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('jogo')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><div class="home-hub-text"><h2>${t('hub_match_title')}</h2><p>${t('hub_match_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('estrategia')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="3"/></svg></div><div class="home-hub-text"><h2>${t('hub_strat_title')}</h2><p>${t('hub_strat_desc')}</p></div></div><div class="home-hub-card" onclick="navigateToHub('equipa')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div><div class="home-hub-text"><h2>${t('hub_team_title')}</h2><p>${t('hub_team_desc')}</p></div></div></div></div></div>`;
+
+  // 2. Alerta de Aniversários
+  let bdayHtml = ''; 
+  const nextBday = getNextBirthday();
+  if(nextBday) {
+    let msg = '';
+    if(nextBday.days === 0) {
+      let encodedText = encodeURIComponent(`🎉 Parabéns, ${nextBday.player.name}! 🎉\nDesejamos-te um dia muito feliz! 🎂⚽`);
+      msg = `🎂 Hoje é o aniversário de <b>${nextBday.player.name}</b>! <a class="card-mini-btn active-green" href="https://wa.me/?text=${encodedText}" target="_blank" style="text-decoration:none; display:inline-block; margin-left:6px; padding:2px 6px;">WhatsApp ↗</a>`;
+    } else { 
+      msg = `🎂 Próximo aniversário: <b>${nextBday.player.name}</b> (${nextBday.days} dia${nextBday.days > 1 ? 's' : ''})`; 
+    }
+    bdayHtml = `<div style="background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:12px; font-size:12px; text-align:center;">${msg}</div>`;
+  }
+
+  // 3. Alerta de Próximo Jogo Agendado
+  let nextMatchHtml = '';
+  const upcomingGames = (state.schedule || [])
+    .filter(s => (s.season || state.currentSeason) === state.currentSeason)
+    .sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time));
+
+  if (upcomingGames.length > 0) {
+    const nm = upcomingGames[0];
+    const dateParts = nm.date.split('-');
+    const dateStr = dateParts.length === 3 ? `${dateParts[2]}/${dateParts[1]}` : nm.date;
+    
+    const timeParts = nm.time.split(':');
+    let d = new Date();
+    d.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]));
+    d.setHours(d.getHours() - 1);
+    const meetTime = String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0');
+
+    nextMatchHtml = `
+      <div style="background:var(--surface); border:1px solid var(--gold); border-radius:12px; padding:12px; margin-bottom:12px; text-align:left;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <span style="font-size:10px; color:var(--gold); font-weight:bold; text-transform:uppercase;">📅 Próximo Jogo</span>
+          <span style="font-size:10px; color:var(--muted);">${dateStr} às ${nm.time}</span>
+        </div>
+        <div style="font-size:14px; font-weight:bold; color:var(--chalk); margin-bottom:4px;">
+          ${nm.location === 'casa' ? `${getMyClub()} vs ${nm.opponent}` : `${nm.opponent} vs ${getMyClub()}`}
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+          <span style="font-size:11px; color:var(--muted);">📍 Comparência: <b>${meetTime}</b></span>
+          <button class="btn btn-gold" style="font-size:10px; padding:4px 8px; flex:none;" onclick="expandedSchedule='${nm.id}'; navigateToHub('planeamento');">Convocatória 📋</button>
+        </div>
+      </div>`;
+  }
+
+  // 4. Alerta Inteligente de Treino (Separa Atrasados de Próximos)
+  let pendingTrainingsHtml = '';
+  const todayStr = new Date().toISOString().slice(0,10);
+  const pendingTrs = (state.trainings || [])
+    .filter(t => t.status === 'pending')
+    .sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  if (pendingTrs.length > 0) {
+    const nt = pendingTrs[0];
+    const dateParts = nt.date.split('-');
+    const dateStr = dateParts.length === 3 ? `${dateParts[2]}/${dateParts[1]}` : nt.date;
+    const isPast = nt.date < todayStr;
+
+    const labelTitle = isPast ? `🔴 Treino Pendente (${dateStr})` : `🟡 Próximo Treino (${dateStr})`;
+    const labelColor = isPast ? `var(--red)` : `var(--yellow)`;
+    const labelSub = isPast ? `Sessão em atraso (por concluir)` : `${pendingTrs.length} sessão(ões) agendada(s)`;
+
+    pendingTrainingsHtml = `
+      <div style="background:var(--surface-2); border:1px solid ${labelColor}; border-radius:12px; padding:10px 12px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+        <div style="text-align:left;">
+          <div style="font-size:11px; font-weight:bold; color:${labelColor};">${labelTitle}</div>
+          <div style="font-size:10px; color:var(--muted);">${labelSub}</div>
+        </div>
+        <button class="btn btn-green" style="font-size:10px; padding:6px 10px; flex:none;" onclick="navigateToHub('planeamento'); navigateToTab('treinos');">Ver Treinos 🟢</button>
+      </div>`;
+  }
+
+  return `<div class="home-screen">
+    <div class="home-pitch-bg">
+      <svg preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%; max-width: 400px;" viewBox="0 0 400 600">
+        <rect x="20" y="20" width="360" height="560" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/>
+        <line x1="20" y1="300" x2="380" y2="300" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/>
+        <circle cx="200" cy="300" r="62" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/>
+        <rect x="85" y="20" width="230" height="95" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/>
+        <rect x="140" y="20" width="120" height="38" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/>
+        <rect x="85" y="485" width="230" height="95" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/>
+        <rect x="140" y="542" width="120" height="38" fill="none" stroke="var(--chalk)" stroke-opacity="0.18" stroke-width="2"/>
+      </svg>
+    </div>
+    <div class="home-content">
+      ${backupWarning}
+      <div class="topbar-settings" style="position:absolute; top:0; right:0;" onclick="openSettings()">⚙️</div>
+      <div class="home-ball">${ballIconSvg()}</div>
+      <h1>${t('home_title')}</h1>
+      <div class="home-sub" style="margin-bottom:2px;">${t('home_sub')}</div>
+      <div style="font-size:11px; color:var(--gold); margin-bottom:14px; font-weight:bold; letter-spacing:0.5px;">by Pedro Silva</div>
+      
+      <!-- CENTRAL DE ALERTAS INTELIGENTES -->
+      ${bdayHtml}
+      ${pendingTrainingsHtml}
+      ${nextMatchHtml}
+
+      ${active ? `<button class="home-btn" style="margin-bottom:12px; border-color:var(--gold);" onclick="navigateToHub('jogo')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>${t('home_cont')}</button>` : ''}
+      
+      <!-- MENU EM GRELHA 2X2 COM ÍCONE AO LADO DO TÍTULO E SUBTÍTULO ABAIXO -->
+      <div class="home-menu" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="home-hub-card" style="padding:12px 10px; align-items:flex-start;" onclick="navigateToHub('planeamento')">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="home-hub-icon" style="margin-bottom:0;"><svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+            <h2 style="font-size:12px; margin:0;">${t('hub_plan_title')}</h2>
+          </div>
+          <p style="font-size:10px; margin-top:6px; color:var(--muted); text-align:left;">${t('hub_plan_desc')}</p>
+        </div>
+
+        <div class="home-hub-card" style="padding:12px 10px; align-items:flex-start;" onclick="navigateToHub('jogo')">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="home-hub-icon" style="margin-bottom:0;"><svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+            <h2 style="font-size:12px; margin:0;">${t('hub_match_title')}</h2>
+          </div>
+          <p style="font-size:10px; margin-top:6px; color:var(--muted); text-align:left;">${t('hub_match_desc')}</p>
+        </div>
+
+        <div class="home-hub-card" style="padding:12px 10px; align-items:flex-start;" onclick="navigateToHub('estrategia')">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="home-hub-icon" style="margin-bottom:0;"><svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="3"/></svg></div>
+            <h2 style="font-size:12px; margin:0;">${t('hub_strat_title')}</h2>
+          </div>
+          <p style="font-size:10px; margin-top:6px; color:var(--muted); text-align:left;">${t('hub_strat_desc')}</p>
+        </div>
+
+        <div class="home-hub-card" style="padding:12px 10px; align-items:flex-start;" onclick="navigateToHub('equipa')">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="home-hub-icon" style="margin-bottom:0;"><svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div>
+            <h2 style="font-size:12px; margin:0;">${t('hub_team_title')}</h2>
+          </div>
+          <p style="font-size:10px; margin-top:6px; color:var(--muted); text-align:left;">${t('hub_team_desc')}</p>
+        </div>
+      </div>
+    </div>
+  </div>`;
 }
 
 function renderJogoSubHeader() { return `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${currentTab==='jogo'?'active':''}" onclick="navigateToTab('jogo')">${t('match_curr')}</div><div class="seg-btn ${currentTab==='jogos'?'active':''}" onclick="navigateToTab('jogos')">${t('res_title')}</div></div>`; }
@@ -1053,6 +1210,88 @@ function endDrag(e) { if (!dragObj.dragging || currentTab !== 'tatica') return; 
 
 window.uiUpdateSearch = function(val){ matchSearchQuery = val; render(); const el = document.getElementById('match-search-input'); if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } };
 
+window.exportCallupPDF = function(schId) {
+  const s = state.schedule.find(x => x.id === schId);
+  if (!s) return;
+
+  const dateStr = s.date.split('-').reverse().join('/');
+  const timeParts = s.time.split(':');
+  let d = new Date();
+  d.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]));
+  d.setHours(d.getHours() - 1);
+  const meetTime = String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0');
+
+  let compLabel = s.type === 'torneio' 
+    ? `Torneio: ${s.tournamentName}${s.phase ? ' - ' + s.phase : ''}${s.matchday ? ' (Jornada ' + s.matchday + ')' : ''}` 
+    : (s.type === 'campeonato' ? `Campeonato${s.phase ? ' - ' + s.phase : ''}${s.matchday ? ' (Jornada ' + s.matchday + ')' : ''}` : 'Jogo Amigável');
+
+  let locLabel = s.location === 'casa' ? 'CASA' : 'FORA';
+  let matchTitle = s.location === 'casa' ? `${getMyClub()} 🆚 ${s.opponent}` : `${s.opponent} 🆚 ${getMyClub()}`;
+
+  // Aqui pegamos nos objetos dos jogadores sem passar pelo playerLabel
+  const called = sortPlayerObjs(eligiblePlayers().filter(p => s.callup.includes(p.id)));
+
+  let rowsHtml = '';
+  if (called.length === 0) {
+    rowsHtml = '<tr><td colspan="3" style="text-align:center; padding:15px;">Nenhum jogador selecionado na convocatória.</td></tr>';
+  } else {
+    called.forEach((p, idx) => {
+      // Removemos o cardinal '#' e pegamos no número puro do jogador ou na ordem da lista
+      const numVal = (p.number !== null && p.number !== undefined && p.number !== '') ? p.number : (idx + 1);
+      const nameVal = p.name || 'Sem Nome';
+
+      rowsHtml += `
+        <tr>
+          <td style="text-align:center; font-weight:bold; width:45px;">${numVal}</td>
+          <td style="text-align:left; font-weight:bold; padding-left:12px;">${nameVal}</td>
+          <td style="width:200px;"></td>
+        </tr>`;
+    });
+  }
+
+  let html = `
+    <div class="print-card">
+      <div class="print-header">
+        <h1>CONVOCATÓRIA OFICIAL</h1>
+        <p style="font-size:20px; font-weight:bold; margin-top:5px; color:#000;">${matchTitle}</p>
+        <p style="font-size:13px; color:#444;">${compLabel} | Local: <b>${locLabel}</b></p>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; background:#EEE; padding:12px 15px; border-radius:6px; margin-bottom:20px; border:1px solid #DDD; font-size:13px;">
+        <div><b>📅 Data do Jogo:</b> ${dateStr}</div>
+        <div><b>⏱️ Hora do Jogo:</b> ${s.time}</div>
+        <div><b>📍 Hora de Comparência:</b> <span style="font-size:14px; font-weight:bold; color:#000;">${meetTime}</span></div>
+      </div>
+
+      <h3 style="margin-bottom:10px;">Atletas Convocados (${called.length})</h3>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:45px; text-align:center;">Núm</th>
+            <th style="text-align:left; padding-left:12px;">Nome do Atleta</th>
+            <th style="width:200px; text-align:center;">Assinatura / Rubrica</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+
+      <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
+        <div style="font-size:11px; color:#666;">
+          <p style="margin:2px 0;">• Comparência obrigatória à hora marcada com o equipamento oficial.</p>
+          <p style="margin:2px 0;">• Em caso de força maior, avisar a equipa técnica com antecedência.</p>
+        </div>
+        <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">
+          A Equipa Técnica
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
+};
+
 function renderCalendario(){
   if(schedulingNew){
     if(!schForm.date) schForm.date = new Date().toISOString().slice(0,10);
@@ -1066,13 +1305,18 @@ function renderCalendario(){
   
   const currentSch = state.schedule.filter(s => (s.season || state.currentSeason) === state.currentSeason);
   
-  return `${topbarHtml(t('hub_plan_title'))}${renderPlanSubHeader()}<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="schForm={isBatch:false, opp:'', date:'', time:'09:00', type:'amigavel', loc:'casa', phase:'', matchday:'', tournamentName:'', games:[]}; editingSchId=null; schedulingNew=true; render()">${t('sch_new')}</button>${currentSch.length ? currentSch.map(s => { const open = expandedSchedule === s.id; const locLabel = s.location === 'casa' ? t('match_home') : t('match_away'); return `<div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('.chip')) { expandedSchedule = expandedSchedule==='${s.id}' ? null : '${s.id}'; render(); }"><div class="match-head-row"><div class="match-head" style="flex:1;"><div><div class="opp">${s.type==='torneio'?`<span style="color:var(--gold); font-size:11px; display:block; text-transform:uppercase; margin-bottom:2px;">🏆 ${s.tournamentName}${s.phase?' - '+s.phase:''}${s.matchday?' (Jornada '+s.matchday+')':''}</span>`:''}${s.type==='campeonato'&&s.phase?`<span style="color:var(--gold); font-size:11px; display:block; text-transform:uppercase; margin-bottom:2px;">🏆 ${s.phase}${s.matchday?' (Jornada '+s.matchday+')':''}</span>`:''}${s.opponent} <span class="badge-loc ${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home'?'casa':'fora'}">${locLabel}</span></div><div class="date">${s.date.split('-').reverse().join('/')} às ${s.time}</div></div></div><div style="display:flex; gap:6px;"><button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); editSchedule('${s.id}')" title="${t('edit')}"><svg style="width:16px; height:16px; transform:translateY(2px);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); duplicateSchedule('${s.id}')" title="Duplicar">📑</button><button class="quick-del" style="color:var(--gold);" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')" title="Iniciar">▶</button><button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sch')}', () => deleteSchedule('${s.id}'))" title="${t('del')}">🗑</button></div></div>${open ? `<div class="goal-list"><div class="panel-title" style="margin-bottom:8px;">${t('sch_callup')} (${s.callup.length})</div><div class="grid-btns cols-4">${eligiblePlayers().map(p=>`<div class="chip chip-sm ${s.callup.includes(p.id)?'active-green':''}" onclick="event.stopPropagation(); window.toggleCallup('${s.id}', '${p.id}')">${playerLabel(p)}</div>`).join('')}</div><div class="btn-row" style="margin-top:12px;"><button class="btn btn-green" style="font-size:12px; padding:10px;" onclick="event.stopPropagation(); window.copyCallup('${s.id}')">WhatsApp 📋</button><button class="btn btn-ghost" style="font-size:12px; padding:10px;" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')">${t('sch_start')}</button></div></div>` : ''}</div>`; }).join('') : `<div class="empty">${t('sch_none')}</div>`}`;
+  return `${topbarHtml(t('hub_plan_title'))}${renderPlanSubHeader()}<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="schForm={isBatch:false, opp:'', date:'', time:'09:00', type:'amigavel', loc:'casa', phase:'', matchday:'', tournamentName:'', games:[]}; editingSchId=null; schedulingNew=true; render()">${t('sch_new')}</button>${currentSch.length ? currentSch.map(s => { const open = expandedSchedule === s.id; const locLabel = s.location === 'casa' ? t('match_home') : t('match_away'); return `<div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('.chip')) { expandedSchedule = expandedSchedule==='${s.id}' ? null : '${s.id}'; render(); }"><div class="match-head-row"><div class="match-head" style="flex:1;"><div><div class="opp">${s.type==='torneio'?`<span style="color:var(--gold); font-size:11px; display:block; text-transform:uppercase; margin-bottom:2px;">🏆 ${s.tournamentName}${s.phase?' - '+s.phase:''}${s.matchday?' (Jornada '+s.matchday+')':''}</span>`:''}${s.type==='campeonato'&&s.phase?`<span style="color:var(--gold); font-size:11px; display:block; text-transform:uppercase; margin-bottom:2px;">🏆 ${s.phase}${s.matchday?' (Jornada '+s.matchday+')':''}</span>`:''}${s.opponent} <span class="badge-loc ${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home'?'casa':'fora'}">${locLabel}</span></div><div class="date">${s.date.split('-').reverse().join('/')} às ${s.time}</div></div></div><div style="display:flex; gap:6px;"><button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); editSchedule('${s.id}')" title="${t('edit')}"><svg style="width:16px; height:16px; transform:translateY(2px);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); duplicateSchedule('${s.id}')" title="Duplicar">📑</button><button class="quick-del" style="color:var(--gold);" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')" title="Iniciar">▶</button><button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sch')}', () => deleteSchedule('${s.id}'))" title="${t('del')}">🗑</button></div></div>${open ? `<div class="goal-list"><div class="panel-title" style="margin-bottom:8px;">${t('sch_callup')} (${s.callup.length})</div><div class="grid-btns cols-4">${eligiblePlayers().map(p=>`<div class="chip chip-sm ${s.callup.includes(p.id)?'active-green':''}" onclick="event.stopPropagation(); window.toggleCallup('${s.id}', '${p.id}')">${playerLabel(p)}</div>`).join('')}</div><div class="btn-row" style="margin-top:12px;"><button class="btn btn-green" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.copyCallup('${s.id}')">WhatsApp 📋</button><button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.exportCallupPDF('${s.id}')">📄 Folha PDF</button><button class="btn btn-ghost" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')">${t('sch_start')}</button></div></div>` : ''}</div>`; }).join('') : `<div class="empty">${t('sch_none')}</div>`}`;
 }
 
 window.uiSaveTraining = function(){ 
   if(!trainingForm.duration || isNaN(trainingForm.duration) || trainingForm.duration <= 0){
     showToast('Insere a duração do treino em minutos!'); return;
   }
+  
+  const existingTr = trainingForm.id ? state.trainings.find(t => t.id === trainingForm.id) : null;
+  
+  // Só fica completed se já estivesse concluído previamente
+  let targetStatus = (existingTr && existingTr.status === 'completed') ? 'completed' : 'pending';
   
   const trData = {
     id: trainingForm.id || uid(), 
@@ -1081,7 +1325,8 @@ window.uiSaveTraining = function(){
     season: state.currentSeason, 
     notes: escapeHTML(trainingForm.notes||''), 
     absences: { ...trainingForm.absences },
-    customMinutes: { ...trainingForm.customMinutes }
+    customMinutes: { ...trainingForm.customMinutes },
+    status: targetStatus
   };
 
   if(trainingForm.id) {
@@ -1138,6 +1383,18 @@ window.editTraining = function(id) {
 
 window.deleteTraining = function(id){ state.trainings = state.trainings.filter(t=>t.id!==id); saveState(); render(); };
 
+window.quickCompleteTraining = function(id) {
+  const tr = state.trainings.find(t => t.id === id);
+  if (!tr) return;
+
+  askConfirm("Concluir treino e registar presenças para todo o plantel?", () => {
+    tr.status = 'completed';
+    saveState();
+    render();
+    showToast("Treino concluído com sucesso! 🟢");
+  });
+};
+
 function renderTreinos(){
   if(trainingForm){ 
     const reasons = [
@@ -1189,12 +1446,13 @@ function renderTreinos(){
   const seasons = getPlanSeasons();
   let activeFilter = window.planSeasonFilter === 'todas' ? state.currentSeason : (window.planSeasonFilter || state.currentSeason);
   let filterUI = seasons.length > 1 ? `<div style="margin-bottom:14px; overflow-x:auto; display:flex; gap:6px; padding-bottom:6px;"><div class="seg-btn ${activeFilter==='TUDO'?'active':''}" style="flex:none; padding:8px 12px; font-size:10px;" onclick="window.planSeasonFilter='TUDO'; render()">Todas</div>${seasons.map(s=>`<div class="seg-btn ${activeFilter===s?'active':''}" style="flex:none; padding:8px 12px; font-size:10px;" onclick="window.planSeasonFilter='${s}'; render()">${s}</div>`).join('')}</div>` : '';
-  const filtered = state.trainings.filter(t => activeFilter==='TUDO' || getEntitySeason(t) === activeFilter);
+  const filtered = state.trainings.filter(t => activeFilter==='TUDO' || getEntitySeason(t) === activeFilter).sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return `${topbarHtml(t('hub_plan_title'))}${renderPlanSubHeader()}<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="trainingForm={absences:{}, customMinutes:{}, notes:'', duration:90, date: new Date().toISOString().slice(0,10)}; render()">${t('tr_new')}</button>${filterUI}
     ${filtered.length ? filtered.map(tr=>{ 
       const open = expandedTraining === tr.id; 
       const duration = tr.duration || 90;
+      const isCompleted = tr.status === undefined || tr.status === 'completed';
       
       let absObj = {};
       if (Array.isArray(tr.absences)) {
@@ -1210,11 +1468,12 @@ function renderTreinos(){
         <div class="match-head-row">
           <div class="match-head" style="flex:1;">
             <div>
-              <div class="opp">${tr.date} <span class="badge-type" style="color:var(--gold);">${duration} Min</span></div>
-              <div class="date">${presCount} presentes · ${absKeys.length} ausentes/parciais</div>
+              <div class="opp">${tr.date} <span class="badge-type" style="color:${isCompleted ? 'var(--green)' : 'var(--gold)'};">${isCompleted ? '🟢 Concluído' : '🟡 Agendado'} (${duration} Min)</span></div>
+              <div class="date">${isCompleted ? `${presCount} presentes · ${absKeys.length} ausentes/parciais` : 'Clique em Concluir para marcar presenças'}</div>
             </div>
           </div>
-          <div style="display:flex; gap:6px;">
+          <div style="display:flex; gap:6px; align-items:center;">
+            ${!isCompleted ? `<button class="btn btn-green" style="font-size:10px; padding:4px 8px; flex:none;" onclick="event.stopPropagation(); quickCompleteTraining('${tr.id}')">🟢 Concluir</button>` : ''}
             <button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); editTraining('${tr.id}')" title="Editar">✏️</button>
             <button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_tr')}', ()=>deleteTraining('${tr.id}'))">🗑</button>
           </div>
@@ -1465,7 +1724,7 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
   });
   
   let totalTreinos = 0;
-  (state.trainings || []).filter(tr => tr && (targetSeason === 'TUDO' || getEntitySeason(tr) === targetSeason)).forEach(tr => {
+  (state.trainings || []).filter(tr => tr && (tr.status === undefined || tr.status === 'completed') && (targetSeason === 'TUDO' || getEntitySeason(tr) === targetSeason)).forEach(tr => {
     totalTreinos++;
     const dur = parseInt(tr.duration, 10) || 90;
     minutosTreinoTotais += dur;
@@ -1803,7 +2062,7 @@ function renderPlantel(){
          html += `</div>`;
       });
   }
-  html += `<div class="add-row" style="margin-top:16px;"><input id="new-player-input" type="text" placeholder="${t('pl_add_ph')}"><button onclick="uiAddPlayer()">+</button></div></div><div class="section-title">${t('exp_title')}</div><div class="card"><div style="font-size:12px; color:var(--muted); margin-bottom:10px; line-height: 1.4;">${t('exp_desc')}</div><div class="btn-row" style="margin-top:0;"><button class="btn btn-gold" onclick="exportData()">${t('exp_json')}</button><button class="btn btn-outline" onclick="document.getElementById('import-file-input').click()">${t('imp_json')}</button></div><div class="btn-row"><button class="btn btn-ghost" onclick="exportReportPDF()">${t('exp_pdf')}</button><button class="btn btn-ghost" onclick="exportCsv()">${t('exp_csv')}</button></div><input type="file" id="import-file-input" accept=".json,application/json" style="display:none;" onchange="importData(this)"></div>`;
+  html += `<div class="add-row" style="margin-top:16px;"><input id="new-player-input" type="text" placeholder="${t('pl_add_ph')}"><button onclick="uiAddPlayer()">+</button></div></div><div class="section-title">${t('exp_title')}</div><div class="card"><div style="font-size:12px; color:var(--muted); margin-bottom:10px; line-height: 1.4;">${t('exp_desc')}${getAutoSaveStatusHTML()}</div><div class="btn-row" style="margin-top:0;"><button class="btn btn-gold" onclick="exportData()">${t('exp_json')}</button><button class="btn btn-outline" onclick="document.getElementById('import-file-input').click()">${t('imp_json')}</button></div><div class="btn-row"><button class="btn btn-ghost" onclick="exportReportPDF()">${t('exp_pdf')}</button><button class="btn btn-ghost" onclick="exportCsv()">${t('exp_csv')}</button></div><input type="file" id="import-file-input" accept=".json,application/json" style="display:none;" onchange="importData(this)"></div>`;
   return html;
 }
 
@@ -1831,7 +2090,57 @@ window.removePlayer = function(id){ const p=state.roster.find(x=>x.id===id); if(
 
 window.exportData = function(){ state.lastBackupDate = Date.now(); const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `coachfolio-backup-${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); saveState(); render(); showToast(t('msg_bkp_exp')); };
 
-window.importData = function(input){ const file = input.files[0]; if(!file) return; const reader = new FileReader(); reader.onload = (e)=>{ try{ const p = JSON.parse(e.target.result); if(!p.roster || !p.matches) throw new Error('inv'); askConfirm(t('msg_overwrite'), ()=>{ state = p; if(!state.schedule) state.schedule = []; if(!state.trainings) state.trainings = []; if(!state.videos) state.videos = []; if(!state.diary) state.diary = []; if(!state.leagues) state.leagues = []; if(!state.fines) state.fines = []; if(!state.teamColor) state.teamColor = '#D9A441'; if(!state.oppColor) state.oppColor = '#C8493F'; if(!state.seasonFormat) state.seasonFormat = 'europeu'; if(!state.currentSeason) state.currentSeason = defaultSeason(); if(state.enableLeagues===undefined) state.enableLeagues=true; if(state.enableFines===undefined) state.enableFines=false; if(state.enableBirthdays===undefined) state.enableBirthdays=false; if(state.trackSubs===undefined) state.trackSubs=true; state.lastBackupDate = Date.now(); saveState(); render(); showToast(t('msg_bkp_imp')); }); }catch(err){ showToast(t('msg_inv_file')); } }; reader.readAsText(file); input.value = ''; };
+function sanitizeData(obj) {
+  if (typeof obj === 'string') return escapeHTML(obj);
+  if (Array.isArray(obj)) return obj.map(sanitizeData);
+  if (obj && typeof obj === 'object') {
+    const sanitized = {};
+    for (let k in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, k)) {
+        sanitized[k] = sanitizeData(obj[k]);
+      }
+    }
+    return sanitized;
+  }
+  return obj;
+}
+
+window.importData = function(input){ 
+  const file = input.files[0]; 
+  if(!file) return; 
+  const reader = new FileReader(); 
+  reader.onload = (e) => { 
+    try { 
+      const p = JSON.parse(e.target.result); 
+      if(!p.roster || !p.matches) throw new Error('inv'); 
+      askConfirm(t('msg_overwrite'), () => { 
+        state = sanitizeData(p); 
+        if(!state.schedule) state.schedule = []; 
+        if(!state.trainings) state.trainings = []; 
+        if(!state.videos) state.videos = []; 
+        if(!state.diary) state.diary = []; 
+        if(!state.leagues) state.leagues = []; 
+        if(!state.fines) state.fines = []; 
+        if(!state.teamColor) state.teamColor = '#D9A441'; 
+        if(!state.oppColor) state.oppColor = '#C8493F'; 
+        if(!state.seasonFormat) state.seasonFormat = 'europeu'; 
+        if(!state.currentSeason) state.currentSeason = defaultSeason(); 
+        if(state.enableLeagues===undefined) state.enableLeagues=true; 
+        if(state.enableFines===undefined) state.enableFines=false; 
+        if(state.enableBirthdays===undefined) state.enableBirthdays=false; 
+        if(state.trackSubs===undefined) state.trackSubs=true; 
+        state.lastBackupDate = Date.now(); 
+        saveState(); 
+        render(); 
+        showToast(t('msg_bkp_imp')); 
+      }); 
+    } catch(err) { 
+      showToast(t('msg_inv_file')); 
+    } 
+  }; 
+  reader.readAsText(file); 
+  input.value = ''; 
+};
 
 window.exportReportPDF = function(){
   const s = computeStats('todos', state.currentSeason, 'todas');

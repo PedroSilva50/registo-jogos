@@ -938,39 +938,12 @@ function renderHome(){
 
       ${active ? `<button class="home-btn" style="margin-bottom:12px; border-color:var(--gold);" onclick="navigateToHub('jogo')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>${t('home_cont')}</button>` : ''}
       
-      <!-- MENU EM GRELHA 2X2 COM ÍCONE AO LADO DO TÍTULO E SUBTÍTULO ABAIXO -->
-      <div class="home-menu" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-        <div class="home-hub-card" style="padding:12px 10px; align-items:flex-start;" onclick="navigateToHub('planeamento')">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <div class="home-hub-icon" style="margin-bottom:0;"><svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-            <h2 style="font-size:12px; margin:0;">${t('hub_plan_title')}</h2>
-          </div>
-          <p style="font-size:10px; margin-top:6px; color:var(--muted); text-align:left;">${t('hub_plan_desc')}</p>
-        </div>
-
-        <div class="home-hub-card" style="padding:12px 10px; align-items:flex-start;" onclick="navigateToHub('jogo')">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <div class="home-hub-icon" style="margin-bottom:0;"><svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
-            <h2 style="font-size:12px; margin:0;">${t('hub_match_title')}</h2>
-          </div>
-          <p style="font-size:10px; margin-top:6px; color:var(--muted); text-align:left;">${t('hub_match_desc')}</p>
-        </div>
-
-        <div class="home-hub-card" style="padding:12px 10px; align-items:flex-start;" onclick="navigateToHub('estrategia')">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <div class="home-hub-icon" style="margin-bottom:0;"><svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="3"/></svg></div>
-            <h2 style="font-size:12px; margin:0;">${t('hub_strat_title')}</h2>
-          </div>
-          <p style="font-size:10px; margin-top:6px; color:var(--muted); text-align:left;">${t('hub_strat_desc')}</p>
-        </div>
-
-        <div class="home-hub-card" style="padding:12px 10px; align-items:flex-start;" onclick="navigateToHub('equipa')">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <div class="home-hub-icon" style="margin-bottom:0;"><svg style="width:18px; height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div>
-            <h2 style="font-size:12px; margin:0;">${t('hub_team_title')}</h2>
-          </div>
-          <p style="font-size:10px; margin-top:6px; color:var(--muted); text-align:left;">${t('hub_team_desc')}</p>
-        </div>
+      <!-- CARTÕES ORIGINAIS RESTRUCTURADOS PARA TELEMÓVEL -->
+      <div class="home-menu">
+        <div class="home-hub-card" onclick="navigateToHub('planeamento')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><div class="home-hub-text"><h2>${t('hub_plan_title')}</h2><p>${t('hub_plan_desc')}</p></div></div>
+        <div class="home-hub-card" onclick="navigateToHub('jogo')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><div class="home-hub-text"><h2>${t('hub_match_title')}</h2><p>${t('hub_match_desc')}</p></div></div>
+        <div class="home-hub-card" onclick="navigateToHub('estrategia')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="3"/></svg></div><div class="home-hub-text"><h2>${t('hub_strat_title')}</h2><p>${t('hub_strat_desc')}</p></div></div>
+        <div class="home-hub-card" onclick="navigateToHub('equipa')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div><div class="home-hub-text"><h2>${t('hub_team_title')}</h2><p>${t('hub_team_desc')}</p></div></div>
       </div>
     </div>
   </div>`;

@@ -308,7 +308,7 @@ const dict = {
 };
 
 let state = { 
-  roster: [], matches: [], trainings: [], schedule: [], tactics: [], tacticPaths: [], tacticalNotebook: [], videos: [], diary: [], leagues: [], fines: [],
+  roster: [], matches: [], trainings: [], schedule: [], tactics: [], tacticPaths: [], tacticalNotebook: [], videos: [], diary: [], leagues: [], fines: [], staff: [],
   tacticFormat: 11, lastBackupDate: null, trackSubs: true, theme: 'original', lang: 'pt', myClubName: '',
   showFairPlay: true, enableVideos: true, enableDiary: true, enableLeagues: true, enableFines: false, enableBirthdays: false, teamColor: '#D9A441', oppColor: '#C8493F', currentSeason: '', seasonFormat: 'europeu',
   tacticHalfPitch: false, rosterSortBy: 'posicao'
@@ -362,6 +362,7 @@ let expandedMatch = null; let expandedSchedule = null; let statsFilter = 'todos'
 let modalConfig = null; let expandedPlayer = null; let editingPlayerId = null; let trainingForm = null; let expandedTraining = null; let videoForm = null; let expandedVideo = null; let diaryForm = null; let expandedDiary = null;
 let schedulingNew = false; let editingSchId = null; let schForm = { isBatch: false, opp: '', date: '', time: '09:00', type: 'amigavel', loc: 'casa', phase: '', matchday: '', tournamentName: '', games: [] };
 let expandedLeague = null; let leagueForm = null; let editingLgMatch = null; let fineForm = null; 
+let selectedPlayerId = null;
 window.matchSeasonFilter = undefined;
 window.planSeasonFilter = undefined;
 
@@ -378,7 +379,7 @@ async function loadState(){
     if(res && res.value) {
        state = JSON.parse(res.value);
        if(!state.roster) state.roster = []; if(!state.matches) state.matches = []; if(!state.trainings) state.trainings = []; if(!state.schedule) state.schedule = [];
-       if(!state.tactics) state.tactics = []; if(!state.tacticPaths) state.tacticPaths = []; if(!state.tacticalNotebook) state.tacticalNotebook = []; if(!state.videos) state.videos = []; if(!state.diary) state.diary = []; if(!state.leagues) state.leagues = []; if(!state.fines) state.fines = [];
+       if(!state.tactics) state.tactics = []; if(!state.tacticPaths) state.tacticPaths = []; if(!state.tacticalNotebook) state.tacticalNotebook = []; if(!state.videos) state.videos = []; if(!state.diary) state.diary = []; if(!state.leagues) state.leagues = []; if(!state.fines) state.fines = []; if(!state.staff) state.staff = [];
        if(!state.tacticFormat) state.tacticFormat = 11;
        if(state.trackSubs === undefined) state.trackSubs = true;
        if(state.showFairPlay === undefined) state.showFairPlay = true;
@@ -420,7 +421,8 @@ function getAutoSaveStatusHTML() {
   return `<div style="font-size:11px; color:var(--muted); margin-top:8px; text-align:center; line-height: 1.3;">
     🟢 <strong>Dados gravados no dispositivo:</strong> ${dateStr}
   </div>`;
-}function escapeHTML(str) { if(!str) return ''; return String(str).replace(/[&<>'"]/g, match => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[match])); }
+}
+function escapeHTML(str) { if(!str) return ''; return String(str).replace(/[&<>'"]/g, match => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[match])); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
 function showToast(msg){ const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(showToast._t); showToast._t = setTimeout(()=>el.classList.remove('show'), 3000); }
 function getMyClub() { return state.myClubName && state.myClubName.trim() !== '' ? state.myClubName : t('def_club'); }
@@ -441,18 +443,18 @@ window.navigateToHub = function(hub) {
   else if(hub === 'estrategia') currentTab = 'tatica';
   else if(hub === 'equipa') currentTab = 'plantel';
   pending = null; pendingCard = null; pendingCaptain = false; pendingRatings = false; pendingSub = null;
-  schedulingNew = false; editingSchId = null; pendingLineupSet = []; editingPlayerId = null; editingLgMatch = null; fineForm = null;
+  schedulingNew = false; editingSchId = null; pendingLineupSet = []; editingPlayerId = null; editingLgMatch = null; fineForm = null; selectedPlayerId = null;
   render();
 };
 
 window.navigateToTab = function(tab) {
   currentTab = tab;
   pending = null; pendingCard = null; pendingCaptain = false; pendingRatings = false; pendingSub = null;
-  schedulingNew = false; editingSchId = null; pendingLineupSet = []; editingPlayerId = null; editingLgMatch = null; fineForm = null;
+  schedulingNew = false; editingSchId = null; pendingLineupSet = []; editingPlayerId = null; editingLgMatch = null; fineForm = null; selectedPlayerId = null;
   render();
 };
 
-window.goHome = function(){ currentHub = 'home'; currentTab = 'home'; render(); };
+window.goHome = function(){ currentHub = 'home'; currentTab = 'home'; selectedPlayerId = null; render(); };
 window.openSettings = function(){ modalConfig = { type: 'settings' }; document.getElementById('modal-root').innerHTML = renderModalHTML(); };
 window.setTheme = function(tName) { state.theme = tName; applyTheme(tName); saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); };
 window.setLanguage = function(lang) { state.lang = lang; saveState(); render(); document.getElementById('modal-root').innerHTML = renderModalHTML(); };
@@ -481,7 +483,6 @@ window.shiftSeason = function(dir) {
 
 function getPosRank(pos) {
     if(!pos || pos.trim() === '') return 99;
-    // Extrai unicamente a primeira posição (antes da primeira vírgula)
     let firstPos = pos.split(',')[0].trim().toUpperCase();
     
     if(firstPos.includes('GR') || firstPos.includes('GK')) return 1;
@@ -495,19 +496,19 @@ function sortPlayerObjs(arr) {
    const sortBy = state.rosterSortBy || 'posicao';
    return arr.sort((a, b) => { 
      if(sortBy === 'nome') { 
-       return (a.name||'').localeCompare(b.name||''); 
+        return (a.name||'').localeCompare(b.name||''); 
      } 
      else if(sortBy === 'posicao') { 
-       const rA = getPosRank(a.positions); 
-       const rB = getPosRank(b.positions);
-       if(rA !== rB) return rA - rB; 
-       return (a.name||'').localeCompare(b.name||''); 
+        const rA = getPosRank(a.positions); 
+        const rB = getPosRank(b.positions);
+        if(rA !== rB) return rA - rB; 
+        return (a.name||'').localeCompare(b.name||''); 
      } 
      else { 
-       const numA = (a.number !== null && a.number !== '' && !isNaN(a.number)) ? parseInt(a.number) : 9999; 
-       const numB = (b.number !== null && b.number !== '' && !isNaN(b.number)) ? parseInt(b.number) : 9999; 
-       if (numA !== numB) return numA - numB; 
-       return (a.name||'').localeCompare(b.name||''); 
+        const numA = (a.number !== null && a.number !== '' && !isNaN(a.number)) ? parseInt(a.number) : 9999; 
+        const numB = (b.number !== null && b.number !== '' && !isNaN(b.number)) ? parseInt(b.number) : 9999; 
+        if (numA !== numB) return numA - numB; 
+        return (a.name||'').localeCompare(b.name||''); 
      }
    }); 
 }
@@ -584,10 +585,13 @@ function formatSecsToMinSec(totalSecs) {
   return `${m}m ${s}s`;
 }
 
+function formatMinSec(secs) {
+  return formatSecsToMinSec(secs);
+}
+
 function getContrastColor(hexColor) {
     if(!hexColor) return '#FFF'; const hex = hexColor.replace('#', ''); const r = parseInt(hex.substr(0, 2), 16); const g = parseInt(hex.substr(2, 2), 16); const b = parseInt(hex.substr(4, 2), 16); const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000; return (yiq >= 128) ? '#000' : '#FFF';
 }
-
 window.uiAddTournamentGame = function(){ const last = schForm.games[schForm.games.length-1]; schForm.games.push({ id: uid(), phase: last ? last.phase : '', matchday: '', opp: '', date: last ? last.date : (schForm.date || new Date().toISOString().slice(0,10)), time: '10:00' }); render(); };
 window.uiRemoveTournamentGame = function(id){ schForm.games = schForm.games.filter(x=>x.id!==id); render(); };
 window.uiUpdateTournamentGame = function(id, field, val){ const g = schForm.games.find(x=>x.id===id); if(g) g[field] = val; };
@@ -748,6 +752,67 @@ window.wipeAllData = function() {
 
 function renderModalHTML(){
   if(!modalConfig) return '';
+
+  if(modalConfig.type === 'scouting') {
+    const s = state.schedule.find(x => x.id === modalConfig.schId);
+    const sc = (s && s.scouting) ? s.scouting : {};
+    const hasData = sc.system || sc.keyPlayers || sc.setPieces || sc.gamePlan;
+    
+    return `
+      <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
+        <div class="modal-card" style="max-width:440px; text-align:left;">
+          <h3 style="margin-top:0; color:var(--gold); text-align:center;">👁️ Scouting: ${s ? s.opponent : 'Adversário'}</h3>
+          
+          <div style="max-height:65vh; overflow-y:auto; padding-right:4px;">
+            <div class="grid-btns" style="margin-bottom:12px;">
+              <div class="field" style="margin-bottom:0;">
+                <label>Sistema Tático Base</label>
+                <input type="text" id="scout-system" placeholder="Ex: 1-4-3-3 ou 1-2-3-1" value="${sc.system || ''}">
+              </div>
+              <div class="field" style="margin-bottom:0;">
+                <label>Bloco Defensivo</label>
+                <select id="scout-block">
+                  <option value="Alto" ${sc.block==='Alto'?'selected':''}>🔴 Bloco Alto</option>
+                  <option value="Médio" ${sc.block==='Médio'?'selected':''}>🟡 Bloco Médio</option>
+                  <option value="Baixo" ${sc.block==='Baixo'?'selected':''}>🟢 Bloco Baixo</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>Construção / Saída de Bola</label>
+              <select id="scout-buildup">
+                <option value="Apoiada desde trás" ${sc.buildUp==='Apoiada desde trás'?'selected':''}>⚽ Apoiada (Curto)</option>
+                <option value="Jogo Direto / Bola Longa" ${sc.buildUp==='Jogo Direto / Bola Longa'?'selected':''}>🚀 Jogo Direto (Longo)</option>
+                <option value="Mista" ${sc.buildUp==='Mista'?'selected':''}>🔄 Mista</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>⚠️ Jogadores-Chave & Alertas Individuais</label>
+              <textarea id="scout-keyplayers" placeholder="Ex: Nº 10 muito forte no 1v1. Pressionar logo no 1º toque!">${sc.keyPlayers || ''}</textarea>
+            </div>
+
+            <div class="field">
+              <label>🎯 Bolas Paradas</label>
+              <textarea id="scout-setpieces" placeholder="Ex: Cantos marcados ao 1º pau. Marcação mista.">${sc.setPieces || ''}</textarea>
+            </div>
+
+            <div class="field">
+              <label>💡 O Nosso Plano de Jogo</label>
+              <textarea id="scout-gameplan" placeholder="Ex: Atrair por dentro e explorar a largura no lado fraco.">${sc.gamePlan || ''}</textarea>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:10px; margin-top:14px;">
+            <button class="btn btn-outline" style="flex:1;" onclick="closeModal()">Cancelar</button>
+            ${hasData ? `<button class="btn btn-red" style="flex:none; padding:0 14px;" onclick="deleteScoutingData('${modalConfig.schId}')" title="Apagar Análise">🗑️</button>` : ''}
+            <button class="btn btn-gold" style="flex:1;" onclick="saveScoutingData('${modalConfig.schId}')">💾 Guardar</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
   if(modalConfig.type === 'settings') {
      const sizeKB = (JSON.stringify(state).length / 1024); const maxKB = 5120; const pct = Math.min(100, (sizeKB/maxKB)*100);
      let strColor = pct > 90 ? 'var(--red)' : (pct > 70 ? 'var(--yellow)' : 'var(--green)');
@@ -803,7 +868,7 @@ function renderModalHTML(){
                  </div>
                  <div class="seg" style="margin-top:10px;">
                   <div class="seg-btn ${state.seasonFormat==='europeu'?'active':''}" onclick="event.stopPropagation(); if(state.seasonFormat!=='europeu' && confirm('Alterar o formato para Época Europeia (ex: 26/27)?')) { state.seasonFormat='europeu'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render(); }">${t('set_season_eu')}</div>
-<div class="seg-btn ${state.seasonFormat==='civil'?'active':''}" onclick="event.stopPropagation(); if(state.seasonFormat!=='civil' && confirm('Alterar o formato para Ano Civil (ex: 2026)?')) { state.seasonFormat='civil'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); }">${t('set_season_civ')}</div>
+                  <div class="seg-btn ${state.seasonFormat==='civil'?'active':''}" onclick="event.stopPropagation(); if(state.seasonFormat!=='civil' && confirm('Alterar o formato para Ano Civil (ex: 2026)?')) { state.seasonFormat='civil'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); }">${t('set_season_civ')}</div>
                 </div>
              </div>
 
@@ -825,11 +890,19 @@ function renderModalHTML(){
        </div>
      </div>`;
   }
+
   if(modalConfig.type === 'archiveSeason') {
      return `<div class="modal-overlay"><div class="modal-card"><h3 style="margin-top:0; color:var(--red);">${t('archive_title')}</h3><p style="font-size:13px; text-align:left; color:var(--chalk);">${t('archive_desc')}</p><div style="background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:20px;"><p style="font-size:12px; font-weight:bold; color:var(--gold); margin-top:0; margin-bottom:10px;">${t('archive_warn')}</p><div style="display:flex; flex-direction:column; gap:8px;"><button class="btn btn-ghost" style="font-size:12px;" onclick="exportReportPDF()">📄 ${t('exp_pdf')}</button><button class="btn btn-ghost" style="font-size:12px;" onclick="exportData()">💾 ${t('exp_json')}</button></div></div><div style="display:flex; gap:10px;"><button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button><button class="btn btn-red" onclick="doArchiveSeason()">${t('archive_btn')}</button></div></div></div>`;
   }
-  if(modalConfig.type === 'finishMatch') { return `<div class="modal-overlay"><div class="modal-card"><p style="font-weight:600; font-size:16px;">${t('msg_not_started')}</p><p style="font-size:13px;">${t('msg_not_started_desc')}</p><div style="display:flex; flex-direction:column; gap:10px;"><button class="btn btn-gold" onclick="confirmFinishMatch('save')">${t('msg_save_game')}</button><button class="btn btn-red" style="flex-direction:column; gap:2px; padding:10px;" onclick="confirmFinishMatch('discard')"><span>${t('msg_exit_nosave')}</span><span style="font-size:10px; font-weight:normal; text-transform:none; letter-spacing:0; opacity:0.8;">${t('msg_exit_desc')}</span></button><button class="btn btn-outline" onclick="confirmFinishMatch('cancel')">${t('cancel')}</button></div></div></div>`; }
-  if(modalConfig.type === 'askRatings') { return `<div class="modal-overlay"><div class="modal-card"><p style="font-weight:600; font-size:16px;">${t('msg_match_ended')}</p><p style="font-size:13px;">${t('msg_ask_rate')}</p><div style="display:flex; flex-direction:column; gap:10px;"><button class="btn btn-gold" onclick="closeModal(); pendingRatings=true; render();">${t('msg_yes_rate')}</button><button class="btn btn-outline" onclick="closeModal(); doFinishMatch();">${t('msg_no_rate')}</button></div></div></div>`; }
+
+  if(modalConfig.type === 'finishMatch') { 
+     return `<div class="modal-overlay"><div class="modal-card"><p style="font-weight:600; font-size:16px;">${t('msg_not_started')}</p><p style="font-size:13px;">${t('msg_not_started_desc')}</p><div style="display:flex; flex-direction:column; gap:10px;"><button class="btn btn-gold" onclick="confirmFinishMatch('save')">${t('msg_save_game')}</button><button class="btn btn-red" style="flex-direction:column; gap:2px; padding:10px;" onclick="confirmFinishMatch('discard')"><span>${t('msg_exit_nosave')}</span><span style="font-size:10px; font-weight:normal; text-transform:none; letter-spacing:0; opacity:0.8;">${t('msg_exit_desc')}</span></button><button class="btn btn-outline" onclick="confirmFinishMatch('cancel')">${t('cancel')}</button></div></div></div>`; 
+  }
+
+  if(modalConfig.type === 'askRatings') { 
+     return `<div class="modal-overlay"><div class="modal-card"><p style="font-weight:600; font-size:16px;">${t('msg_match_ended')}</p><p style="font-size:13px;">${t('msg_ask_rate')}</p><div style="display:flex; flex-direction:column; gap:10px;"><button class="btn btn-gold" onclick="closeModal(); pendingRatings=true; render();">${t('msg_yes_rate')}</button><button class="btn btn-outline" onclick="closeModal(); doFinishMatch();">${t('msg_no_rate')}</button></div></div></div>`; 
+  }
+
   return `<div class="modal-overlay"><div class="modal-card"><p>${modalConfig.message}</p><div style="display:flex; gap:10px;"><button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button><button class="btn btn-red" onclick="confirmModal()">${t('confirm')}</button></div></div></div>`;
 }
 
@@ -837,7 +910,6 @@ function topbarHtml(title){
   return `<div class="topbar"><div style="display:flex; align-items:center;"><span class="topbar-home" onclick="goHome()" title="${t('nav_home_lbl')}"><span class="topbar-home-icon">${ballIconSvg()}</span><span class="topbar-home-label">${t('nav_home_lbl')}</span></span><h1 style="margin-left:10px;">${title}</h1></div><span class="topbar-settings" onclick="openSettings()">⚙️</span></div>`; 
 }
 function ballIconSvg(){ return `<svg style="width:100%; height:100%;" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="none" stroke="var(--gold)" stroke-width="4"/><polygon points="50,29 63,39 58,55 42,55 37,39" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round"/><path d="M50 29 L50 9 M63 39 L81 30 M58 55 L71 71 M42 55 L29 71 M37 39 L19 30" stroke="var(--gold)" stroke-width="3" fill="none" stroke-linecap="round"/></svg>`; }
-
 function matchNarrativeHtml(m, isLocked = false){
   const tm = m.timeline || {}; const cards = m.cards || []; const subs = m.subs || [];
   const eventsForHalf = (half) => {
@@ -859,7 +931,6 @@ function renderHome(){
   const active = getActiveMatch(); 
   let backupWarning = '';
 
-  // 1. Alerta de Backup Atrasado
   if(state.lastBackupDate && state.matches.length > 0) { 
     const daysSince = (Date.now() - state.lastBackupDate) / (1000 * 60 * 60 * 24); 
     if(daysSince > 7) {
@@ -870,7 +941,6 @@ function renderHome(){
     }
   }
 
-  // 2. Alerta de Aniversários
   let bdayHtml = ''; 
   const nextBday = getNextBirthday();
   if(nextBday) {
@@ -884,7 +954,6 @@ function renderHome(){
     bdayHtml = `<div style="background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:12px; font-size:12px; text-align:center;">${msg}</div>`;
   }
 
-  // 3. Alerta de Próximo Jogo Agendado
   let nextMatchHtml = '';
   const upcomingGames = (state.schedule || [])
     .filter(s => (s.season || state.currentSeason) === state.currentSeason)
@@ -917,7 +986,6 @@ function renderHome(){
       </div>`;
   }
 
-  // 4. Alerta Inteligente de Treino (Separa Atrasados de Próximos)
   let pendingTrainingsHtml = '';
   const todayStr = new Date().toISOString().slice(0,10);
   const pendingTrs = (state.trainings || [])
@@ -964,14 +1032,12 @@ function renderHome(){
       <div class="home-sub" style="margin-bottom:2px;">${t('home_sub')}</div>
       <div style="font-size:11px; color:var(--gold); margin-bottom:14px; font-weight:bold; letter-spacing:0.5px;">by Pedro Silva</div>
       
-      <!-- CENTRAL DE ALERTAS INTELIGENTES -->
       ${bdayHtml}
       ${pendingTrainingsHtml}
       ${nextMatchHtml}
 
       ${active ? `<button class="home-btn" style="margin-bottom:12px; border-color:var(--gold);" onclick="navigateToHub('jogo')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>${t('home_cont')}</button>` : ''}
       
-      <!-- CARTÕES ORIGINAIS RESTRUCTURADOS PARA TELEMÓVEL -->
       <div class="home-menu">
         <div class="home-hub-card" onclick="navigateToHub('planeamento')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><div class="home-hub-text"><h2>${t('hub_plan_title')}</h2><p>${t('hub_plan_desc')}</p></div></div>
         <div class="home-hub-card" onclick="navigateToHub('jogo')"><div class="home-hub-icon"><svg style="width:22px; height:22px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><div class="home-hub-text"><h2>${t('hub_match_title')}</h2><p>${t('hub_match_desc')}</p></div></div>
@@ -1150,7 +1216,6 @@ window.exportTacticPNG = async function() {
       if (!blob) { showToast('Erro ao gerar imagem.'); return; }
       const file = new File([blob], `esquema-tatico-${new Date().toISOString().slice(0,10)}.png`, { type: 'image/png' });
       
-      // Tenta a partilha direta nativa do telemóvel (WhatsApp, etc.)
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({
@@ -1163,7 +1228,6 @@ window.exportTacticPNG = async function() {
           if (e.name !== 'AbortError') showToast('Erro ao partilhar.');
         }
       } else {
-        // Fallback: download direto se a partilha de ficheiros não for suportada
         const link = document.createElement('a');
         link.download = file.name;
         link.href = URL.createObjectURL(blob);
@@ -1201,7 +1265,6 @@ window.exportTacticPDF = function() {
       
     document.getElementById('print-area').innerHTML = html;
     
-    // Pequena pausa (300ms) para garantir que o browser carrega a imagem no DOM antes de imprimir
     setTimeout(() => {
       window.print();
     }, 300);
@@ -1327,7 +1390,6 @@ window.exportCallupPDF = function(schId) {
   let locLabel = s.location === 'casa' ? 'CASA' : 'FORA';
   let matchTitle = s.location === 'casa' ? `${getMyClub()} 🆚 ${s.opponent}` : `${s.opponent} 🆚 ${getMyClub()}`;
 
-  // Jogadores Convocados
   const called = sortPlayerObjs(eligiblePlayers().filter(p => s.callup.includes(p.id)));
   let rowsHtml = '';
   if (called.length === 0) {
@@ -1344,7 +1406,6 @@ window.exportCallupPDF = function(schId) {
     });
   }
 
-  // Staff Convocado (Apenas os selecionados para este jogo)
   const selectedStaffIds = s.staffCallup || [];
   const staffList = (state.staff || []).filter(st => selectedStaffIds.includes(st.id));
   let staffRowsHtml = '';
@@ -1423,6 +1484,111 @@ window.exportCallupPDF = function(schId) {
   window.print();
 };
 
+window.openScouting = function(schId) {
+  const s = state.schedule.find(x => x.id === schId);
+  if (!s) return;
+  if (!s.scouting) {
+    s.scouting = {
+      system: '',
+      block: 'Médio',
+      buildUp: 'Apoiada desde trás',
+      keyPlayers: '',
+      setPieces: '',
+      gamePlan: ''
+    };
+  }
+  modalConfig = { type: 'scouting', schId: schId };
+  const root = document.getElementById('modal-root');
+  if (root) root.innerHTML = renderModalHTML();
+};
+
+window.saveScoutingData = function(schId) {
+  const s = state.schedule.find(x => x.id === schId);
+  if (!s) return;
+  if (!s.scouting) s.scouting = {};
+
+  const cleanText = (str) => (str || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  s.scouting.system = cleanText(document.getElementById('scout-system')?.value);
+  s.scouting.block = document.getElementById('scout-block')?.value || 'Médio';
+  s.scouting.buildUp = document.getElementById('scout-buildup')?.value || 'Apoiada desde trás';
+  s.scouting.keyPlayers = cleanText(document.getElementById('scout-keyplayers')?.value);
+  s.scouting.setPieces = cleanText(document.getElementById('scout-setpieces')?.value);
+  s.scouting.gamePlan = cleanText(document.getElementById('scout-gameplan')?.value);
+
+  saveState();
+  closeModal();
+  showToast('Análise de Scouting gravada! 👁️');
+  render();
+};
+
+window.deleteScoutingData = function(schId) {
+  const s = state.schedule.find(x => x.id === schId);
+  if (!s || !s.scouting) return;
+  
+  if (confirm('Tem a certeza que deseja eliminar a análise de scouting deste jogo?')) {
+    delete s.scouting;
+    saveState();
+    closeModal();
+    showToast('Análise de scouting eliminada! 🗑️');
+    render();
+  }
+};
+
+window.exportScoutingPDF = function(schId) {
+  const s = state.schedule.find(x => x.id === schId);
+  if (!s || !s.scouting) {
+    showToast('Sem dados de scouting para exportar.');
+    return;
+  }
+
+  const sc = s.scouting;
+  const dateStr = s.date.split('-').reverse().join('/');
+  const matchTitle = s.location === 'casa' ? `${getMyClub()} vs ${s.opponent}` : `${s.opponent} vs ${getMyClub()}`;
+
+  let html = `
+    <div class="print-card">
+      <div class="print-header">
+        <h1>RELATÓRIO DE SCOUTING & ANÁLISE TÁTICA</h1>
+        <p style="font-size:18px; font-weight:bold; margin-top:5px; color:#000;">${matchTitle}</p>
+        <p style="font-size:13px; color:#444;">Data: ${dateStr} | Hora: ${s.time} | Época: ${s.season || state.currentSeason}</p>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; background:#EEE; padding:12px; border-radius:6px; margin-bottom:20px; border:1px solid #DDD; text-align:center; font-size:12px;">
+        <div><b>Sistema Tático Base:</b><br><span style="font-size:15px; font-weight:bold; color:#000;">${sc.system || 'N/A'}</span></div>
+        <div><b>Bloco / Pressionamento:</b><br><span style="font-size:15px; font-weight:bold; color:#000;">${sc.block || 'N/A'}</span></div>
+        <div><b>Saída de Bola:</b><br><span style="font-size:15px; font-weight:bold; color:#000;">${sc.buildUp || 'N/A'}</span></div>
+      </div>
+
+      <h3 style="margin-bottom:8px; color:#000; border-bottom:2px solid #000; padding-bottom:4px;">⚠️ Destaques Individuais / Pontos Fortes</h3>
+      <div style="white-space:pre-wrap; border:1px solid #CCC; padding:12px; border-radius:6px; background:#FFF; min-height:80px; font-size:12px; margin-bottom:20px; line-height:1.5;">
+        ${sc.keyPlayers || 'Sem observações registadas.'}
+      </div>
+
+      <h3 style="margin-bottom:8px; color:#000; border-bottom:2px solid #000; padding-bottom:4px;">🎯 Bolas Paradas do Adversário</h3>
+      <div style="white-space:pre-wrap; border:1px solid #CCC; padding:12px; border-radius:6px; background:#FFF; min-height:60px; font-size:12px; margin-bottom:20px; line-height:1.5;">
+        ${sc.setPieces || 'Sem observações registadas.'}
+      </div>
+
+      <h3 style="margin-bottom:8px; color:#000; border-bottom:2px solid #000; padding-bottom:4px;">💡 O Nosso Plano de Jogo & Estratégia</h3>
+      <div style="white-space:pre-wrap; border:1px solid #000; padding:12px; border-radius:6px; background:#F9F9F9; min-height:100px; font-size:12px; margin-bottom:20px; line-height:1.5; font-weight:bold;">
+        ${sc.gamePlan || 'Sem plano estratégico definido.'}
+      </div>
+
+      <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
+        <div style="font-size:10px; color:#666;">
+          <p style="margin:2px 0;">• Documento interno de preparação tática — Coachfolio v2.7</p>
+        </div>
+        <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">
+          A Equipa Técnica
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
+};
+
 function renderCalendario(){
   if(schedulingNew){
     if(!schForm.date) schForm.date = new Date().toISOString().slice(0,10);
@@ -1443,7 +1609,7 @@ function renderCalendario(){
     <div class="panel-title" style="margin-top:12px; margin-bottom:8px; color:var(--gold);">👔 Equipa Técnica Presença</div>
     <div class="grid-btns cols-4">${(state.staff || []).map(st => `<div class="chip chip-sm ${(s.staffCallup || []).includes(st.id)?'active-green':''}" onclick="event.stopPropagation(); window.toggleStaffCallup('${s.id}', '${st.id}')">${st.name}</div>`).join('')}</div>
     
-    <div class="btn-row" style="margin-top:12px;"><button class="btn btn-green" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.copyCallup('${s.id}')">WhatsApp 📋</button><button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.exportCallupPDF('${s.id}')">📄 Folha PDF</button><button class="btn btn-ghost" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')">${t('sch_start')}</button></div></div>` : ''}</div>`; }).join('') : `<div class="empty">${t('sch_none')}</div>`}`;
+    <div class="btn-row" style="margin-top:12px;"><button class="btn btn-green" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.copyCallup('${s.id}')">WhatsApp 📋</button><button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.exportCallupPDF('${s.id}')">📄 Folha PDF</button><button class="btn btn-ghost" style="font-size:11px; padding:10px; color:var(--gold); border:1px solid var(--gold-dim);" onclick="event.stopPropagation(); window.openScouting('${s.id}')">👁️ Scouting</button>${s.scouting ? `<button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.exportScoutingPDF('${s.id}')">📄 PDF Scouting</button>` : ''}<button class="btn btn-ghost" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')">${t('sch_start')}</button></div></div>` : ''}</div>`; }).join('') : `<div class="empty">${t('sch_none')}</div>`}`;
 }
 
 window.uiSaveTraining = function(){ 
@@ -1452,8 +1618,6 @@ window.uiSaveTraining = function(){
   }
   
   const existingTr = trainingForm.id ? state.trainings.find(t => t.id === trainingForm.id) : null;
-  
-  // Só fica completed se já estivesse concluído previamente
   let targetStatus = (existingTr && existingTr.status === 'completed') ? 'completed' : 'pending';
   
   const trData = {
@@ -1778,7 +1942,7 @@ window.exportMatchPDF = function(mId){
 
   let goalsHtml = '';
   (m.goals||[]).forEach(g => {
-     let desc = g.type==='scored' ? `⚽ ${playerName(g.scorerId)} ${g.assistId&&g.assistId!=='none'? '(Ast: '+playerName(g.assistId)+')':''}` : `🥅 Golo Sofrido`;
+     let desc = g.type==='scored' ? `⚽ ${playerName(g.scorerId)} ${g.assistId&&g.assistId!=='none'? '(Ast: '+playerName(g.assistId)+')':''}` : `局 Golo Sofrido`;
      let min = g.minute != null ? g.minute+"'" : (g.half===1?"1ªP":"2ªP");
      goalsHtml += `<tr><td>${min}</td><td style="text-align:left; font-weight:bold;">${desc}</td></tr>`;
   });
@@ -1787,6 +1951,17 @@ window.exportMatchPDF = function(mId){
   (m.cards||[]).forEach(c => {
     cardsHtml += `<tr><td>${c.minute != null ? c.minute+"'" : '-'}</td><td style="text-align:left;">${c.color==='Amarelo'?'🟨':'🟥'} ${playerName(c.playerId)}</td></tr>`;
   });
+
+  const selectedStaffIds = m.originalSchedule?.staffCallup || [];
+  const staffList = (state.staff || []).filter(st => selectedStaffIds.includes(st.id));
+  let staffRowsHtml = '';
+  if (staffList.length === 0) {
+    staffRowsHtml = '<tr><td colspan="2" style="text-align:center; padding:6px; color:#666;">Equipa Técnica / Delegado não registados.</td></tr>';
+  } else {
+    staffList.forEach(st => {
+      staffRowsHtml += `<tr><td style="text-align:left; font-weight:bold;">${st.name}</td><td style="text-align:center; color:#444;">${st.role || 'Equipa Técnica'}</td></tr>`;
+    });
+  }
 
   let html = `<div class="print-card">
     <div class="print-header">
@@ -1802,6 +1977,8 @@ window.exportMatchPDF = function(mId){
       <div style="flex:1;">
         <h3>Substituições</h3>
         <table><tr><th>Min</th><th style="text-align:left;">Saiu</th><th style="text-align:left;">Entrou</th></tr>${subsHtml||'<tr><td colspan="3">Sem registo</td></tr>'}</table>
+        <h3 style="margin-top:15px;">Equipa Técnica Presente</h3>
+        <table><tr><th style="text-align:left;">Nome</th><th>Função</th></tr>${staffRowsHtml}</table>
         <h3 style="margin-top:15px;">Cartões</h3>
         <table><tr><th>Min</th><th style="text-align:left;">Jogador</th></tr>${cardsHtml||'<tr><td colspan="2">Sem registo</td></tr>'}</table>
       </div>
@@ -1920,7 +2097,7 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
 
 function generatePlayerBarsHTML(stats, maxStats) {
     const attrs = [
-        { label: 'MINS', val: stats.minutos, max: maxStats.minutos || 1, color: 'var(--gold)' },
+        { label: 'MINS', val: Math.round((stats.minutos || 0) / 60), max: Math.round((maxStats.minutos || 1) / 60) || 1, color: 'var(--gold)' },
         { label: 'GOLOS', val: stats.golos, max: maxStats.golos || 1, color: 'var(--chalk)' },
         { label: 'ASSIST', val: stats.assistencias, max: maxStats.assist || 1, color: 'var(--muted)' },
         { label: 'TITUL.', val: stats.jogosTitular, max: maxStats.jogos || 1, color: 'var(--green)' }
@@ -1980,8 +2157,6 @@ function renderStats(){
       let tableHtml = `<div class="stats-table-wrapper"><table class="stats-table"><tr><th class="p-name">Nome</th><th>T</th><th>P(%)</th><th>J</th><th>Mins</th><th>G</th><th>A</th><th>🟨</th><th>🟥</th></tr>`;
       roster.forEach(p => {
           const st = calcularEstatisticaJogador(p.id, activeSeason); 
-          
-          // CÁLCULO CORRIGIDO: Baseado nos minutos reais cumpridos vs minutos totais da equipa
           const pPct = st.minutosTreinoTotais > 0 ? Math.round((st.minutosTreinoCumpridos / st.minutosTreinoTotais)*100) : 0;
 
           tableHtml += `<tr onclick="expandedPlayer='${p.id}'; navigateToTab('plantel');" style="cursor:pointer;">
@@ -2179,130 +2354,301 @@ window.deleteStaffMember = function(id) {
   showToast('Elemento removido.');
 };
 
-function renderPlantel(){
+window.exportPlayerPDF = function(playerId) {
+  const p = (state.roster || []).find(x => x.id === playerId);
+  if (!p) {
+    showToast('Atleta não encontrado.');
+    return;
+  }
+
+  const currentMatches = (state.matches || []).filter(m => (m.season || state.currentSeason) === state.currentSeason);
+  let totalSecs = 0, totalGoals = 0, totalAssists = 0, yellowCards = 0, redCards = 0, matchCount = 0;
+
+  currentMatches.forEach(m => {
+    let pMins = calcPlayerMinutes(m, p.id);
+    if (pMins > 0) {
+      totalSecs += pMins;
+      matchCount++;
+    }
+    if (m.goals) {
+      m.goals.forEach(g => {
+        if (g.scorerId === p.id) totalGoals++;
+        if (g.assistId === p.id) totalAssists++;
+      });
+    }
+    if (m.cards) {
+      m.cards.forEach(c => {
+        if (c.playerId === p.id) {
+          if (c.color === 'Amarelo') yellowCards++;
+          if (c.color === 'Vermelho') redCards++;
+        }
+      });
+    }
+  });
+
+  const currentTrainings = (state.trainings || []).filter(t => (t.season || state.currentSeason) === state.currentSeason);
+  let presences = 0;
+  currentTrainings.forEach(tr => {
+    let isAbsent = false;
+    if (Array.isArray(tr.absences)) isAbsent = tr.absences.includes(p.id);
+    else if (tr.absences && tr.absences[p.id]) isAbsent = true;
+    if (!isAbsent) presences++;
+  });
+  const trainPct = currentTrainings.length ? Math.round((presences / currentTrainings.length) * 100) : 0;
+
+  let html = `
+    <div class="print-card">
+      <div class="print-header">
+        <h1>FICHA DE RENDIMENTO INDIVIDUAL</h1>
+        <p style="font-size:22px; font-weight:bold; margin-top:5px; color:#000;">#${p.number || '-'} ${p.name}</p>
+        <p style="font-size:13px; color:#444;">Clube: <b>${getMyClub()}</b> | Época: <b>${state.currentSeason}</b></p>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; background:#F8F8F8; padding:15px; border-radius:6px; border:1px solid #DDD; margin-bottom:20px; font-size:12px;">
+        <div><b>Posição Principal:</b> ${p.positions || 'Não definida'}</div>
+        <div><b>Data de Nascimento:</b> ${p.birthDate || 'N/A'}</div>
+      </div>
+
+      <h3 style="margin-bottom:10px; border-bottom:2px solid #000; padding-bottom:4px;">📊 Estatísticas de Competição</h3>
+      <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; text-align:center; margin-bottom:20px;">
+        <div style="border:1px solid #CCC; padding:10px; border-radius:6px;">
+          <span style="font-size:10px; color:#666; text-transform:uppercase;">Jogos</span><br>
+          <b style="font-size:18px;">${matchCount}</b>
+        </div>
+        <div style="border:1px solid #CCC; padding:10px; border-radius:6px;">
+          <span style="font-size:10px; color:#666; text-transform:uppercase;">Tempo Total</span><br>
+          <b style="font-size:18px;">${formatMinSec(totalSecs)}</b>
+        </div>
+        <div style="border:1px solid #CCC; padding:10px; border-radius:6px;">
+          <span style="font-size:10px; color:#666; text-transform:uppercase;">Golos / Assist.</span><br>
+          <b style="font-size:18px;">${totalGoals} / ${totalAssists}</b>
+        </div>
+        <div style="border:1px solid #CCC; padding:10px; border-radius:6px;">
+          <span style="font-size:10px; color:#666; text-transform:uppercase;">Cartões (🟨/🟥)</span><br>
+          <b style="font-size:18px;">${yellowCards} / ${redCards}</b>
+        </div>
+      </div>
+
+      <h3 style="margin-bottom:10px; border-bottom:2px solid #000; padding-bottom:4px;">🏋️ Treino & Assiduidade</h3>
+      <div style="display:flex; justify-content:space-between; background:#FFF; border:1px solid #CCC; padding:12px; border-radius:6px; margin-bottom:20px; font-size:12px;">
+        <div><b>Sessões de Treino Realizadas:</b> ${currentTrainings.length}</div>
+        <div><b>Presenças do Atleta:</b> ${presences}</div>
+        <div><b>Taxa de Assiduidade:</b> <b style="color:#000;">${trainPct}%</b></div>
+      </div>
+
+      <h3 style="margin-bottom:10px; border-bottom:2px solid #000; padding-bottom:4px;">📝 Avaliação Qualitativa do Treinador</h3>
+      <div style="border:1px solid #000; padding:15px; border-radius:6px; min-height:120px; font-size:12px; background:#FAFAFA;">
+        ${p.notes || 'Sem observações adicionais registadas na ficha do atleta.'}
+      </div>
+
+      <div style="margin-top:40px; display:flex; justify-content:space-between; align-items:flex-end;">
+        <div style="font-size:10px; color:#666;">Relatório Individual Emitido por Coachfolio v2.7</div>
+        <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">O Treinador / Coordenação</div>
+      </div>
+    </div>`;
+
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
+};
+
+window.renderPlantel = function() {
   const activeRoster = eligiblePlayers();
-  let totalMins = 0; let totalPlayersWithMins = 0;
-  if(state.showFairPlay) { activeRoster.forEach(p => { const st = calcularEstatisticaJogador(p.id); if(st.minutos > 0) { totalMins += st.minutos; totalPlayersWithMins++; } }); }
-  const avgMins = totalPlayersWithMins > 0 ? (totalMins / totalPlayersWithMins) : 0;
+  let totalMins = 0; 
+  let totalPlayersWithMins = 0;
+  if (state.showFairPlay) { 
+    activeRoster.forEach(p => { 
+      const st = calcularEstatisticaJogador(p.id); 
+      if (st && st.totalSegundosJogo > 0) { 
+        totalMins += st.totalSegundosJogo; 
+        totalPlayersWithMins++; 
+      } 
+    }); 
+  }
 
   let html = `${topbarHtml(t('hub_team_title'))}${renderTeamSubHeader()}`;
 
-  // Seletor de Sub-Aba: Jogadores vs Equipa Técnica
+  // Seletor de Sub-Aba: Jogadores vs Staff
   html += `
     <div class="seg" style="margin-bottom:14px;">
-      <div class="seg-btn ${staffSubTab==='jogadores'?'active':''}" onclick="switchStaffTab('jogadores')">🏃 Jogadores</div>
-      <div class="seg-btn ${staffSubTab==='staff'?'active':''}" onclick="switchStaffTab('staff')">👔 Equipa Técnica</div>
+      <div class="seg-btn ${staffSubTab==='jogadores'?'active':''}" onclick="switchStaffTab('jogadores')">🏃 Jogadores (${activeRoster.length})</div>
+      <div class="seg-btn ${staffSubTab==='staff'?'active':''}" onclick="switchStaffTab('staff')">👔 Equipa Técnica (${(state.staff || []).length})</div>
     </div>
   `;
 
-  // VISTA 1: EQUIPA TÉCNICA
-  if (staffSubTab === 'staff') {
-    if (staffForm) {
-      return html + `
-        <div class="card">
-          <div class="field"><label>Nome</label><input type="text" placeholder="Ex: João Silva" value="${staffForm.name || ''}" oninput="staffForm.name=this.value"></div>
-          <div class="field"><label>Cargo / Função</label><input type="text" placeholder="Ex: Treinador Adjunto, Fisioterapeuta..." value="${staffForm.role || ''}" oninput="staffForm.role=this.value"></div>
-          <div class="field"><label>Telefone</label><input type="tel" placeholder="912 345 678" value="${staffForm.phone || ''}" oninput="staffForm.phone=this.value"></div>
-          <div class="field" style="margin-bottom:0;"><label>E-mail</label><input type="email" placeholder="email@exemplo.com" value="${staffForm.email || ''}" oninput="staffForm.email=this.value"></div>
-        </div>
-        <button class="btn btn-gold" style="width:100%; margin-bottom:10px;" onclick="saveStaffMember()">💾 Guardar Elemento</button>
-        <button class="btn btn-outline" style="width:100%;" onclick="staffForm=null; render()">Cancelar</button>
-      `;
-    }
-
-    const list = state.staff || [];
-    html += `<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="staffForm={name:'', role:'', phone:'', email:''}; render()">+ Novo Elem. Técnico</button>`;
-    if (list.length === 0) {
-      html += `<div class="empty">Nenhum elemento na Equipa Técnica.</div>`;
+  // 1. SEPARADOR DE JOGADORES
+  if (staffSubTab === 'jogadores') {
+    if (activeRoster.length === 0) {
+      html += `<div class="empty">${t('pl_none')}</div>
+        <div class="add-row" style="margin-bottom:15px;"><input id="new-player-input" type="text" placeholder="${t('pl_add_ph')}"><button onclick="uiAddPlayer()">+</button></div>`;
     } else {
-      list.forEach(s => {
-        html += `
-          <div class="card match-item" style="margin-bottom:8px;">
-            <div class="match-head-row">
-              <div class="match-head" style="flex:1;">
-                <div>
-                  <div class="opp">${s.name}</div>
-                  <div style="font-size:11px; color:var(--gold); font-weight:700; margin-top:2px;">${s.role || 'Membro da Equipa Técnica'}</div>
-                  ${s.phone ? `<div style="font-size:10px; color:var(--muted); margin-top:2px;">📞 ${s.phone}</div>` : ''}
-                </div>
-              </div>
-              <div style="display:flex; gap:6px;">
-                <button class="quick-del" onclick="staffForm={...state.staff.find(x=>x.id==='${s.id}')}; render()">✏️</button>
-                <button class="quick-del" onclick="askConfirm('Remover este elemento?', ()=>deleteStaffMember('${s.id}'))">🗑</button>
-              </div>
+      // Máximos do plantel para calibrar as barras visuais
+      let maxStats = { minutos: 1, golos: 1, assist: 1, jogos: 1 };
+      activeRoster.forEach(pl => {
+        const s = calcularEstatisticaJogador(pl.id);
+        if (s.totalSegundosJogo > maxStats.minutos) maxStats.minutos = s.totalSegundosJogo;
+        if (s.golos > maxStats.golos) maxStats.golos = s.golos;
+        if (s.assistencias > maxStats.assist) maxStats.assist = s.assistencias;
+        if (s.jogosTitular > maxStats.jogos) maxStats.jogos = s.jogosTitular;
+      });
+
+      html += `<div style="display:flex; flex-direction:column; gap:0px; margin-bottom:15px;">`;
+
+      sortPlayerObjs(activeRoster).forEach(p => {
+        const isExpanded = expandedPlayer === p.id;
+        const isEditing = editingPlayerId === p.id;
+        const st = calcularEstatisticaJogador(p.id);
+        const age = p.birthDate ? computeAge(p.birthDate) : null;
+
+        // Posições com badges dourados
+        let posBadges = '';
+        if (p.positions && p.positions.trim() !== '') {
+          posBadges = p.positions.split(',').map(pos => `<span style="background:var(--gold-dim); color:var(--gold); border:1px solid var(--gold); border-radius:4px; padding:1px 5px; font-size:9px; font-weight:bold; margin-right:4px;">${pos.trim()}</span>`).join('');
+        }
+
+        html += `<div class="player-item">
+          <!-- CABEÇALHO DO JOGADOR NA LISTA -->
+          <div class="player-row" style="padding:12px 6px;" onclick="expandedPlayer = expandedPlayer === '${p.id}' ? null : '${p.id}'; editingPlayerId = null; render();">
+            <div style="display:flex; align-items:center; gap:8px; text-align:left;">
+              <span style="color:var(--gold); font-weight:bold; font-size:15px;" class="mono">#${p.number !== null && p.number !== undefined && p.number !== '' ? p.number : ''}</span>
+              <span style="font-weight:bold; color:var(--chalk); font-size:15px;">${p.name || t('pl_no_name')}</span>
+              ${posBadges}
+              ${age !== null ? `<span style="font-size:12px; color:var(--muted); font-weight:normal;">- ${age} ${t('pl_yrs')}</span>` : ''}
             </div>
           </div>`;
+
+        // CARTÃO EXPANDIDO (EXATAMENTE COMO NA FOTO)
+        if (isExpanded) {
+          if (isEditing) {
+            // MODO DE EDIÇÃO DOS DADOS
+            html += `<div style="background:var(--surface); border:1px solid var(--gold); border-radius:12px; padding:14px; margin:8px 0 14px; text-align:left;">
+              <div class="panel-title" style="color:var(--gold); margin-bottom:10px;">${t('pl_edit')}</div>
+              <div class="grid-btns" style="margin-bottom:10px;">
+                <div class="field" style="margin-bottom:0;"><label>${t('pl_num')}</label><input type="number" value="${p.number || ''}" onchange="updatePlayerNumber('${p.id}', this.value)"></div>
+                <div class="field" style="margin-bottom:0;"><label>${t('pl_name')}</label><input type="text" value="${p.name || ''}" onchange="updatePlayerName('${p.id}', this.value)"></div>
+              </div>
+              <div class="field" style="margin-bottom:10px;"><label>${t('pl_dob')}</label><input type="text" placeholder="Ex: 15.05.2010" value="${p.birthDate || ''}" onchange="updatePlayerBirthDate('${p.id}', this.value)"></div>
+              <div class="field" style="margin-bottom:12px;">
+                <label>${t('pl_pos')}</label>
+                <div style="font-size:11px; color:var(--gold); font-weight:bold; margin-bottom:4px;">${p.positions || 'Nenhuma'}</div>
+                <div class="seg" style="flex-wrap:wrap; gap:4px;">
+                  ${['GR','DC','DD','DE','MDC','MC','MOC','EXT','PL'].map(pos => `<div class="seg-btn ${(p.positions||'').includes(pos)?'active':''}" style="flex:none; padding:5px 8px; font-size:10px;" onclick="togglePlayerPos('${p.id}', '${pos}')">${pos}</div>`).join('')}
+                </div>
+              </div>
+              <div style="display:flex; gap:8px; margin-top:12px;">
+                <button class="btn btn-gold" style="flex:1;" onclick="editingPlayerId=null; render();">${t('pl_done')}</button>
+                <button class="btn btn-red" style="flex:none; padding:0 12px;" onclick="askConfirm('${t('msg_del_pl')}', ()=>{ removePlayer('${p.id}'); expandedPlayer=null; editingPlayerId=null; render(); })">🗑️</button>
+              </div>
+            </div>`;
+          } else {
+            // MODO DE VISUALIZAÇÃO GRÁFICA (EXATAMENTE COMO NA IMAGEM)
+            const playerBars = generatePlayerBarsHTML({
+              minutos: st.totalSegundosJogo,
+              golos: st.golos,
+              assistencias: st.assistencias,
+              jogosTitular: st.jogosTitular
+            }, maxStats);
+
+            const donutChart = generateDonutChartSVG(st.presencasTreino, st.faltasTreino);
+
+            html += `<div style="background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px; margin:6px 0 14px; text-align:left;">
+              <!-- 1. GRELHA DE 4 CAIXAS DE ESTATÍSTICAS -->
+              <div class="profile-stats-grid" style="grid-template-columns:1fr 1fr 1fr 1fr; gap:6px; margin-bottom:10px;">
+                <div class="profile-stat">
+                  <div class="val" style="color:var(--gold); font-size:16px;">${st.minutos}</div>
+                  <div class="lbl" style="font-size:8px;">MIN. JOGO</div>
+                </div>
+                <div class="profile-stat">
+                  <div class="val" style="color:#3b82f6; font-size:16px;">${st.minutosTreinoCumpridos}'</div>
+                  <div class="lbl" style="font-size:8px;">MIN. TREINO</div>
+                </div>
+                <div class="profile-stat">
+                  <div class="val" style="font-size:16px;">${st.golos}</div>
+                  <div class="lbl" style="font-size:8px;">⚽ GOLOS</div>
+                </div>
+                <div class="profile-stat">
+                  <div class="val" style="font-size:16px;">${st.assistencias}</div>
+                  <div class="lbl" style="font-size:8px;">🎯 ASSISTÊNCIAS</div>
+                </div>
+              </div>
+
+              <!-- 2. PAINEL FORMA & FALTAS -->
+              <div style="background:var(--surface-2); border-radius:8px; padding:10px 12px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; font-size:11px;">
+                <span style="color:var(--muted); font-weight:bold; text-transform:uppercase;">FORMA & FALTAS</span>
+                <div style="display:flex; align-items:center; gap:10px; font-weight:bold;">
+                  <span>⭐ ${st.media}</span>
+                  <span>📉 ${st.faltasTreino} Faltas</span>
+                  <span>🟨 ${st.amarelos}</span>
+                  <span>🟥 ${st.vermelhos}</span>
+                </div>
+              </div>
+
+              <!-- 3. GRÁFICO DAS BARRAS + ASSIDUIDADE CIRCULAR -->
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px;">
+                <div style="flex:1;">
+                  ${playerBars}
+                </div>
+                <div style="width:90px; text-align:center;">
+                  ${donutChart}
+                  <div style="font-size:8px; color:var(--muted); font-weight:bold; text-transform:uppercase; margin-top:4px;">ASSIDUIDADE TREINO</div>
+                </div>
+              </div>
+
+              <!-- 4. BOTÕES DE EDIÇÃO E EXPORTAÇÃO PDF -->
+              <div style="display:flex; gap:8px;">
+                <button class="btn btn-outline" style="flex:1; font-size:11px; padding:10px;" onclick="editingPlayerId='${p.id}'; render();">✏️ EDITAR DADOS DO JOGADOR</button>
+                <button class="btn btn-gold" style="flex:none; padding:10px 14px; font-size:11px;" onclick="window.exportPlayerPDF('${p.id}')">📄 FICHA PDF</button>
+              </div>
+            </div>`;
+          }
+        }
+
+        html += `</div>`;
       });
+
+      html += `</div>
+        <div class="add-row" style="margin-bottom:15px;"><input id="new-player-input" type="text" placeholder="${t('pl_add_ph')}"><button onclick="uiAddPlayer()">+</button></div>`;
     }
-    return html;
   }
 
-  // VISTA 2: JOGADORES (A tua lógica original 100% intacta)
-  html += `<div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--line);"><span style="font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:700;">Ordenar por:</span><select onchange="state.rosterSortBy=this.value; saveState(); render()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--chalk); border-radius:6px; padding:6px; font-size:11px; font-weight:bold; outline:none;"><option value="numero" ${state.rosterSortBy==='numero'?'selected':''}>Número</option><option value="nome" ${state.rosterSortBy==='nome'?'selected':''}>Nome (A-Z)</option><option value="posicao" ${(state.rosterSortBy||'posicao')==='posicao'?'selected':''}>Posição (Campo)</option></select></div>`;
+  // 2. SEPARADOR DE EQUIPA TÉCNICA (STAFF)
+  if (staffSubTab === 'staff') {
+    const staffList = state.staff || [];
 
-  if(activeRoster.length === 0) { html += `<div class="empty">${t('pl_none')}</div>`; } 
-  else {
-      activeRoster.forEach(p => {
-         if(!p) return;
-         const open = expandedPlayer === p.id; const isEditing = editingPlayerId === p.id; const st = calcularEstatisticaJogador(p.id);
-         let fpBadge = '';
-         if(state.showFairPlay && avgMins > 0 && state.trackSubs) {
-            if(st.minutos >= avgMins * 0.8) fpBadge = `<span title="${t('fp_balanced')}" style="font-size:12px; margin-left:6px;">🟢</span>`;
-            else if(st.minutos >= avgMins * 0.4) fpBadge = `<span title="${t('fp_medium')}" style="font-size:12px; margin-left:6px;">🟡</span>`;
-            else fpBadge = `<span title="${t('fp_low')}" style="font-size:12px; margin-left:6px;">🔴</span>`;
-         }
+    if (staffForm) {
+      return `${topbarHtml('Membro da Equipa Técnica')}${renderTeamSubHeader()}
+        <div class="card">
+          <div class="field"><label>Nome</label><input type="text" value="${staffForm.name||''}" oninput="staffForm.name=this.value"></div>
+          <div class="field"><label>Cargo / Função</label><input type="text" placeholder="Ex: Treinador Adjunto / Fisioterapeuta" value="${staffForm.role||''}" oninput="staffForm.role=this.value"></div>
+        </div>
+        <button class="btn btn-gold" style="width:100%; margin-bottom:10px;" onclick="saveStaffMember()">${t('save')}</button>
+        <button class="btn btn-outline" style="width:100%;" onclick="staffForm=null; render()">${t('cancel')}</button>`;
+    }
 
-         html += `<div class="player-item" onclick="if(!event.target.closest('button') && !event.target.closest('input') && !event.target.closest('select')){ expandedPlayer=expandedPlayer==='${p.id}'?null:'${p.id}'; editingPlayerId=null; render(); }"><div class="player-row" style="border-bottom:none; padding-bottom:${open?'10px':'10px'}; display:flex; align-items:center;"><span style="flex:1;">${p.number ? `<span class="mono" style="color:var(--gold);">#${p.number}</span> ` : ''}<strong style="font-size:15px;">${p.name||t('pl_no_name')}</strong>${p.positions ? `<span style="font-size:9px; color:var(--gold); border:1px solid var(--gold-dim); padding:1px 4px; border-radius:4px; margin-left:6px; font-weight:700;">${p.positions}</span>` : ''}${fpBadge} ${p.birthDate ? ` <span style="color:var(--muted); font-size:12px;">- ${computeAge(p.birthDate)} ${t('pl_yrs')}</span>` : ''}</span></div>`;
-         
-         if(open) {
-             html += `<div style="padding-bottom:12px;">`;
-             if(!isEditing) {
-                 html += `
-                 <div class="profile-stats-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;">
-                   <div class="profile-stat"><div class="val" style="color:var(--gold);">${st.minutos}'</div><div class="lbl">Min. Jogo</div></div>
-                   <div class="profile-stat"><div class="val" style="color:#3b82f6;">${st.minutosTreinoCumpridos}'</div><div class="lbl">Min. Treino</div></div>
-                   <div class="profile-stat"><div class="val">${st.golos}</div><div class="lbl">${t('pl_goals')}</div></div>
-                   <div class="profile-stat"><div class="val">${st.assistencias}</div><div class="lbl">${t('pl_assists')}</div></div>
-                 </div>
-                 
-                 <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface-2); padding:10px; border-radius:8px; margin-bottom:16px;">
-                   <span style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:700;">Forma & Faltas</span>
-                   <span class="mono" style="font-size:13px;">⭐ ${st.media} | 📉 ${st.faltasTreino} Faltas | 🟨 ${st.amarelos} 🟥 ${st.vermelhos}</span>
-                 </div>
-                 
-                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-top:1px solid var(--line); padding-top:16px; gap:16px;">
-                   <div style="flex:1.5;">
-                     ${generatePlayerBarsHTML(st, {minutos: Math.max(avgMins*1.5, 90), golos: 15, assist: 10, jogos: state.matches.filter(m=>(m.season||state.currentSeason)===state.currentSeason).length || 1})}
-                   </div>
-                   <div style="flex:1; text-align:center;">
-                     ${generateDonutChartSVG(st.minutosTreinoCumpridos, Math.max(0, st.minutosTreinoTotais - st.minutosTreinoCumpridos))}
-                     <div style="font-size:9px; color:var(--muted); font-weight:bold; margin-top:8px;">ASSIDUIDADE TREINO</div>
-                   </div>
-                 </div>
-                 
-                 <button class="btn btn-outline" style="width:100%; font-size:12px; padding:10px;" onclick="event.stopPropagation(); editingPlayerId='${p.id}'; render();">${t('pl_edit')}</button>`;
-             } else {
-                 html += `<div style="display:flex; flex-direction:column; gap:10px; background:var(--surface-2); padding:12px; border-radius:12px; border:1px solid var(--line);"><div class="panel-title" style="margin-bottom:0; color:var(--gold);">${t('pl_mode')}</div><div class="field" style="margin-bottom:0;"><label>${t('pl_name')}</label><input type="text" onchange="updatePlayerName('${p.id}', this.value)" value="${p.name||''}"></div><div class="field" style="margin-bottom:0;"><label>${t('pl_num')}</label><input type="number" min="1" max="99" onchange="updatePlayerNumber('${p.id}', this.value)" value="${p.number||''}"></div>
-                 
-                 <div class="field" style="margin-bottom:0;">
-                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                      <label style="margin-bottom:0;">${t('pl_pos')} <span style="text-transform:none; font-weight:normal; letter-spacing:0;">(Máx 5)</span></label>
-                      ${p.positions ? `<button class="quick-del" style="font-size:9px; border:1px solid var(--line); border-radius:4px; padding:2px 6px;" onclick="event.stopPropagation(); window.clearPlayerPos('${p.id}')">🧹 Limpar</button>` : ''}
-                   </div>
-                   <div class="grid-btns cols-4" style="gap:4px;">${['GR','DC','DE','DD','MDC','MC','MOC','ME','MD','EE','ED','PL','AV'].map(pos => `<div class="chip chip-sm ${((p.positions||'').split(',').map(x=>x.trim()).includes(pos))?'active-green':''}" onclick="event.stopPropagation(); window.togglePlayerPos('${p.id}', '${pos}')">${pos}</div>`).join('')}</div>
-                   ${p.positions ? `<div style="font-size:10px; color:var(--gold); margin-top:6px;">Atual: ${p.positions}</div>` : ''}
-                 </div>
-                 
-                 <div class="field" style="margin-bottom:0;"><label>${t('pl_dob')}</label><input type="text" placeholder="dd.mm.aaaa" onchange="updatePlayerBirthDate('${p.id}', this.value)" value="${p.birthDate||''}"></div><div style="display:flex; gap:10px; margin-top:10px;"><button class="btn btn-ghost" style="flex:1;" onclick="event.stopPropagation(); editingPlayerId=null; render();">${t('pl_done')}</button><button class="btn btn-outline" style="color:var(--red); flex:1;" onclick="askConfirm('${t('msg_del_pl')}', ()=>removePlayer('${p.id}'))">🗑 ${t('remove')}</button></div></div>`;
-             }
-             html += `</div>`;
-         }
-         html += `</div>`;
+    html += `<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="staffForm={name:'', role:''}; render()">➕ Adicionar Staff</button>`;
+
+    if (staffList.length === 0) {
+      html += `<div class="card" style="text-align:center; padding:20px;"><p style="color:var(--muted);">Ainda não existem elementos na equipa técnica.</p></div>`;
+    } else {
+      html += `<div style="display:flex; flex-direction:column; gap:8px; margin-bottom:15px;">`;
+      staffList.forEach(st => {
+        html += `
+          <div class="card" style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; margin-bottom:0;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="width:32px; height:32px; border-radius:50%; background:var(--surface-2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:14px;">👔</div>
+              <div style="text-align:left;">
+                <div style="font-weight:bold; color:var(--chalk); font-size:14px;">${st.name}</div>
+                <div style="font-size:11px; color:var(--gold);">${st.role || 'Equipa Técnica'}</div>
+              </div>
+            </div>
+            <button class="quick-del" onclick="askConfirm('Remover este elemento?', ()=>deleteStaffMember('${st.id}'))">🗑</button>
+          </div>`;
       });
+      html += `</div>`;
+    }
   }
-  html += `<div class="add-row" style="margin-top:16px;"><input id="new-player-input" type="text" placeholder="${t('pl_add_ph')}"><button onclick="uiAddPlayer()">+</button></div></div><div class="section-title">${t('exp_title')}</div><div class="card"><div style="font-size:12px; color:var(--muted); margin-bottom:10px; line-height: 1.4;">${t('exp_desc')}${getAutoSaveStatusHTML()}</div><div class="btn-row" style="margin-top:0;"><button class="btn btn-gold" onclick="exportData()">${t('exp_json')}</button><button class="btn btn-outline" onclick="document.getElementById('import-file-input').click()">${t('imp_json')}</button></div><div class="btn-row"><button class="btn btn-ghost" onclick="exportReportPDF()">${t('exp_pdf')}</button><button class="btn btn-ghost" onclick="exportCsv()">${t('exp_csv')}</button></div><input type="file" id="import-file-input" accept=".json,application/json" style="display:none;" onchange="importData(this)"></div>`;
+
   return html;
-}
+};
 
 window.uiAddPlayer = function(){ try { if(!state.roster) state.roster = []; const input = document.getElementById('new-player-input'); if(!input) return; const v = input.value; if(v && v.trim() !== '') { state.roster.push({ id: uid(), name: escapeHTML(v.trim()), birthDate: null, number: null, positions: '', active: true }); input.value = ''; saveState(); render(); } } catch(e) { console.error("Error:", e); alert(t('msg_err_add_pl') + e.message); } };
 window.updatePlayerName = function(id, val){ const p=state.roster.find(x=>x.id===id); if(p){p.name=escapeHTML(val.trim()); saveState(); render();} };
@@ -2359,6 +2705,7 @@ window.importData = function(input){
         if(!state.diary) state.diary = []; 
         if(!state.leagues) state.leagues = []; 
         if(!state.fines) state.fines = []; 
+        if(!state.staff) state.staff = [];
         if(!state.teamColor) state.teamColor = '#D9A441'; 
         if(!state.oppColor) state.oppColor = '#C8493F'; 
         if(!state.seasonFormat) state.seasonFormat = 'europeu'; 
@@ -2380,17 +2727,97 @@ window.importData = function(input){
   input.value = ''; 
 };
 
-window.exportReportPDF = function(){
-  const s = computeStats('todos', state.currentSeason, 'todas');
-  let html = `<div class="print-card"><div class="print-header"><h1>${t('rep_title')} - ${getMyClub()}</h1><p>${t('rep_gen')} ${new Date().toLocaleDateString('pt-PT')} | Época: ${state.currentSeason}</p></div><h2>Resumo Global</h2><table><tr><th>Vitórias</th><th>Empates</th><th>Derrotas</th><th>Golos Marcados</th><th>Golos Sofridos</th></tr><tr><td>${s.wins}</td><td>${s.draws}</td><td>${s.losses}</td><td>${s.scored}</td><td>${s.conceded}</td></tr></table><div style="display:flex; gap:20px;"><div style="flex:1;"><h2>Melhores Marcadores</h2><table><tr><th>Jogador</th><th>Golos</th></tr>${s.scorers.slice(0, 10).map(sc => `<tr><td>${sc.name}</td><td>${sc.count}</td></tr>`).join('')}${s.scorers.length === 0 ? `<tr><td colspan="2">Sem registos</td></tr>` : ''}</table></div><div style="flex:1;"><h2>Mais Assistências</h2><table><tr><th>Jogador</th><th>Assist.</th></tr>${s.assisters.slice(0, 10).map(a => `<tr><td>${a.name}</td><td>${a.count}</td></tr>`).join('')}${s.assisters.length === 0 ? `<tr><td colspan="2">Sem registos</td></tr>` : ''}</table></div></div><h2>Histórico de Jogos (${state.currentSeason})</h2>`;
-  const seasonMatches = state.matches.filter(m => (m.season || state.currentSeason) === state.currentSeason);
-  seasonMatches.forEach(m => {
-    const sc = m.goals.filter(g=>g.type==='scored').length; const co = m.goals.filter(g=>g.type==='conceded').length; let tLbl = m.type==='campeonato'?t('sch_champ'):(m.type==='torneio'?t('sch_tour'):t('sch_friendly')); let lLbl = m.location==='casa'?t('match_home'):t('match_away'); let matchTitle = m.location === 'casa' ? `${getMyClub()} vs ${m.opponent}` : `${m.opponent} vs ${getMyClub()}`;
-    html += `<div class="print-card" style="margin-top:10px;"><h3 style="margin:0;">[${m.date}] ${matchTitle} (${sc} - ${co})</h3><p style="margin:5px 0 10px; font-size:11px;">${tLbl}${m.phase ? ' - '+m.phase : ''}${m.matchday ? ' (J:'+m.matchday+')' : ''} | ${lLbl}</p>`;
-    if(m.goals.length > 0) { html += `<b>Golos:</b> `; const goalTexts = m.goals.map(g => { if(g.type==='scored') return `${playerName(g.scorerId)}${g.minute!=null?" ("+g.minute+"')":""}${g.assistId&&g.assistId!=='none'?' [ast. '+playerName(g.assistId)+']':''}`; return `${t('rep_conc')}${g.minute!=null?" ("+g.minute+"')":""}`; }); html += goalTexts.join(' · ') + `<br>`; }
-    if(m.notes) html += `<br><b>Notas:</b> ${m.notes}`; html += `</div>`;
-  });
-  html += `</div>`; const printArea = document.getElementById('print-area'); printArea.innerHTML = html; window.print();
+window.exportReportPDF = function() {
+  if (!state.currentMatch) {
+    showToast('Sem jogo ativo para exportar.');
+    return;
+  }
+  const m = state.currentMatch;
+  const dateStr = (m.date || new Date().toISOString().slice(0,10)).split('-').reverse().join('/');
+  const matchTitle = m.location === 'casa' ? `${getMyClub()} ${m.myScore} - ${m.oppScore} ${m.opponent}` : `${m.opponent} ${m.oppScore} - ${m.myScore} ${getMyClub()}`;
+
+  let rowsHtml = '';
+  const playedPlayers = eligiblePlayers().filter(p => (m.playerMinutes && m.playerMinutes[p.id]) || (m.starterIds && m.starterIds.includes(p.id)));
+  
+  if (playedPlayers.length === 0) {
+    rowsHtml = '<tr><td colspan="4" style="text-align:center; padding:15px;">Sem registo de jogadores neste jogo.</td></tr>';
+  } else {
+    sortPlayerObjs(playedPlayers).forEach((p, idx) => {
+      const numVal = (p.number !== null && p.number !== undefined && p.number !== '') ? p.number : (idx + 1);
+      const secs = m.playerMinutes ? (m.playerMinutes[p.id] || 0) : 0;
+      const minsStr = formatMinSec(secs);
+      const isStarter = m.starterIds && m.starterIds.includes(p.id);
+      
+      rowsHtml += `
+        <tr>
+          <td style="text-align:center; font-weight:bold; width:45px;">${numVal}</td>
+          <td style="text-align:left; font-weight:bold; padding-left:12px;">${p.name} ${isStarter ? '<span style="font-size:10px; color:#666;">(Titular)</span>' : ''}</td>
+          <td style="text-align:center; font-weight:bold; width:100px;">${minsStr}</td>
+          <td style="width:150px;"></td>
+        </tr>`;
+    });
+  }
+
+  const selectedStaffIds = m.staffCallup || [];
+  const staffList = (state.staff || []).filter(st => selectedStaffIds.includes(st.id));
+  let staffRowsHtml = '';
+  
+  if (staffList.length === 0) {
+    staffRowsHtml = '<tr><td colspan="3" style="text-align:center; padding:10px; color:#666;">Equipa Técnica / Delegado não registados.</td></tr>';
+  } else {
+    staffList.forEach(st => {
+      staffRowsHtml += `
+        <tr>
+          <td style="text-align:left; font-weight:bold; padding-left:12px;">${st.name}</td>
+          <td style="text-align:center; font-weight:600; color:#444;">${st.role || 'Equipa Técnica'}</td>
+          <td style="width:150px; text-align:center; font-size:11px;">Presente</td>
+        </tr>`;
+    });
+  }
+
+  let html = `
+    <div class="print-card">
+      <div class="print-header">
+        <h1>RELATÓRIO OFICIAL DE JOGO</h1>
+        <p style="font-size:20px; font-weight:bold; margin-top:5px; color:#000;">${matchTitle}</p>
+        <p style="font-size:13px; color:#444;">Data: ${dateStr} | Época: ${state.currentSeason}</p>
+      </div>
+
+      <h3 style="margin-bottom:8px;">Atletas Participantes (${playedPlayers.length})</h3>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:45px; text-align:center;">Núm</th>
+            <th style="text-align:left; padding-left:12px;">Nome do Atleta</th>
+            <th style="width:100px; text-align:center;">Tempo Jogo</th>
+            <th style="width:150px; text-align:center;">Observações</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+
+      <h3 style="margin-bottom:8px; margin-top:20px;">Equipa Técnica Presente (${staffList.length})</h3>
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align:left; padding-left:12px;">Nome</th>
+            <th style="text-align:center;">Cargo / Função</th>
+            <th style="width:150px; text-align:center;">Estado</th>
+          </tr>
+        </thead>
+        <tbody>${staffRowsHtml}</tbody>
+      </table>
+
+      ${m.notes ? `<h3 style="margin-top:20px; margin-bottom:6px;">Notas do Treinador</h3><div style="border:1px solid #CCC; padding:10px; border-radius:4px; font-size:12px; white-space:pre-wrap;">${m.notes}</div>` : ''}
+
+      <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
+        <div style="font-size:10px; color:#666;">Documento gerado por Coachfolio v2.7</div>
+        <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">O Treinador / Responsável</div>
+      </div>
+    </div>`;
+
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
 };
 
 function render(){
@@ -2423,7 +2850,6 @@ setInterval(()=>{
   const el = document.getElementById('live-timer'); if(el) el.textContent = formatMatchTime(getMatchElapsedMs(m));
 }, 1000);
 
-// --- BLINDAGEM CONTRA FECHO ACIDENTAL E TECLA VOLTAR ---
 window.history.pushState({ page: 1 }, "", "");
 
 window.addEventListener('popstate', function(event) {

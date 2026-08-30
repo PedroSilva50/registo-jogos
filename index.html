@@ -17,6 +17,7 @@
 <meta name="apple-mobile-web-app-title" content="Coachfolio">
 <meta name="theme-color" content="#0E211A">
 <title>COACHFOLIO v2.7</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{--bg:#0E211A;--surface:#153328;--surface-2:#1C4133;--chalk:#F3EFE6;--muted:#8FA79B;--gold:#D9A441;--gold-dim:#4A3E22;--red:#C8493F;--red-dim:#3F2320;--yellow:#E1C324;--green:#4ade80;--green-dim:#133320;--line:rgba(243,239,230,0.10);--btn-gold-txt:#241B08;--btn-red-txt:#2B0F0C;--btn-green-txt:#0E211A;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -119,7 +120,7 @@
   .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--gold);color:var(--btn-gold-txt);padding:10px 18px;border-radius:20px;font-size:12px;text-transform:uppercase;letter-spacing:0.05em;font-weight:700;opacity:0;transition:all .25s ease;pointer-events:none;z-index:9999;white-space:nowrap;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
   .section-title{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin:18px 0 8px;font-weight:700;}
-  .home-screen{position:relative;min-height:calc(100vh - 28px);display:flex;align-items:center;justify-content:center;padding:12px 4px;}
+  .home-screen{position:relative;min-height:auto;display:flex;align-items:flex-start;justify-content:flex-start;padding:12px 4px 20px;}
   .home-pitch-bg{position:absolute;inset:0;z-index:0;opacity:0.6;display:flex;align-items:center;justify-content:center;overflow:hidden;}
   .home-content{position:relative;z-index:1;width:100%;text-align:center;}
   .home-ball{width:56px;height:56px;margin:0 auto 10px;display:flex;justify-content:center;}
@@ -354,6 +355,8 @@ function getEntitySeason(entity) {
 }
 
 let currentHub = 'home'; let currentTab = 'home'; let statsViewMode = 'team';
+let staffSubTab = 'jogadores';
+let staffForm = null;
 let pending = null; let pendingCard = null; let pendingCaptain = false; let pendingRatings = false; let pendingSub = null; let pendingLineupSet = [];
 let expandedMatch = null; let expandedSchedule = null; let statsFilter = 'todos'; let statsPhaseFilter = 'todas'; let videoFilter = 'todos'; let matchSearchQuery = '';
 let modalConfig = null; let expandedPlayer = null; let editingPlayerId = null; let trainingForm = null; let expandedTraining = null; let videoForm = null; let expandedVideo = null; let diaryForm = null; let expandedDiary = null;
@@ -496,7 +499,7 @@ function sortPlayerObjs(arr) {
      } 
      else if(sortBy === 'posicao') { 
        const rA = getPosRank(a.positions); 
-       const rB = getPosRank(b.positions); // <- AGORA SIM! Compara 'a' com 'b'
+       const rB = getPosRank(b.positions);
        if(rA !== rB) return rA - rB; 
        return (a.name||'').localeCompare(b.name||''); 
      } 
@@ -549,7 +552,37 @@ function getHalfDuration(m, half) {
   else { if(m.timeline.fullTime && m.timeline.secondHalfStart) { if(m.timer && m.timer.half2DurationMs != null) return Math.floor(m.timer.half2DurationMs / 60000); let diff = timeToMins(m.timeline.fullTime) - timeToMins(m.timeline.secondHalfStart); return diff < 0 ? diff + 1440 : diff; } if(m.timeline.secondHalfStart && !m.timeline.fullTime) return getMatchMinute(m); return 0; }
 }
 function getPlayersOnPitchAtEndOfHalf(m, half) { let current = [...(m.lineup || [])]; let subs = (m.subs || []).filter(s => s.half <= half).sort((a,b) => { if(a.half !== b.half) return a.half - b.half; let minA = a.isHalftime ? 9999 : (a.minute || 0); let minB = b.isHalftime ? 9999 : (b.minute || 0); return minA - minB; }); subs.forEach(s => { current = current.filter(id => id !== s.outId); current.push(s.inId); }); return current; }
-function calcPlayerMinutes(m, pId) { let mins = 0; [1, 2].forEach(half => { let duration = getHalfDuration(m, half); let onPitch = half === 1 ? (m.lineup || []).includes(pId) : getPlayersOnPitchAtEndOfHalf(m, 1).includes(pId); let timeOn = 0; let subsInHalf = (m.subs || []).filter(s => s.half === half && !s.isHalftime).sort((a,b) => (a.minute||0) - (b.minute||0)); subsInHalf.forEach(sub => { if (sub.outId === pId && onPitch) { mins += ((sub.minute||0) - timeOn); onPitch = false; } if (sub.inId === pId && !onPitch) { timeOn = (sub.minute||0); onPitch = true; } }); if (onPitch) mins += (duration - timeOn); }); return mins > 0 ? mins : 0; }
+function calcPlayerMinutes(m, pId) { 
+  let totalSecs = 0; 
+  [1, 2].forEach(half => { 
+    let durationMins = getHalfDuration(m, half); 
+    let durationSecs = durationMins * 60; 
+    let onPitch = half === 1 ? (m.lineup || []).includes(pId) : getPlayersOnPitchAtEndOfHalf(m, 1).includes(pId); 
+    let timeOnSecs = 0; 
+    let subsInHalf = (m.subs || []).filter(s => s.half === half && !s.isHalftime).sort((a,b) => (a.minute||0) - (b.minute||0)); 
+    
+    subsInHalf.forEach(sub => { 
+      let subSecs = (sub.minute || 0) * 60; 
+      if (sub.outId === pId && onPitch) { 
+        totalSecs += (subSecs - timeOnSecs); 
+        onPitch = false; 
+      } 
+      if (sub.inId === pId && !onPitch) { 
+        timeOnSecs = subSecs; 
+        onPitch = true; 
+      } 
+    }); 
+    if (onPitch) totalSecs += (durationSecs - timeOnSecs); 
+  }); 
+  return totalSecs > 0 ? totalSecs : 0; 
+}
+
+function formatSecsToMinSec(totalSecs) {
+  if (!totalSecs || isNaN(totalSecs) || totalSecs <= 0) return "0m 0s";
+  const m = Math.floor(totalSecs / 60);
+  const s = Math.round(totalSecs % 60);
+  return `${m}m ${s}s`;
+}
 
 function getContrastColor(hexColor) {
     if(!hexColor) return '#FFF'; const hex = hexColor.replace('#', ''); const r = parseInt(hex.substr(0, 2), 16); const g = parseInt(hex.substr(2, 2), 16); const b = parseInt(hex.substr(4, 2), 16); const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000; return (yiq >= 128) ? '#000' : '#FFF';
@@ -951,7 +984,13 @@ function renderHome(){
 
 function renderJogoSubHeader() { return `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${currentTab==='jogo'?'active':''}" onclick="navigateToTab('jogo')">${t('match_curr')}</div><div class="seg-btn ${currentTab==='jogos'?'active':''}" onclick="navigateToTab('jogos')">${t('res_title')}</div></div>`; }
 function renderPlanSubHeader() { return `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${currentTab==='calendario'?'active':''}" onclick="navigateToTab('calendario')">${t('sch_title')}</div><div class="seg-btn ${currentTab==='treinos'?'active':''}" onclick="navigateToTab('treinos')">${t('tr_title')}</div>${state.enableDiary ? `<div class="seg-btn ${currentTab==='diario'?'active':''}" onclick="navigateToTab('diario')">${t('diary_title')}</div>` : ''}</div>`; }
-function renderStratSubHeader() { return `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${currentTab==='tatica'?'active':''}" onclick="navigateToTab('tatica')">${t('tac_title')}</div><div class="seg-btn ${currentTab==='caderno'?'active':''}" onclick="navigateToTab('caderno')">📋 Caderno</div>${state.enableVideos ? `<div class="seg-btn ${currentTab==='videos'?'active':''}" onclick="navigateToTab('videos')">${t('vid_title')}</div>` : ''}</div>`; }
+function renderStratSubHeader() { 
+  return `<div class="seg" style="margin-bottom:14px;">
+    <div class="seg-btn ${currentTab==='tatica'?'active':''}" onclick="navigateToTab('tatica')">${t('tac_title')}</div>
+    <div class="seg-btn ${currentTab==='caderno'?'active':''}" onclick="navigateToTab('caderno')">📋 Minhas Jogadas</div>
+    ${state.enableVideos ? `<div class="seg-btn ${currentTab==='videos'?'active':''}" onclick="navigateToTab('videos')">${t('vid_title')}</div>` : ''}
+  </div>`; 
+}
 function renderTeamSubHeader() { return `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${currentTab==='plantel'?'active':''}" onclick="navigateToTab('plantel')" style="font-size:9px; padding:8px 4px;">${t('pl_title')}</div><div class="seg-btn ${currentTab==='stats'?'active':''}" onclick="navigateToTab('stats')" style="font-size:9px; padding:8px 4px;">${t('st_title')}</div>${state.enableFines ? `<div class="seg-btn ${currentTab==='caixinha'?'active':''}" onclick="navigateToTab('caixinha')" style="font-size:9px; padding:8px 4px;">${t('fine_title')}</div>` : ''}${state.enableLeagues ? `<div class="seg-btn ${currentTab==='classificacoes'?'active':''}" onclick="navigateToTab('classificacoes')" style="font-size:9px; padding:8px 4px;">${t('lg_title')}</div>` : ''}</div>`; }
 
 function renderJogo(){
@@ -1017,10 +1056,10 @@ function renderJogo(){
     <div class="card chrono-card">
       <div class="chrono-time" id="live-timer">${formatMatchTime(getMatchElapsedMs(m))}</div>
       ${(!m.timeline || !m.timeline.kickoff) ? (!needsLineup ? `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; margin: 10px auto 0; display: block;" onclick="askConfirm('${t('msg_ko')}', ()=>setMatchTimeMark('${m.id}','kickoff'))">${t('match_kickoff')}</button>`:'') : ''}
-      ${(m.timeline && m.timeline.kickoff && !m.timeline.halftime) ? `<div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">${m.timer.isRunning ? `<button class="btn btn-outline" style="padding:8px 20px; font-size:12px; flex:none; border-color:var(--muted); color:var(--muted);" onclick="pauseMatchTimer('${m.id}')">${t('match_pause')}</button>` : `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; flex:none;" onclick="resumeMatchTimer('${m.id}')">${t('match_resume')}</button>`}<button class="btn btn-ghost" style="padding:8px 20px; font-size:12px; flex:none;" onclick="askConfirm('${t('msg_ht')}', ()=>setMatchTimeMark('${m.id}','halftime'))">${t('match_ht')}</button></div>` : ''}
-      ${(m.timeline && m.timeline.halftime && !m.timeline.secondHalfStart) ? `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; margin: 10px auto 0; display: block;" onclick="askConfirm('${t('msg_2nd')}', ()=>setMatchTimeMark('${m.id}','secondHalfStart'))">${t('match_2nd')}</button>` : ''}
-      ${(m.timeline && m.timeline.secondHalfStart && !m.timeline.fullTime) ? `<div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">${m.timer.isRunning ? `<button class="btn btn-outline" style="padding:8px 12px; font-size:12px; flex:none; border-color:var(--muted); color:var(--muted);" onclick="pauseMatchTimer('${m.id}')">${t('match_pause')}</button>` : `<button class="btn btn-gold" style="padding:8px 12px; font-size:12px; flex:none;" onclick="resumeMatchTimer('${m.id}')">${t('match_resume')}</button>`}<button class="btn btn-red" style="padding:8px 12px; font-size:12px; flex:none;" onclick="askConfirm('${t('msg_ft')}', ()=>setMatchTimeMark('${m.id}','fullTime'))">${t('match_ft')}</button></div>` : ''}
-      ${(isMatchEnded && !m.finished) ? `<div style="font-size:11px; color:var(--red); text-transform:uppercase; margin-top:10px; font-weight:700; letter-spacing: 0.05em;">${t('match_ended')}</div>` : ''}
+       ${(m.timeline && m.timeline.kickoff && !m.timeline.halftime) ? `<div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">${m.timer.isRunning ? `<button class="btn btn-outline" style="padding:8px 20px; font-size:12px; flex:none; border-color:var(--muted); color:var(--muted);" onclick="pauseMatchTimer('${m.id}')">${t('match_pause')}</button>` : `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; flex:none;" onclick="resumeMatchTimer('${m.id}')">${t('match_resume')}</button>`}<button class="btn btn-ghost" style="padding:8px 20px; font-size:12px; flex:none;" onclick="askConfirm('${t('msg_ht')}', ()=>setMatchTimeMark('${m.id}','halftime'))">${t('match_ht')}</button></div>` : ''}
+       ${(m.timeline && m.timeline.halftime && !m.timeline.secondHalfStart) ? `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; margin: 10px auto 0; display: block;" onclick="askConfirm('${t('msg_2nd')}', ()=>setMatchTimeMark('${m.id}','secondHalfStart'))">${t('match_2nd')}</button>` : ''}
+       ${(m.timeline && m.timeline.secondHalfStart && !m.timeline.fullTime) ? `<div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">${m.timer.isRunning ? `<button class="btn btn-outline" style="padding:8px 12px; font-size:12px; flex:none; border-color:var(--muted); color:var(--muted);" onclick="pauseMatchTimer('${m.id}')">${t('match_pause')}</button>` : `<button class="btn btn-gold" style="padding:8px 12px; font-size:12px; flex:none;" onclick="resumeMatchTimer('${m.id}')">${t('match_resume')}</button>`}<button class="btn btn-red" style="padding:8px 12px; font-size:12px; flex:none;" onclick="askConfirm('${t('msg_ft')}', ()=>setMatchTimeMark('${m.id}','fullTime'))">${t('match_ft')}</button></div>` : ''}
+       ${(isMatchEnded && !m.finished) ? `<div style="font-size:11px; color:var(--red); text-transform:uppercase; margin-top:10px; font-weight:700; letter-spacing: 0.05em;">${t('match_ended')}</div>` : ''}
     </div>
     
     <div class="scoreboard">
@@ -1100,6 +1139,78 @@ window.deleteTacticalPlay = function(id) {
   showToast('Jogada eliminada.');
 };
 
+window.exportTacticPNG = async function() {
+  const pitchEl = document.getElementById('tactic-pitch');
+  if (!pitchEl) return;
+  showToast('A preparar imagem... ⏳');
+  
+  try {
+    const canvas = await html2canvas(pitchEl, { useCORS: true, scale: 2, backgroundColor: '#1B452D' });
+    canvas.toBlob(async (blob) => {
+      if (!blob) { showToast('Erro ao gerar imagem.'); return; }
+      const file = new File([blob], `esquema-tatico-${new Date().toISOString().slice(0,10)}.png`, { type: 'image/png' });
+      
+      // Tenta a partilha direta nativa do telemóvel (WhatsApp, etc.)
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: 'Esquema Tático',
+            text: `Esquema Tático — ${getMyClub()}`
+          });
+          showToast('Partilha concluída! ⚽');
+        } catch (e) {
+          if (e.name !== 'AbortError') showToast('Erro ao partilhar.');
+        }
+      } else {
+        // Fallback: download direto se a partilha de ficheiros não for suportada
+        const link = document.createElement('a');
+        link.download = file.name;
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        URL.revokeObjectURL(link.href);
+        showToast('Imagem guardada! 📸');
+      }
+    }, 'image/png');
+  } catch (err) {
+    console.error(err);
+    showToast('Erro ao exportar imagem.');
+  }
+};
+
+window.exportTacticPDF = function() {
+  const pitchEl = document.getElementById('tactic-pitch');
+  if (!pitchEl) return;
+  showToast('A preparar PDF... ⏳');
+  
+  html2canvas(pitchEl, { useCORS: true, scale: 2, backgroundColor: '#1B452D' }).then(canvas => {
+    const imgData = canvas.toDataURL('image/png');
+    const html = `
+      <div class="print-card">
+        <div class="print-header">
+          <h1>${getMyClub()} — ESQUEMA TÁTICO</h1>
+          <p>Gerado em: ${new Date().toLocaleDateString('pt-PT')} | Época: ${state.currentSeason}</p>
+        </div>
+        <div style="text-align:center; margin:20px 0;">
+          <img src="${imgData}" style="max-width:100%; max-height:650px; border:2px solid #000; border-radius:8px;">
+        </div>
+        <div style="margin-top:20px; font-size:11px; color:#666; text-align:center;">
+          Coachfolio v2.7 — Documento de Análise Tática
+        </div>
+      </div>`;
+      
+    document.getElementById('print-area').innerHTML = html;
+    
+    // Pequena pausa (300ms) para garantir que o browser carrega a imagem no DOM antes de imprimir
+    setTimeout(() => {
+      window.print();
+    }, 300);
+  }).catch(err => {
+    console.error(err);
+    showToast('Erro ao gerar PDF tático.');
+  });
+};
+
 function initTacticCanvas() {
     const cvs = document.getElementById('tactic-canvas'); if(!cvs) return;
     canvasRect = cvs.getBoundingClientRect(); cvs.width = canvasRect.width; cvs.height = canvasRect.height;
@@ -1130,7 +1241,11 @@ function renderTatica(){
   return `
     ${topbarHtml(t('hub_strat_title'))}
     ${renderStratSubHeader()}
-    <button class="btn btn-gold" style="width:100%; margin-bottom:12px; font-size:11px;" onclick="saveTacticalPlay()">💾 Guardar no Caderno Tático</button>
+    <div style="display:flex; gap:6px; margin-bottom:12px;">
+      <button class="btn btn-gold" style="flex:1; font-size:10px; padding:10px 4px;" onclick="saveTacticalPlay()">💾 Guardar Jogada</button>
+      <button class="btn btn-green" style="flex:1; font-size:10px; padding:10px 4px;" onclick="exportTacticPNG()">📸 PNG</button>
+      <button class="btn btn-outline" style="flex:1; font-size:10px; padding:10px 4px; border-color:var(--gold); color:var(--gold);" onclick="exportTacticPDF()">📄 PDF</button>
+    </div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;"><div class="seg" style="margin-top:0; flex:1;"><div class="seg-btn ${format===5?'active':''}" onclick="changeTacticFormat(5)">F5</div><div class="seg-btn ${format===7?'active':''}" onclick="changeTacticFormat(7)">F7</div><div class="seg-btn ${format===9?'active':''}" onclick="changeTacticFormat(9)">F9</div><div class="seg-btn ${format===11?'active':''}" onclick="changeTacticFormat(11)">F11</div></div><div class="seg" style="margin-top:0; margin-left:10px;"><div class="seg-btn ${!isHalf?'active':''}" onclick="state.tacticHalfPitch=false; render();" title="Campo Inteiro">🏟️</div><div class="seg-btn ${isHalf?'active':''}" onclick="state.tacticHalfPitch=true; render();" title="Meio Campo">🥅</div></div></div>
     <div class="seg" style="margin-bottom:12px;"><div class="seg-btn ${currentTacticMode==='move'?'active':''}" onclick="setTacticMode('move')">✋ Mover</div><div class="seg-btn ${currentTacticMode==='draw'?'active':''}" onclick="setTacticMode('draw')">✏️ Desenhar</div></div>
     ${currentTacticMode === 'draw' ? `<div style="display:flex; justify-content:center; gap:12px; margin-bottom:12px; align-items:center;"><div style="width:24px; height:24px; border-radius:50%; background:#FFFFFF; border:2px solid ${currentDrawColor==='#FFFFFF'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#FFFFFF')"></div><div style="width:24px; height:24px; border-radius:50%; background:var(--yellow); border:2px solid ${currentDrawColor==='#E1C324'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#E1C324')"></div><div style="width:24px; height:24px; border-radius:50%; background:var(--red); border:2px solid ${currentDrawColor==='#C8493F'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#C8493F')"></div><button class="quick-del" style="border:1px solid var(--line); border-radius:4px; font-size:10px; padding:4px 8px; margin-left:10px;" onclick="clearCanvasLines()">🧹 Limpar Risco</button></div>` : `<div style="font-size:10px; color:var(--muted); text-align:center; margin-bottom:10px; text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">${t('tac_inst')}</div>`}
@@ -1183,6 +1298,17 @@ function endDrag(e) { if (!dragObj.dragging || currentTab !== 'tatica') return; 
 
 window.uiUpdateSearch = function(val){ matchSearchQuery = val; render(); const el = document.getElementById('match-search-input'); if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } };
 
+window.toggleStaffCallup = function(schId, stId) {
+  const s = state.schedule.find(x => x.id === schId);
+  if (s) {
+    if (!s.staffCallup) s.staffCallup = [];
+    if (s.staffCallup.includes(stId)) s.staffCallup = s.staffCallup.filter(x => x !== stId);
+    else s.staffCallup.push(stId);
+    saveState();
+    render();
+  }
+};
+
 window.exportCallupPDF = function(schId) {
   const s = state.schedule.find(x => x.id === schId);
   if (!s) return;
@@ -1201,22 +1327,40 @@ window.exportCallupPDF = function(schId) {
   let locLabel = s.location === 'casa' ? 'CASA' : 'FORA';
   let matchTitle = s.location === 'casa' ? `${getMyClub()} 🆚 ${s.opponent}` : `${s.opponent} 🆚 ${getMyClub()}`;
 
-  // Aqui pegamos nos objetos dos jogadores sem passar pelo playerLabel
+  // Jogadores Convocados
   const called = sortPlayerObjs(eligiblePlayers().filter(p => s.callup.includes(p.id)));
-
   let rowsHtml = '';
   if (called.length === 0) {
-    rowsHtml = '<tr><td colspan="3" style="text-align:center; padding:15px;">Nenhum jogador selecionado na convocatória.</td></tr>';
+    rowsHtml = '<tr><td colspan="3" style="text-align:center; padding:15px;">Nenhum jogador selecionado.</td></tr>';
   } else {
     called.forEach((p, idx) => {
-      // Removemos o cardinal '#' e pegamos no número puro do jogador ou na ordem da lista
       const numVal = (p.number !== null && p.number !== undefined && p.number !== '') ? p.number : (idx + 1);
-      const nameVal = p.name || 'Sem Nome';
-
       rowsHtml += `
         <tr>
           <td style="text-align:center; font-weight:bold; width:45px;">${numVal}</td>
-          <td style="text-align:left; font-weight:bold; padding-left:12px;">${nameVal}</td>
+          <td style="text-align:left; font-weight:bold; padding-left:12px;">${p.name || 'Sem Nome'}</td>
+          <td style="width:200px;"></td>
+        </tr>`;
+    });
+  }
+
+  // Staff Convocado (Apenas os selecionados para este jogo)
+  const selectedStaffIds = s.staffCallup || [];
+  const staffList = (state.staff || []).filter(st => selectedStaffIds.includes(st.id));
+  let staffRowsHtml = '';
+  if (staffList.length === 0) {
+    staffRowsHtml = `
+      <tr>
+        <td style="text-align:left; font-weight:bold; padding-left:12px;">Equipa Técnica / Delegado</td>
+        <td style="text-align:center; color:#666;">Treinador / Responsável</td>
+        <td style="width:200px;"></td>
+      </tr>`;
+  } else {
+    staffList.forEach(st => {
+      staffRowsHtml += `
+        <tr>
+          <td style="text-align:left; font-weight:bold; padding-left:12px;">${st.name}</td>
+          <td style="text-align:center; font-weight:600; color:#444;">${st.role || 'Equipa Técnica'}</td>
           <td style="width:200px;"></td>
         </tr>`;
     });
@@ -1250,13 +1394,27 @@ window.exportCallupPDF = function(schId) {
         </tbody>
       </table>
 
+      <h3 style="margin-bottom:10px; margin-top:25px;">Equipa Técnica Convocada (${staffList.length})</h3>
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align:left; padding-left:12px;">Nome</th>
+            <th style="text-align:center;">Cargo / Função</th>
+            <th style="width:200px; text-align:center;">Assinatura / Rubrica</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${staffRowsHtml}
+        </tbody>
+      </table>
+
       <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
         <div style="font-size:11px; color:#666;">
           <p style="margin:2px 0;">• Comparência obrigatória à hora marcada com o equipamento oficial.</p>
           <p style="margin:2px 0;">• Em caso de força maior, avisar a equipa técnica com antecedência.</p>
         </div>
         <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">
-          A Equipa Técnica
+          A Direção / Equipa Técnica
         </div>
       </div>
     </div>`;
@@ -1278,7 +1436,14 @@ function renderCalendario(){
   
   const currentSch = state.schedule.filter(s => (s.season || state.currentSeason) === state.currentSeason);
   
-  return `${topbarHtml(t('hub_plan_title'))}${renderPlanSubHeader()}<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="schForm={isBatch:false, opp:'', date:'', time:'09:00', type:'amigavel', loc:'casa', phase:'', matchday:'', tournamentName:'', games:[]}; editingSchId=null; schedulingNew=true; render()">${t('sch_new')}</button>${currentSch.length ? currentSch.map(s => { const open = expandedSchedule === s.id; const locLabel = s.location === 'casa' ? t('match_home') : t('match_away'); return `<div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('.chip')) { expandedSchedule = expandedSchedule==='${s.id}' ? null : '${s.id}'; render(); }"><div class="match-head-row"><div class="match-head" style="flex:1;"><div><div class="opp">${s.type==='torneio'?`<span style="color:var(--gold); font-size:11px; display:block; text-transform:uppercase; margin-bottom:2px;">🏆 ${s.tournamentName}${s.phase?' - '+s.phase:''}${s.matchday?' (Jornada '+s.matchday+')':''}</span>`:''}${s.type==='campeonato'&&s.phase?`<span style="color:var(--gold); font-size:11px; display:block; text-transform:uppercase; margin-bottom:2px;">🏆 ${s.phase}${s.matchday?' (Jornada '+s.matchday+')':''}</span>`:''}${s.opponent} <span class="badge-loc ${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home'?'casa':'fora'}">${locLabel}</span></div><div class="date">${s.date.split('-').reverse().join('/')} às ${s.time}</div></div></div><div style="display:flex; gap:6px;"><button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); editSchedule('${s.id}')" title="${t('edit')}"><svg style="width:16px; height:16px; transform:translateY(2px);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); duplicateSchedule('${s.id}')" title="Duplicar">📑</button><button class="quick-del" style="color:var(--gold);" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')" title="Iniciar">▶</button><button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sch')}', () => deleteSchedule('${s.id}'))" title="${t('del')}">🗑</button></div></div>${open ? `<div class="goal-list"><div class="panel-title" style="margin-bottom:8px;">${t('sch_callup')} (${s.callup.length})</div><div class="grid-btns cols-4">${eligiblePlayers().map(p=>`<div class="chip chip-sm ${s.callup.includes(p.id)?'active-green':''}" onclick="event.stopPropagation(); window.toggleCallup('${s.id}', '${p.id}')">${playerLabel(p)}</div>`).join('')}</div><div class="btn-row" style="margin-top:12px;"><button class="btn btn-green" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.copyCallup('${s.id}')">WhatsApp 📋</button><button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.exportCallupPDF('${s.id}')">📄 Folha PDF</button><button class="btn btn-ghost" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')">${t('sch_start')}</button></div></div>` : ''}</div>`; }).join('') : `<div class="empty">${t('sch_none')}</div>`}`;
+  return `${topbarHtml(t('hub_plan_title'))}${renderPlanSubHeader()}<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="schForm={isBatch:false, opp:'', date:'', time:'09:00', type:'amigavel', loc:'casa', phase:'', matchday:'', tournamentName:'', games:[]}; editingSchId=null; schedulingNew=true; render()">${t('sch_new')}</button>${currentSch.length ? currentSch.map(s => { const open = expandedSchedule === s.id; const locLabel = s.location === 'casa' ? t('match_home') : t('match_away'); return `<div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('.chip')) { expandedSchedule = expandedSchedule==='${s.id}' ? null : '${s.id}'; render(); }"><div class="match-head-row"><div class="match-head" style="flex:1;"><div><div class="opp">${s.type==='torneio'?`<span style="color:var(--gold); font-size:11px; display:block; text-transform:uppercase; margin-bottom:2px;">🏆 ${s.tournamentName}${s.phase?' - '+s.phase:''}${s.matchday?' (Jornada '+s.matchday+')':''}</span>`:''}${s.type==='campeonato'&&s.phase?`<span style="color:var(--gold); font-size:11px; display:block; text-transform:uppercase; margin-bottom:2px;">🏆 ${s.phase}${s.matchday?' (Jornada '+s.matchday+')':''}</span>`:''}${s.opponent} <span class="badge-loc ${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home'?'casa':'fora'}">${locLabel}</span></div><div class="date">${s.date.split('-').reverse().join('/')} às ${s.time}</div></div></div><div style="display:flex; gap:6px;"><button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); editSchedule('${s.id}')" title="${t('edit')}"><svg style="width:16px; height:16px; transform:translateY(2px);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); duplicateSchedule('${s.id}')" title="Duplicar">📑</button><button class="quick-del" style="color:var(--gold);" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')" title="Iniciar">▶</button><button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sch')}', () => deleteSchedule('${s.id}'))" title="${t('del')}">🗑</button></div></div>${open ? `<div class="goal-list">
+    <div class="panel-title" style="margin-bottom:8px;">🏃 ${t('sch_callup')} (${s.callup.length})</div>
+    <div class="grid-btns cols-4">${eligiblePlayers().map(p=>`<div class="chip chip-sm ${s.callup.includes(p.id)?'active-green':''}" onclick="event.stopPropagation(); window.toggleCallup('${s.id}', '${p.id}')">${playerLabel(p)}</div>`).join('')}</div>
+    
+    <div class="panel-title" style="margin-top:12px; margin-bottom:8px; color:var(--gold);">👔 Equipa Técnica Presença</div>
+    <div class="grid-btns cols-4">${(state.staff || []).map(st => `<div class="chip chip-sm ${(s.staffCallup || []).includes(st.id)?'active-green':''}" onclick="event.stopPropagation(); window.toggleStaffCallup('${s.id}', '${st.id}')">${st.name}</div>`).join('')}</div>
+    
+    <div class="btn-row" style="margin-top:12px;"><button class="btn btn-green" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.copyCallup('${s.id}')">WhatsApp 📋</button><button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.exportCallupPDF('${s.id}')">📄 Folha PDF</button><button class="btn btn-ghost" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')">${t('sch_start')}</button></div></div>` : ''}</div>`; }).join('') : `<div class="empty">${t('sch_none')}</div>`}`;
 }
 
 window.uiSaveTraining = function(){ 
@@ -1384,7 +1549,7 @@ function renderTreinos(){
       <div class="card">
         <div class="grid-btns">
           <div class="field" style="margin-bottom:0;"><label>${t('sch_date')}</label><input id="tr-date-input" type="date" value="${trainingForm.date}" oninput="trainingForm.date=this.value"></div>
-          <div class="field" style="margin-bottom:0;"><label>Duração Total (Min)</label><input type="number" min="15" step="5" placeholder="Ex: 90" value="${trainingForm.duration||90}" oninput="trainingForm.duration=this.value; render();"></div>
+          <div class="field" style="margin-bottom:0;"><label>Duração Total (Min)</label><input id="tr-duration-input" type="number" inputmode="numeric" pattern="[0-9]*" min="15" max="300" step="5" placeholder="Ex: 90" value="${trainingForm.duration || 90}" onclick="this.select()" oninput="trainingForm.duration=parseInt(this.value,10)||'';"></div>
         </div>
         <div class="field" style="margin-top:12px; margin-bottom:0;"><label>${t('tr_notes')}</label><textarea id="tr-notes-input" placeholder="${t('tr_notes_ph')}" oninput="trainingForm.notes=this.value">${trainingForm.notes || ''}</textarea></div>
       </div>
@@ -1404,9 +1569,9 @@ function renderTreinos(){
                 ${reasons.map(r => `<option value="${r.id}" ${currentReason===r.id?'selected':''}>${r.label}</option>`).join('')}
               </select>
             </div>
-            ${hasCustomMins ? `<div style="display:flex; align-items:center; justify-content:flex-end; gap:8px; font-size:11px; color:var(--muted); border-top:1px stroke var(--line); padding-top:4px;">
+            ${hasCustomMins ? `<div style="display:flex; align-items:center; justify-content:flex-end; gap:8px; font-size:11px; color:var(--muted); border-top:1px solid var(--line); padding-top:4px;">
               <span>Minutos cumpridos antes da saída:</span>
-              <input type="number" min="0" max="${baseDuration}" value="${playerMins}" style="width:65px; padding:2px 6px; font-size:11px; text-align:center; background:var(--surface); border:1px solid var(--gold); color:var(--gold); font-weight:bold; border-radius:4px;" oninput="setPlayerCustomMinutes('${p.id}', this.value)">
+              <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="${baseDuration}" value="${playerMins}" style="width:65px; padding:2px 6px; font-size:11px; text-align:center; background:var(--surface); border:1px solid var(--gold); color:var(--gold); font-weight:bold; border-radius:4px;" onclick="this.select()" oninput="setPlayerCustomMinutes('${p.id}', this.value)">
               <span>/ ${baseDuration}'</span>
             </div>` : ''}
           </div>`;
@@ -1510,8 +1675,7 @@ window.uiSaveVideo = function(){ if(!videoForm.title || !videoForm.title.trim())
 window.deleteVideo = function(id){ state.videos = state.videos.filter(v=>v.id!==id); saveState(); render(); };
 window.shareVideoWhatsapp = function(id){
   const v = state.videos.find(x=>x.id===id); if(!v) return;
-  const typeLabel = v.type==='treino' ? t('vid_type_train') : (v.type==='jogo' ? t('vid_type_match') : t('vid_type_setpiece'));
-  let text = `🎬 *${v.title}* (${typeLabel})\n\n🔗 ${v.url}\n`;
+  let text = `🎬 *${v.title}*\n\n🔗 ${v.url}\n`;
   if(v.notes) text += `\n📝 *Notas:* ${v.notes}\n`;
   window.shareContent(text);
 };
@@ -1519,17 +1683,40 @@ window.shareVideoWhatsapp = function(id){
 function renderVideos(){
   if(videoForm){
     return `${topbarHtml(t('vid_new'))}${renderStratSubHeader()}
-      <div class="card"><div class="field"><label>${t('vid_name')}</label><input type="text" placeholder="${t('vid_name_ph')}" value="${videoForm.title||''}" oninput="videoForm.title=this.value"></div><div class="field"><label>${t('vid_type')}</label><div class="seg"><div class="seg-btn ${videoForm.type==='treino'?'active':''}" onclick="videoForm.type='treino'; render()">${t('vid_type_train')}</div><div class="seg-btn ${videoForm.type==='jogo'?'active':''}" onclick="videoForm.type='jogo'; render()">${t('vid_type_match')}</div><div class="seg-btn ${videoForm.type==='parada'?'active':''}" onclick="videoForm.type='parada'; render()">${t('vid_type_setpiece')}</div></div></div><div class="field"><label>${t('vid_url')}</label><input type="url" placeholder="${t('vid_url_ph')}" value="${videoForm.url||''}" oninput="videoForm.url=this.value"></div><div class="field" style="margin-bottom:0;"><label>${t('vid_notes')}</label><textarea placeholder="${t('vid_notes_ph')}" oninput="videoForm.notes=this.value">${videoForm.notes||''}</textarea></div></div>
-      <button class="btn btn-gold" style="width:100%; margin-bottom:10px;" onclick="uiSaveVideo()">${t('vid_save')}</button><button class="btn btn-outline" style="width:100%;" onclick="videoForm=null; render()">${t('cancel')}</button>`;
+      <div class="card">
+        <div class="field"><label>${t('vid_name')}</label><input type="text" placeholder="Ex: Exercício de Finalização" value="${videoForm.title||''}" oninput="videoForm.title=this.value"></div>
+        <div class="field"><label>${t('vid_url')}</label><input type="url" placeholder="https://youtube.com/... ou link do vídeo" value="${videoForm.url||''}" oninput="videoForm.url=this.value"></div>
+        <div class="field" style="margin-bottom:0;"><label>Descrição / Notas</label><textarea placeholder="Ex: Foco no tempo de passe..." oninput="videoForm.notes=this.value">${videoForm.notes||''}</textarea></div>
+      </div>
+      <button class="btn btn-gold" style="width:100%; margin-bottom:10px;" onclick="uiSaveVideo()">${t('vid_save')}</button>
+      <button class="btn btn-outline" style="width:100%;" onclick="videoForm=null; render()">${t('cancel')}</button>`;
   }
-  const filtered = state.videos.filter(v => videoFilter === 'todos' || v.type === videoFilter);
+
+  const list = state.videos || [];
   return `${topbarHtml(t('hub_strat_title'))}${renderStratSubHeader()}
-    <button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="videoForm={title:'', type:'treino', url:'', notes:''}; render()">${t('vid_new')}</button>
-    <div class="seg" style="margin-bottom: 14px;"><div class="seg-btn ${videoFilter==='todos'?'active':''}" onclick="videoFilter='todos'; render()">${t('st_all')}</div><div class="seg-btn ${videoFilter==='treino'?'active':''}" onclick="videoFilter='treino'; render()">${t('vid_type_train')}</div><div class="seg-btn ${videoFilter==='jogo'?'active':''}" onclick="videoFilter='jogo'; render()">${t('vid_type_match')}</div><div class="seg-btn ${videoFilter==='parada'?'active':''}" onclick="videoFilter='parada'; render()">${t('vid_type_setpiece')}</div></div>
-    ${filtered.length ? filtered.map(v => {
-      const open = expandedVideo === v.id; const ytEmbed = getYouTubeEmbedUrl(v.url); const typeLabel = v.type==='treino' ? t('vid_type_train') : (v.type==='jogo' ? t('vid_type_match') : t('vid_type_setpiece'));
-      return `<div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('a') && !event.target.closest('iframe')){ expandedVideo=expandedVideo==='${v.id}'?null:'${v.id}'; render(); }"><div class="match-head-row"><div class="match-head" style="flex:1;"><div><div class="opp">${v.title}</div><div class="date"><span class="badge-type" style="margin-left:0;">${typeLabel}</span></div></div></div><button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('vid_del_ask')}', ()=>deleteVideo('${v.id}'))">🗑</button></div>${open ? `<div class="goal-list">${ytEmbed ? `<div class="video-embed-container"><iframe src="${ytEmbed}" allowfullscreen></iframe></div>` : ''}${v.notes ? `<div class="notes-readonly" style="margin-top:8px;">📝 ${v.notes}</div>` : ''}<div class="btn-row" style="margin-top:12px;"><button class="btn btn-green" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); shareVideoWhatsapp('${v.id}')">${t('vid_share')}</button><a class="btn btn-outline" style="font-size:11px; padding:10px; text-decoration:none;" href="${v.url}" target="_blank" onclick="event.stopPropagation();">${t('vid_open')}</a></div></div>` : ''}</div>`;
-    }).join('') : `<div class="empty">${t('vid_none')}</div>`}`;
+    <button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="videoForm={title:'', url:'', notes:''}; render()">${t('vid_new')}</button>
+    ${list.length ? list.map(v => {
+      const open = expandedVideo === v.id; 
+      const ytEmbed = getYouTubeEmbedUrl(v.url);
+      return `<div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('a') && !event.target.closest('iframe')){ expandedVideo=expandedVideo==='${v.id}'?null:'${v.id}'; render(); }">
+        <div class="match-head-row">
+          <div class="match-head" style="flex:1;">
+            <div>
+              <div class="opp">${v.title}</div>
+            </div>
+          </div>
+          <button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('vid_del_ask')}', ()=>deleteVideo('${v.id}'))">🗑</button>
+        </div>
+        ${open ? `<div class="goal-list">
+          ${ytEmbed ? `<div class="video-embed-container"><iframe src="${ytEmbed}" allowfullscreen></iframe></div>` : ''}
+          ${v.notes ? `<div class="notes-readonly" style="margin-top:8px;">📝 ${v.notes}</div>` : ''}
+          <div class="btn-row" style="margin-top:12px;">
+            <button class="btn btn-green" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); shareVideoWhatsapp('${v.id}')">${t('vid_share')}</button>
+            <a class="btn btn-outline" style="font-size:11px; padding:10px; text-decoration:none;" href="${v.url}" target="_blank" onclick="event.stopPropagation();">${t('vid_open')}</a>
+          </div>
+        </div>` : ''}
+      </div>`;
+    }).join('') : `<div class="empty">Nenhum vídeo guardado.</div>`}`;
 }
 
 window.exportMatchPDF = function(mId){
@@ -1671,18 +1858,18 @@ function computeStats(typeFilterVal, seasonFilterVal, phaseFilterVal){
 window.statsSeasonFilter = undefined;
 
 function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason) {
-  let golos = 0, assistencias = 0, amarelos = 0, vermelhos = 0, somaAvaliacoes = 0, numAvaliacoes = 0, faltasTreino = 0, jogosTitular = 0, minutos = 0, presencasTreino = 0, jogosConvocado = 0;
+  let golos = 0, assistencias = 0, amarelos = 0, vermelhos = 0, somaAvaliacoes = 0, numAvaliacoes = 0, faltasTreino = 0, jogosTitular = 0, totalSegundosJogo = 0, presencasTreino = 0, jogosConvocado = 0;
   let minutosTreinoCumpridos = 0, minutosTreinoTotais = 0;
   
   if (!state || !playerId) {
-    return { golos:0, assistencias:0, amarelos:0, vermelhos:0, media:'-', faltasTreino:0, presencasTreino:0, totalTreinos:0, minutosTreinoCumpridos:0, minutosTreinoTotais:0, jogosTitular:0, jogosConvocado:0, minutos:0 };
+    return { golos:0, assistencias:0, amarelos:0, vermelhos:0, media:'-', faltasTreino:0, presencasTreino:0, totalTreinos:0, minutosTreinoCumpridos:0, minutosTreinoTotais:0, jogosTitular:0, jogosConvocado:0, minutos:"0m 0s", totalSegundosJogo:0 };
   }
 
   (state.matches || []).filter(m => m && (targetSeason === 'TUDO' || getEntitySeason(m) === targetSeason)).forEach(m => {
     if ((m.lineup || []).includes(playerId) || (m.subs || []).some(s => s && s.inId === playerId)) jogosConvocado++;
     if (state.trackSubs && m.finished) { 
       if ((m.lineup || []).includes(playerId)) jogosTitular++; 
-      if (typeof calcPlayerMinutes === 'function') minutos += calcPlayerMinutes(m, playerId); 
+      if (typeof calcPlayerMinutes === 'function') totalSegundosJogo += calcPlayerMinutes(m, playerId); 
     }
     (m.goals || []).forEach(g => { 
       if (g && g.type === 'scored' && g.scorerId === playerId) golos++; 
@@ -1703,13 +1890,10 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
     minutosTreinoTotais += dur;
 
     let isAbsent = false;
-    let reason = 'presente';
     if (Array.isArray(tr.absences)) {
       isAbsent = tr.absences.includes(playerId);
-      if(isAbsent) reason = 'injustificada';
     } else if (tr.absences && tr.absences[playerId]) {
       isAbsent = true;
-      reason = tr.absences[playerId];
     }
 
     if (isAbsent) {
@@ -1728,7 +1912,9 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
     media: numAvaliacoes > 0 ? (somaAvaliacoes / numAvaliacoes).toFixed(1) : '-', 
     faltasTreino, presencasTreino, totalTreinos, 
     minutosTreinoCumpridos, minutosTreinoTotais,
-    jogosTitular, jogosConvocado, minutos 
+    jogosTitular, jogosConvocado, 
+    minutos: formatSecsToMinSec(totalSegundosJogo),
+    totalSegundosJogo
   };
 }
 
@@ -1796,8 +1982,7 @@ function renderStats(){
           const st = calcularEstatisticaJogador(p.id, activeSeason); 
           
           // CÁLCULO CORRIGIDO: Baseado nos minutos reais cumpridos vs minutos totais da equipa
-          // Substituir esta linha no PDF:
-		  const pPct = st.minutosTreinoTotais > 0 ? Math.round((st.minutosTreinoCumpridos / st.minutosTreinoTotais)*100) : 0;
+          const pPct = st.minutosTreinoTotais > 0 ? Math.round((st.minutosTreinoCumpridos / st.minutosTreinoTotais)*100) : 0;
 
           tableHtml += `<tr onclick="expandedPlayer='${p.id}'; navigateToTab('plantel');" style="cursor:pointer;">
             <td class="p-name">${p.name}</td>
@@ -1966,14 +2151,94 @@ window.exportCsv = function() {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `coachfolio-estatisticas-${activeSeason === 'TUDO' ? 'totais' : activeSeason.replace('/','-')}-${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); showToast(t('msg_csv_exp'));
 };
 
+window.switchStaffTab = function(tab) {
+  staffSubTab = tab;
+  render();
+};
+
+window.saveStaffMember = function() {
+  if (!staffForm || !staffForm.name) { showToast('Preencha o nome do elemento.'); return; }
+  if (!state.staff) state.staff = [];
+  if (staffForm.id) {
+    const idx = state.staff.findIndex(s => s.id === staffForm.id);
+    if (idx !== -1) state.staff[idx] = { ...staffForm };
+  } else {
+    staffForm.id = 'st_' + Date.now();
+    state.staff.push({ ...staffForm });
+  }
+  saveState();
+  staffForm = null;
+  render();
+  showToast('Elemento guardado!');
+};
+
+window.deleteStaffMember = function(id) {
+  state.staff = (state.staff || []).filter(s => s.id !== id);
+  saveState();
+  render();
+  showToast('Elemento removido.');
+};
+
 function renderPlantel(){
   const activeRoster = eligiblePlayers();
   let totalMins = 0; let totalPlayersWithMins = 0;
   if(state.showFairPlay) { activeRoster.forEach(p => { const st = calcularEstatisticaJogador(p.id); if(st.minutos > 0) { totalMins += st.minutos; totalPlayersWithMins++; } }); }
   const avgMins = totalPlayersWithMins > 0 ? (totalMins / totalPlayersWithMins) : 0;
 
-  let html = `${topbarHtml(t('hub_team_title'))}${renderTeamSubHeader()}<div class="card">`;
-  html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--line);"><span style="font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:700;">Ordenar por:</span><select onchange="state.rosterSortBy=this.value; saveState(); render()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--chalk); border-radius:6px; padding:6px; font-size:11px; font-weight:bold; outline:none;"><option value="numero" ${state.rosterSortBy==='numero'?'selected':''}>Número</option><option value="nome" ${state.rosterSortBy==='nome'?'selected':''}>Nome (A-Z)</option><option value="posicao" ${(state.rosterSortBy||'posicao')==='posicao'?'selected':''}>Posição (Campo)</option></select></div>`;
+  let html = `${topbarHtml(t('hub_team_title'))}${renderTeamSubHeader()}`;
+
+  // Seletor de Sub-Aba: Jogadores vs Equipa Técnica
+  html += `
+    <div class="seg" style="margin-bottom:14px;">
+      <div class="seg-btn ${staffSubTab==='jogadores'?'active':''}" onclick="switchStaffTab('jogadores')">🏃 Jogadores</div>
+      <div class="seg-btn ${staffSubTab==='staff'?'active':''}" onclick="switchStaffTab('staff')">👔 Equipa Técnica</div>
+    </div>
+  `;
+
+  // VISTA 1: EQUIPA TÉCNICA
+  if (staffSubTab === 'staff') {
+    if (staffForm) {
+      return html + `
+        <div class="card">
+          <div class="field"><label>Nome</label><input type="text" placeholder="Ex: João Silva" value="${staffForm.name || ''}" oninput="staffForm.name=this.value"></div>
+          <div class="field"><label>Cargo / Função</label><input type="text" placeholder="Ex: Treinador Adjunto, Fisioterapeuta..." value="${staffForm.role || ''}" oninput="staffForm.role=this.value"></div>
+          <div class="field"><label>Telefone</label><input type="tel" placeholder="912 345 678" value="${staffForm.phone || ''}" oninput="staffForm.phone=this.value"></div>
+          <div class="field" style="margin-bottom:0;"><label>E-mail</label><input type="email" placeholder="email@exemplo.com" value="${staffForm.email || ''}" oninput="staffForm.email=this.value"></div>
+        </div>
+        <button class="btn btn-gold" style="width:100%; margin-bottom:10px;" onclick="saveStaffMember()">💾 Guardar Elemento</button>
+        <button class="btn btn-outline" style="width:100%;" onclick="staffForm=null; render()">Cancelar</button>
+      `;
+    }
+
+    const list = state.staff || [];
+    html += `<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="staffForm={name:'', role:'', phone:'', email:''}; render()">+ Novo Elem. Técnico</button>`;
+    if (list.length === 0) {
+      html += `<div class="empty">Nenhum elemento na Equipa Técnica.</div>`;
+    } else {
+      list.forEach(s => {
+        html += `
+          <div class="card match-item" style="margin-bottom:8px;">
+            <div class="match-head-row">
+              <div class="match-head" style="flex:1;">
+                <div>
+                  <div class="opp">${s.name}</div>
+                  <div style="font-size:11px; color:var(--gold); font-weight:700; margin-top:2px;">${s.role || 'Membro da Equipa Técnica'}</div>
+                  ${s.phone ? `<div style="font-size:10px; color:var(--muted); margin-top:2px;">📞 ${s.phone}</div>` : ''}
+                </div>
+              </div>
+              <div style="display:flex; gap:6px;">
+                <button class="quick-del" onclick="staffForm={...state.staff.find(x=>x.id==='${s.id}')}; render()">✏️</button>
+                <button class="quick-del" onclick="askConfirm('Remover este elemento?', ()=>deleteStaffMember('${s.id}'))">🗑</button>
+              </div>
+            </div>
+          </div>`;
+      });
+    }
+    return html;
+  }
+
+  // VISTA 2: JOGADORES (A tua lógica original 100% intacta)
+  html += `<div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--line);"><span style="font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:700;">Ordenar por:</span><select onchange="state.rosterSortBy=this.value; saveState(); render()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--chalk); border-radius:6px; padding:6px; font-size:11px; font-weight:bold; outline:none;"><option value="numero" ${state.rosterSortBy==='numero'?'selected':''}>Número</option><option value="nome" ${state.rosterSortBy==='nome'?'selected':''}>Nome (A-Z)</option><option value="posicao" ${(state.rosterSortBy||'posicao')==='posicao'?'selected':''}>Posição (Campo)</option></select></div>`;
 
   if(activeRoster.length === 0) { html += `<div class="empty">${t('pl_none')}</div>`; } 
   else {
@@ -2185,7 +2450,7 @@ loadState();
   <div style="background: #fff; width: 90%; max-width: 400px; padding: 20px; border-radius: 10px; text-align: center; color: #333; font-family: sans-serif;">
     
     <h2 style="margin-top: 0; color: #0E211A; margin-bottom: 5px;">⚽ Coachfolio</h2>
-    <p style="font-size: 0.9em; color: #666; margin: 0;">Versão 2.6.9.1</p>
+    <p style="font-size: 0.9em; color: #666; margin: 0;">Versão 2.7.0</p>
     <p style="font-size: 0.9em; font-style: italic; color: #555; margin-top: 5px;">"Feito por treinadores, para treinadores."</p>
     
     <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">

@@ -481,8 +481,10 @@ window.shiftSeason = function(dir) {
     }
 };
 
+// ORDENAÇÃO POR POSIÇÃO: CONSIDERA APENAS A PRIMEIRA POSIÇÃO DEFINIDA (ANTES DA PRIMEIRA VÍRGULA)
 function getPosRank(pos) {
     if(!pos || pos.trim() === '') return 99;
+    // Extrai estritamente a primeira posição (antes da vírgula)
     let firstPos = pos.split(',')[0].trim().toUpperCase();
     
     if(firstPos.includes('GR') || firstPos.includes('GK')) return 1;
@@ -539,7 +541,8 @@ function getNextBirthday() {
     upcoming.sort((a,b) => a.days - b.days); return upcoming.length > 0 ? upcoming[0] : null;
 }
 
-function playerLabel(p) { if(!p) return t('pl_no_name'); return p.number ? `${p.number} - ${p.name}` : (p.name || t('pl_no_name')); }
+// FORMATAÇÃO LIMPA: SEM O SÍMBOLO '#'
+function playerLabel(p) { if(!p) return t('pl_no_name'); return p.number ? `${p.number} ${p.name}` : (p.name || t('pl_no_name')); }
 function getActiveMatch(){ return state.matches.find(m => !m.finished) || null; }
 function playerName(id){ if(id === 'unknown') return t('match_nobody'); const p = state.roster.find(p=>p.id===id); return p ? playerLabel(p) : '—'; }
 function eligiblePlayers(){ return sortPlayerObjs((state.roster || []).filter(p => p && p.active !== false)); }
@@ -1942,7 +1945,7 @@ window.exportMatchPDF = function(mId){
 
   let goalsHtml = '';
   (m.goals||[]).forEach(g => {
-     let desc = g.type==='scored' ? `⚽ ${playerName(g.scorerId)} ${g.assistId&&g.assistId!=='none'? '(Ast: '+playerName(g.assistId)+')':''}` : `局 Golo Sofrido`;
+     let desc = g.type==='scored' ? `⚽ ${playerName(g.scorerId)} ${g.assistId&&g.assistId!=='none'? '(Ast: '+playerName(g.assistId)+')':''}` : `🥅 Golo Sofrido`;
      let min = g.minute != null ? g.minute+"'" : (g.half===1?"1ªP":"2ªP");
      goalsHtml += `<tr><td>${min}</td><td style="text-align:left; font-weight:bold;">${desc}</td></tr>`;
   });
@@ -2354,6 +2357,7 @@ window.deleteStaffMember = function(id) {
   showToast('Elemento removido.');
 };
 
+// EXPORTAÇÃO COMPLETA DA FICHA INDIVIDUAL PDF COM OS GRÁFICOS VISUAIS INCLUÍDOS
 window.exportPlayerPDF = function(playerId) {
   const p = (state.roster || []).find(x => x.id === playerId);
   if (!p) {
@@ -2361,87 +2365,89 @@ window.exportPlayerPDF = function(playerId) {
     return;
   }
 
+  const st = calcularEstatisticaJogador(p.id);
   const currentMatches = (state.matches || []).filter(m => (m.season || state.currentSeason) === state.currentSeason);
-  let totalSecs = 0, totalGoals = 0, totalAssists = 0, yellowCards = 0, redCards = 0, matchCount = 0;
-
-  currentMatches.forEach(m => {
-    let pMins = calcPlayerMinutes(m, p.id);
-    if (pMins > 0) {
-      totalSecs += pMins;
-      matchCount++;
-    }
-    if (m.goals) {
-      m.goals.forEach(g => {
-        if (g.scorerId === p.id) totalGoals++;
-        if (g.assistId === p.id) totalAssists++;
-      });
-    }
-    if (m.cards) {
-      m.cards.forEach(c => {
-        if (c.playerId === p.id) {
-          if (c.color === 'Amarelo') yellowCards++;
-          if (c.color === 'Vermelho') redCards++;
-        }
-      });
-    }
-  });
-
   const currentTrainings = (state.trainings || []).filter(t => (t.season || state.currentSeason) === state.currentSeason);
-  let presences = 0;
-  currentTrainings.forEach(tr => {
-    let isAbsent = false;
-    if (Array.isArray(tr.absences)) isAbsent = tr.absences.includes(p.id);
-    else if (tr.absences && tr.absences[p.id]) isAbsent = true;
-    if (!isAbsent) presences++;
+  const trainPct = currentTrainings.length ? Math.round((st.presencasTreino / currentTrainings.length) * 100) : 0;
+
+  // Cálculo dos máximos para gerar as barras visuais na folha de impressão
+  let maxStats = { minutos: 1, golos: 1, assist: 1, jogos: 1 };
+  eligiblePlayers().forEach(pl => {
+    const s = calcularEstatisticaJogador(pl.id);
+    if (s.totalSegundosJogo > maxStats.minutos) maxStats.minutos = s.totalSegundosJogo;
+    if (s.golos > maxStats.golos) maxStats.golos = s.golos;
+    if (s.assistencias > maxStats.assist) maxStats.assist = s.assistencias;
+    if (s.jogosTitular > maxStats.jogos) maxStats.jogos = s.jogosTitular;
   });
-  const trainPct = currentTrainings.length ? Math.round((presences / currentTrainings.length) * 100) : 0;
+
+  const playerBars = generatePlayerBarsHTML({
+    minutos: st.totalSegundosJogo,
+    golos: st.golos,
+    assistencias: st.assistencias,
+    jogosTitular: st.jogosTitular
+  }, maxStats);
+
+  const donutChart = generateDonutChartSVG(st.presencasTreino, st.faltasTreino);
 
   let html = `
     <div class="print-card">
       <div class="print-header">
         <h1>FICHA DE RENDIMENTO INDIVIDUAL</h1>
-        <p style="font-size:22px; font-weight:bold; margin-top:5px; color:#000;">#${p.number || '-'} ${p.name}</p>
+        <p style="font-size:22px; font-weight:bold; margin-top:5px; color:#000;">${p.number ? p.number + ' ' : ''}${p.name}</p>
         <p style="font-size:13px; color:#444;">Clube: <b>${getMyClub()}</b> | Época: <b>${state.currentSeason}</b></p>
       </div>
 
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; background:#F8F8F8; padding:15px; border-radius:6px; border:1px solid #DDD; margin-bottom:20px; font-size:12px;">
-        <div><b>Posição Principal:</b> ${p.positions || 'Não definida'}</div>
+        <div><b>Posição Principal:</b> ${p.positions ? p.positions.split(',')[0].trim() : 'Não definida'}</div>
+        <div><b>Outras Posições:</b> ${p.positions || 'N/A'}</div>
         <div><b>Data de Nascimento:</b> ${p.birthDate || 'N/A'}</div>
+        <div><b>Idade:</b> ${p.birthDate ? computeAge(p.birthDate) + ' anos' : 'N/A'}</div>
       </div>
 
       <h3 style="margin-bottom:10px; border-bottom:2px solid #000; padding-bottom:4px;">📊 Estatísticas de Competição</h3>
       <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; text-align:center; margin-bottom:20px;">
         <div style="border:1px solid #CCC; padding:10px; border-radius:6px;">
-          <span style="font-size:10px; color:#666; text-transform:uppercase;">Jogos</span><br>
-          <b style="font-size:18px;">${matchCount}</b>
+          <span style="font-size:10px; color:#666; text-transform:uppercase;">Convocatórias</span><br>
+          <b style="font-size:18px;">${st.jogosConvocado}</b>
         </div>
         <div style="border:1px solid #CCC; padding:10px; border-radius:6px;">
           <span style="font-size:10px; color:#666; text-transform:uppercase;">Tempo Total</span><br>
-          <b style="font-size:18px;">${formatMinSec(totalSecs)}</b>
+          <b style="font-size:18px;">${st.minutos}</b>
         </div>
         <div style="border:1px solid #CCC; padding:10px; border-radius:6px;">
           <span style="font-size:10px; color:#666; text-transform:uppercase;">Golos / Assist.</span><br>
-          <b style="font-size:18px;">${totalGoals} / ${totalAssists}</b>
+          <b style="font-size:18px;">${st.golos} / ${st.assistencias}</b>
         </div>
         <div style="border:1px solid #CCC; padding:10px; border-radius:6px;">
           <span style="font-size:10px; color:#666; text-transform:uppercase;">Cartões (🟨/🟥)</span><br>
-          <b style="font-size:18px;">${yellowCards} / ${redCards}</b>
+          <b style="font-size:18px;">${st.amarelos} / ${st.vermelhos}</b>
+        </div>
+      </div>
+
+      <h3 style="margin-bottom:10px; border-bottom:2px solid #000; padding-bottom:4px;">📈 Análise Gráfica Visual</h3>
+      <div style="display:flex; justify-content:space-between; align-items:center; border:1px solid #CCC; padding:15px; border-radius:6px; margin-bottom:20px; background:#FAFAFA;">
+        <div style="flex:1; margin-right:20px;">
+          ${playerBars}
+        </div>
+        <div style="width:110px; text-align:center;">
+          ${donutChart}
+          <div style="font-size:9px; color:#666; font-weight:bold; margin-top:4px; text-transform:uppercase;">Assiduidade Treino</div>
         </div>
       </div>
 
       <h3 style="margin-bottom:10px; border-bottom:2px solid #000; padding-bottom:4px;">🏋️ Treino & Assiduidade</h3>
       <div style="display:flex; justify-content:space-between; background:#FFF; border:1px solid #CCC; padding:12px; border-radius:6px; margin-bottom:20px; font-size:12px;">
-        <div><b>Sessões de Treino Realizadas:</b> ${currentTrainings.length}</div>
-        <div><b>Presenças do Atleta:</b> ${presences}</div>
+        <div><b>Sessões Realizadas:</b> ${currentTrainings.length}</div>
+        <div><b>Presenças:</b> ${st.presencasTreino} | <b>Faltas:</b> ${st.faltasTreino}</div>
         <div><b>Taxa de Assiduidade:</b> <b style="color:#000;">${trainPct}%</b></div>
       </div>
 
-      <h3 style="margin-bottom:10px; border-bottom:2px solid #000; padding-bottom:4px;">📝 Avaliação Qualitativa do Treinador</h3>
-      <div style="border:1px solid #000; padding:15px; border-radius:6px; min-height:120px; font-size:12px; background:#FAFAFA;">
+      <h3 style="margin-bottom:10px; border-bottom:2px solid #000; padding-bottom:4px;">📝 Observações do Treinador</h3>
+      <div style="border:1px solid #000; padding:15px; border-radius:6px; min-height:100px; font-size:12px; background:#FAFAFA;">
         ${p.notes || 'Sem observações adicionais registadas na ficha do atleta.'}
       </div>
 
-      <div style="margin-top:40px; display:flex; justify-content:space-between; align-items:flex-end;">
+      <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
         <div style="font-size:10px; color:#666;">Relatório Individual Emitido por Coachfolio v2.7</div>
         <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">O Treinador / Coordenação</div>
       </div>
@@ -2451,6 +2457,7 @@ window.exportPlayerPDF = function(playerId) {
   window.print();
 };
 
+// RENDERPLANTEL: MANTÉM O LAYOUT EXATAMENTE COMO NA FOTO (CLEAN & SOFT)
 window.renderPlantel = function() {
   const activeRoster = eligiblePlayers();
   let totalMins = 0; 
@@ -2469,7 +2476,7 @@ window.renderPlantel = function() {
 
   // Seletor de Sub-Aba: Jogadores vs Staff
   html += `
-    <div class="seg" style="margin-bottom:14px;">
+    <div class="seg" style="margin-bottom:10px;">
       <div class="seg-btn ${staffSubTab==='jogadores'?'active':''}" onclick="switchStaffTab('jogadores')">🏃 Jogadores (${activeRoster.length})</div>
       <div class="seg-btn ${staffSubTab==='staff'?'active':''}" onclick="switchStaffTab('staff')">👔 Equipa Técnica (${(state.staff || []).length})</div>
     </div>
@@ -2477,11 +2484,23 @@ window.renderPlantel = function() {
 
   // 1. SEPARADOR DE JOGADORES
   if (staffSubTab === 'jogadores') {
+    // BARRA SELETORA DE ORDENAÇÃO
+    const currentSort = state.rosterSortBy || 'posicao';
+    html += `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; background:var(--surface-2); padding:6px 10px; border-radius:8px; border:1px solid var(--line);">
+        <span style="font-size:10px; color:var(--muted); font-weight:bold; text-transform:uppercase;">Ordenar por:</span>
+        <div class="seg" style="margin-top:0; flex:none; gap:4px;">
+          <button class="seg-btn ${currentSort==='posicao'?'active':''}" style="font-size:9px; padding:4px 8px;" onclick="state.rosterSortBy='posicao'; saveState(); render();">Posição</button>
+          <button class="seg-btn ${currentSort==='nome'?'active':''}" style="font-size:9px; padding:4px 8px;" onclick="state.rosterSortBy='nome'; saveState(); render();">Nome</button>
+          <button class="seg-btn ${currentSort==='numero'?'active':''}" style="font-size:9px; padding:4px 8px;" onclick="state.rosterSortBy='numero'; saveState(); render();">Número</button>
+        </div>
+      </div>
+    `;
+
     if (activeRoster.length === 0) {
       html += `<div class="empty">${t('pl_none')}</div>
         <div class="add-row" style="margin-bottom:15px;"><input id="new-player-input" type="text" placeholder="${t('pl_add_ph')}"><button onclick="uiAddPlayer()">+</button></div>`;
     } else {
-      // Máximos do plantel para calibrar as barras visuais
       let maxStats = { minutos: 1, golos: 1, assist: 1, jogos: 1 };
       activeRoster.forEach(pl => {
         const s = calcularEstatisticaJogador(pl.id);
@@ -2499,27 +2518,23 @@ window.renderPlantel = function() {
         const st = calcularEstatisticaJogador(p.id);
         const age = p.birthDate ? computeAge(p.birthDate) : null;
 
-        // Posições com badges dourados
         let posBadges = '';
         if (p.positions && p.positions.trim() !== '') {
           posBadges = p.positions.split(',').map(pos => `<span style="background:var(--gold-dim); color:var(--gold); border:1px solid var(--gold); border-radius:4px; padding:1px 5px; font-size:9px; font-weight:bold; margin-right:4px;">${pos.trim()}</span>`).join('');
         }
 
         html += `<div class="player-item">
-          <!-- CABEÇALHO DO JOGADOR NA LISTA -->
           <div class="player-row" style="padding:12px 6px;" onclick="expandedPlayer = expandedPlayer === '${p.id}' ? null : '${p.id}'; editingPlayerId = null; render();">
             <div style="display:flex; align-items:center; gap:8px; text-align:left;">
-              <span style="color:var(--gold); font-weight:bold; font-size:15px;" class="mono">#${p.number !== null && p.number !== undefined && p.number !== '' ? p.number : ''}</span>
+              <span style="color:var(--gold); font-weight:bold; font-size:15px;" class="mono">${p.number !== null && p.number !== undefined && p.number !== '' ? p.number : ''}</span>
               <span style="font-weight:bold; color:var(--chalk); font-size:15px;">${p.name || t('pl_no_name')}</span>
               ${posBadges}
               ${age !== null ? `<span style="font-size:12px; color:var(--muted); font-weight:normal;">- ${age} ${t('pl_yrs')}</span>` : ''}
             </div>
           </div>`;
 
-        // CARTÃO EXPANDIDO (EXATAMENTE COMO NA FOTO)
         if (isExpanded) {
           if (isEditing) {
-            // MODO DE EDIÇÃO DOS DADOS
             html += `<div style="background:var(--surface); border:1px solid var(--gold); border-radius:12px; padding:14px; margin:8px 0 14px; text-align:left;">
               <div class="panel-title" style="color:var(--gold); margin-bottom:10px;">${t('pl_edit')}</div>
               <div class="grid-btns" style="margin-bottom:10px;">
@@ -2540,7 +2555,6 @@ window.renderPlantel = function() {
               </div>
             </div>`;
           } else {
-            // MODO DE VISUALIZAÇÃO GRÁFICA (EXATAMENTE COMO NA IMAGEM)
             const playerBars = generatePlayerBarsHTML({
               minutos: st.totalSegundosJogo,
               golos: st.golos,
@@ -2551,7 +2565,6 @@ window.renderPlantel = function() {
             const donutChart = generateDonutChartSVG(st.presencasTreino, st.faltasTreino);
 
             html += `<div style="background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px; margin:6px 0 14px; text-align:left;">
-              <!-- 1. GRELHA DE 4 CAIXAS DE ESTATÍSTICAS -->
               <div class="profile-stats-grid" style="grid-template-columns:1fr 1fr 1fr 1fr; gap:6px; margin-bottom:10px;">
                 <div class="profile-stat">
                   <div class="val" style="color:var(--gold); font-size:16px;">${st.minutos}</div>
@@ -2571,7 +2584,6 @@ window.renderPlantel = function() {
                 </div>
               </div>
 
-              <!-- 2. PAINEL FORMA & FALTAS -->
               <div style="background:var(--surface-2); border-radius:8px; padding:10px 12px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; font-size:11px;">
                 <span style="color:var(--muted); font-weight:bold; text-transform:uppercase;">FORMA & FALTAS</span>
                 <div style="display:flex; align-items:center; gap:10px; font-weight:bold;">
@@ -2582,7 +2594,6 @@ window.renderPlantel = function() {
                 </div>
               </div>
 
-              <!-- 3. GRÁFICO DAS BARRAS + ASSIDUIDADE CIRCULAR -->
               <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px;">
                 <div style="flex:1;">
                   ${playerBars}
@@ -2593,7 +2604,6 @@ window.renderPlantel = function() {
                 </div>
               </div>
 
-              <!-- 4. BOTÕES DE EDIÇÃO E EXPORTAÇÃO PDF -->
               <div style="display:flex; gap:8px;">
                 <button class="btn btn-outline" style="flex:1; font-size:11px; padding:10px;" onclick="editingPlayerId='${p.id}'; render();">✏️ EDITAR DADOS DO JOGADOR</button>
                 <button class="btn btn-gold" style="flex:none; padding:10px 14px; font-size:11px;" onclick="window.exportPlayerPDF('${p.id}')">📄 FICHA PDF</button>

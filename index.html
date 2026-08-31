@@ -279,7 +279,7 @@ const dict = {
     sch_phase: "Fase / Competição", sch_phase_ph: "Ex: 1ª Fase, Taça", sch_matchday: "Jornada", sch_matchday_ph: "Ex: 1, 14", sch_opp: "Adversário", sch_opp_ph: "Nome da equipa",
     sch_date: "Data", sch_time: "Hora", sch_add_game: "+ Adicionar Jogo ao Torneio", sch_type: "Tipo de jogo", sch_friendly: "Amigável", sch_champ: "Camp.", sch_tour: "Torneio",
     sch_save: "Guardar Agendamento", sch_none: "Nenhum jogo agendado no calendário.", sch_callup: "Convocatória", sch_start: "Iniciar Jogo", sch_meet: "Hora de Comparência:",
-    tr_title: "Treinos", tr_new: "+ Novo Treino", tr_notes: "Notas / Foco", tr_notes_ph: "Ex: trabalho de finalização...",
+    tr_title: "Treinos", tr_new: "+ Novo Treino", tr_notes: "Plano de Treino & Observações", tr_notes_ph: "Ex: 1. Meiinho; 2. Posse 4v4... | Notas: A equipa esteve bem.",
     tr_abs: "Faltas", tr_abs_desc: "Todos ficam presentes por omissão. Toca em quem faltou.", tr_save: "Guardar Treino",
     tr_pres: "presentes", tr_abss: "faltas", tr_none: "Ainda não há treinos registados.",
     diary_title: "Diário do Balneário", diary_new: "+ Nova Nota / Reunião", diary_heading: "Título da Nota", diary_heading_ph: "Ex: Reunião de Pais / Conversa Individual",
@@ -581,6 +581,10 @@ function calcPlayerMinutes(m, pId) {
   let totalSecs = 0; 
   [1, 2].forEach(half => { 
     let durationMins = getHalfDuration(m, half); 
+    
+    // NOVIDADE: Usa o tempo inserido manualmente e divide por 2 para cada parte!
+    if (durationMins === 0 && m.finished) durationMins = (m.manualMatchDuration || 90) / 2; 
+    
     let durationSecs = durationMins * 60; 
     let onPitch = half === 1 ? (m.lineup || []).includes(pId) : getPlayersOnPitchAtEndOfHalf(m, 1).includes(pId); 
     let timeOnSecs = 0; 
@@ -735,7 +739,19 @@ window.uiFinishMatch = function(){
 
 window.confirmFinishMatch = function(action) {
     const m = getActiveMatch(); if(!m) return;
-    if(action === 'cancel') { closeModal(); } else if(action === 'save') { closeModal(); modalConfig = { type: 'askRatings' }; document.getElementById('modal-root').innerHTML = renderModalHTML(); } else if(action === 'discard') {
+    if(action === 'cancel') { closeModal(); } 
+    else if(action === 'save') { 
+        // LER O TEMPO INTRODUZIDO PELO TREINADOR
+        const manualInput = document.getElementById('manual-match-duration');
+        if(manualInput) {
+            let d = parseInt(manualInput.value, 10);
+            m.manualMatchDuration = (isNaN(d) || d <= 0) ? 90 : d;
+        }
+        closeModal(); 
+        modalConfig = { type: 'askRatings' }; 
+        document.getElementById('modal-root').innerHTML = renderModalHTML(); 
+    } 
+    else if(action === 'discard') {
         if(m.originalSchedule) { state.schedule.push(m.originalSchedule); state.schedule.sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time)); state.matches = state.matches.filter(x => x.id !== m.id); saveState(); closeModal(); navigateToTab('calendario'); } else { state.matches = state.matches.filter(x => x.id !== m.id); saveState(); closeModal(); goHome(); }
     }
 };
@@ -751,7 +767,7 @@ window.confirmSub = function(mId) { const m = state.matches.find(x=>x.id===mId);
 window.deleteSub = function(mId, subId) { const m = state.matches.find(x=>x.id===mId); if(!m) return; m.subs = m.subs.filter(s => s.id !== subId); saveState(); render(); };
 window.setCaptain = function(matchId, playerId){ const m = state.matches.find(m=>m.id===matchId); if(m){ m.capitao = playerId; saveState(); } pendingCaptain = false; render(); };
 window.setRating = function(matchId, playerId, rating){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; if(!m.ratings) m.ratings = {}; if(m.ratings[playerId] === rating) delete m.ratings[playerId]; else m.ratings[playerId] = rating; saveState(); render(); };
-window.askConfirm = function(message, onConfirm){ modalConfig = { message, onConfirm }; document.getElementById('modal-root').innerHTML = renderModalHTML(); };
+window.askConfirm = function(message, onConfirm, btnClass = 'btn-red'){ modalConfig = { type: 'confirm', message, onConfirm, btnClass }; document.getElementById('modal-root').innerHTML = renderModalHTML(); };
 window.closeModal = function(){ modalConfig = null; document.getElementById('modal-root').innerHTML = ''; };
 window.confirmModal = function(){ const cb = modalConfig ? modalConfig.onConfirm : null; window.closeModal(); if(cb) cb(); };
 
@@ -937,15 +953,27 @@ function renderModalHTML(){
      return `<div class="modal-overlay"><div class="modal-card"><h3 style="margin-top:0; color:var(--red);">${t('archive_title')}</h3><p style="font-size:13px; text-align:left; color:var(--chalk);">${t('archive_desc')}</p><div style="background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:20px;"><p style="font-size:12px; font-weight:bold; color:var(--gold); margin-top:0; margin-bottom:10px;">${t('archive_warn')}</p><div style="display:flex; flex-direction:column; gap:8px;"><button class="btn btn-ghost" style="font-size:12px;" onclick="exportSeasonPDF()">📄 ${t('exp_pdf')}</button><button class="btn btn-ghost" style="font-size:12px;" onclick="exportData()">💾 ${t('exp_json')}</button></div></div><div style="display:flex; gap:10px;"><button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button><button class="btn btn-red" onclick="doArchiveSeason()">${t('archive_btn')}</button></div></div></div>`;
   }
 
-  if(modalConfig.type === 'finishMatch') { 
-     return `<div class="modal-overlay"><div class="modal-card"><p style="font-weight:600; font-size:16px;">${t('msg_not_started')}</p><p style="font-size:13px;">${t('msg_not_started_desc')}</p><div style="display:flex; flex-direction:column; gap:10px;"><button class="btn btn-gold" onclick="confirmFinishMatch('save')">${t('msg_save_game')}</button><button class="btn btn-red" style="flex-direction:column; gap:2px; padding:10px;" onclick="confirmFinishMatch('discard')"><span>${t('msg_exit_nosave')}</span><span style="font-size:10px; font-weight:normal; text-transform:none; letter-spacing:0; opacity:0.8;">${t('msg_exit_desc')}</span></button><button class="btn btn-outline" onclick="confirmFinishMatch('cancel')">${t('cancel')}</button></div></div></div>`; 
+   if(modalConfig.type === 'finishMatch') { 
+     return `<div class="modal-overlay"><div class="modal-card">
+       <p style="font-weight:600; font-size:16px;">${t('msg_not_started')}</p>
+       <p style="font-size:13px;">${t('msg_not_started_desc')}</p>
+       <div class="field" style="text-align:left; margin-bottom:16px; background:var(--surface); padding:10px; border-radius:8px; border:1px solid var(--gold);">
+         <label style="color:var(--gold);">Duração Total do Jogo (Minutos)</label>
+         <input type="number" id="manual-match-duration" value="90" min="10" max="120" style="text-align:center; font-weight:bold; font-size:18px;">
+       </div>
+       <div style="display:flex; flex-direction:column; gap:10px;">
+         <button class="btn btn-gold" onclick="confirmFinishMatch('save')">${t('msg_save_game')}</button>
+         <button class="btn btn-red" style="flex-direction:column; gap:2px; padding:10px;" onclick="confirmFinishMatch('discard')"><span>${t('msg_exit_nosave')}</span><span style="font-size:10px; font-weight:normal; text-transform:none; letter-spacing:0; opacity:0.8;">${t('msg_exit_desc')}</span></button>
+         <button class="btn btn-outline" onclick="confirmFinishMatch('cancel')">${t('cancel')}</button>
+       </div>
+     </div></div>`; 
   }
 
   if(modalConfig.type === 'askRatings') { 
      return `<div class="modal-overlay"><div class="modal-card"><p style="font-weight:600; font-size:16px;">${t('msg_match_ended')}</p><p style="font-size:13px;">${t('msg_ask_rate')}</p><div style="display:flex; flex-direction:column; gap:10px;"><button class="btn btn-gold" onclick="closeModal(); pendingRatings=true; render();">${t('msg_yes_rate')}</button><button class="btn btn-outline" onclick="closeModal(); doFinishMatch();">${t('msg_no_rate')}</button></div></div></div>`; 
   }
 
-  return `<div class="modal-overlay"><div class="modal-card"><p>${modalConfig.message}</p><div style="display:flex; gap:10px;"><button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button><button class="btn btn-red" onclick="confirmModal()">${t('confirm')}</button></div></div></div>`;
+  return `<div class="modal-overlay"><div class="modal-card"><p>${modalConfig.message}</p><div style="display:flex; gap:10px;"><button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button><button class="btn ${modalConfig.btnClass || 'btn-red'}" onclick="confirmModal()">${t('confirm')}</button></div></div></div>`;
 }
 
 function topbarHtml(title){ 
@@ -1063,7 +1091,28 @@ function renderHome(){
         <button class="btn btn-green" style="font-size:10px; padding:6px 10px; flex:none;" onclick="navigateToHub('planeamento'); navigateToTab('treinos');">Ver Treinos 🟢</button>
       </div>`;
   }
+  let formHtml = '';
+  // Vai buscar os últimos 5 jogos concluídos da época atual
+  const seasonFinishedMatches = (state.matches || [])
+    .filter(m => m.finished && (m.season || state.currentSeason) === state.currentSeason)
+    .sort((a,b) => new Date(a.date) - new Date(b.date))
+    .slice(-5);
 
+  if(seasonFinishedMatches.length > 0) {
+    const formDots = seasonFinishedMatches.map(m => {
+      const sc = (m.goals||[]).filter(g=>g.type==='scored').length; 
+      const co = (m.goals||[]).filter(g=>g.type==='conceded').length;
+      const res = sc > co ? 'V' : (sc === co ? 'E' : 'D');
+      const color = res === 'V' ? 'var(--green)' : (res === 'E' ? 'var(--yellow)' : 'var(--red)');
+      return `<div style="background:${color}; color:#000; width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-weight:bold; font-size:11px;">${res}</div>`;
+    }).join('<span style="color:var(--muted); margin:0 3px;">-</span>');
+    
+    formHtml = `
+    <div style="background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+      <span style="font-size:10px; color:var(--muted); font-weight:bold; text-transform:uppercase; letter-spacing:0.05em;">Forma (Últ. ${seasonFinishedMatches.length})</span>
+      <div style="display:flex; align-items:center;">${formDots}</div>
+    </div>`;
+  }
   return `<div class="home-screen">
     <div class="home-pitch-bg">
       <svg preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%; max-width: 400px;" viewBox="0 0 400 600">
@@ -1078,7 +1127,7 @@ function renderHome(){
     </div>
     <div class="home-content">
       ${backupWarning}
-	  ${installWarning}
+      ${installWarning}
       <div class="topbar-settings" style="position:absolute; top:0; right:0;" onclick="openSettings()">⚙️</div>
       <div class="home-ball">${ballIconSvg()}</div>
       <h1>${t('home_title')}</h1>
@@ -1088,6 +1137,7 @@ function renderHome(){
       ${bdayHtml}
       ${pendingTrainingsHtml}
       ${nextMatchHtml}
+      ${formHtml} <!-- O GRÁFICO DA FORMA ENTRA AQUI -->
 
       ${active ? `<button class="home-btn" style="margin-bottom:12px; border-color:var(--gold);" onclick="navigateToHub('jogo')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>${t('home_cont')}</button>` : ''}
       
@@ -1703,6 +1753,16 @@ function renderCalendario(){
 }
 
 window.uiSaveTraining = function(){ 
+  // LER OS VALORES DIRETAMENTE DO ECRÃ ANTES DE GRAVAR (À Prova de Android)
+  const dateEl = document.getElementById('tr-date-input');
+  const durEl = document.getElementById('tr-duration-input');
+  const notesEl = document.getElementById('tr-notes-input');
+
+  if(dateEl) trainingForm.date = dateEl.value;
+  if(durEl) trainingForm.duration = parseInt(durEl.value, 10);
+  if(notesEl) trainingForm.notes = notesEl.value;
+
+  // Validação de Segurança
   if(!trainingForm.duration || isNaN(trainingForm.duration) || trainingForm.duration <= 0){
     showToast('Insere a duração do treino em minutos!'); return;
   }
@@ -1713,7 +1773,7 @@ window.uiSaveTraining = function(){
   const trData = {
     id: trainingForm.id || uid(), 
     date: trainingForm.date, 
-    duration: parseInt(trainingForm.duration, 10),
+    duration: trainingForm.duration,
     season: state.currentSeason, 
     notes: escapeHTML(trainingForm.notes||''), 
     absences: { ...trainingForm.absences },
@@ -1779,12 +1839,13 @@ window.quickCompleteTraining = function(id) {
   const tr = state.trainings.find(t => t.id === id);
   if (!tr) return;
 
-  askConfirm("Concluir treino e registar presenças para todo o plantel?", () => {
+  // Repara na nova frase mais clara e no 'btn-green' no final!
+  askConfirm("Concluir este treino? (Os atletas ficarão todos como Presentes).", () => {
     tr.status = 'completed';
     saveState();
     render();
     showToast("Treino concluído com sucesso! 🟢");
-  });
+  }, 'btn-green'); 
 };
 
 function renderTreinos(){
@@ -2310,17 +2371,21 @@ function renderStats(){
   
   html += seasonFilterUI;
 
-  if (statsViewMode === 'players') {
+ if (statsViewMode === 'players') {
       const roster = eligiblePlayers().sort((a,b) => (a.name||'').localeCompare(b.name||''));
-      let tableHtml = `<div class="stats-table-wrapper"><table class="stats-table"><tr><th class="p-name">Nome</th><th>T</th><th>P(%)</th><th>J</th><th>Mins</th><th>G</th><th>A</th><th>🟨</th><th>🟥</th></tr>`;
+      
+      // MUDANÇA 1: Cabeçalho P(%) muda para MinT
+      let tableHtml = `<div class="stats-table-wrapper"><table class="stats-table"><tr><th class="p-name">Nome</th><th>T</th><th>MinT</th><th>J</th><th>Mins</th><th>G</th><th>A</th><th>🟨</th><th>🟥</th></tr>`;
+      
       roster.forEach(p => {
           const st = calcularEstatisticaJogador(p.id, activeSeason); 
           const pPct = st.minutosTreinoTotais > 0 ? Math.round((st.minutosTreinoCumpridos / st.minutosTreinoTotais)*100) : 0;
 
+          // MUDANÇA 2: Mostra os minutos em vez de pPct%, mas mantém a lógica das cores
           tableHtml += `<tr onclick="expandedPlayer='${p.id}'; navigateToTab('plantel');" style="cursor:pointer;">
             <td class="p-name">${p.name}</td>
             <td>${st.totalTreinos}</td>
-            <td style="color:${pPct>=80?'var(--green)':(pPct>=50?'var(--yellow)':'var(--red)')};">${pPct}%</td>
+            <td style="color:${pPct>=80?'var(--green)':(pPct>=50?'var(--yellow)':'var(--red)')}; font-weight:bold;">${st.minutosTreinoCumpridos}'</td>
             <td>${st.jogosConvocado}</td>
             <td style="color:var(--gold); font-weight:bold;">${st.minutos}</td>
             <td>${st.golos}</td>
@@ -2715,8 +2780,11 @@ window.renderPlantel = function() {
               </div>
               <div class="field" style="margin-bottom:10px;"><label>${t('pl_dob')}</label><input type="text" placeholder="Ex: 15.05.2010" value="${p.birthDate || ''}" onchange="updatePlayerBirthDate('${p.id}', this.value)"></div>
               <div class="field" style="margin-bottom:12px;">
-                <label>${t('pl_pos')}</label>
-                <div style="font-size:11px; color:var(--gold); font-weight:bold; margin-bottom:4px;">${p.positions || 'Nenhuma'}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                  <label style="margin:0;">${t('pl_pos')}</label>
+                  ${p.positions ? `<button class="quick-del" style="font-size:9px; border:1px solid var(--line); border-radius:4px; padding:2px 6px;" onclick="clearPlayerPos('${p.id}')">🧹 LIMPAR</button>` : ''}
+                </div>
+                <div style="font-size:11px; color:var(--gold); font-weight:bold; margin-bottom:8px;">${p.positions || 'Nenhuma'}</div>
                 <div class="seg" style="flex-wrap:wrap; gap:4px;">
                   ${['GR','DC','DD','DE','MDC','MC','MOC','EXT','PL'].map(pos => `<div class="seg-btn ${(p.positions||'').includes(pos)?'active':''}" style="flex:none; padding:5px 8px; font-size:10px;" onclick="togglePlayerPos('${p.id}', '${pos}')">${pos}</div>`).join('')}
                 </div>
@@ -2989,7 +3057,7 @@ loadState();
   <div style="background: #fff; width: 90%; max-width: 400px; padding: 20px; border-radius: 10px; text-align: center; color: #333; font-family: sans-serif;">
     
     <h2 style="margin-top: 0; color: #0E211A; margin-bottom: 5px;">⚽ Coachfolio</h2>
-    <p style="font-size: 0.9em; color: #666; margin: 0;">Versão 2.7.0</p>
+    <p style="font-size: 0.9em; color: #666; margin: 0;">Versão 2.8</p>
     <p style="font-size: 0.9em; font-style: italic; color: #555; margin-top: 5px;">"Feito por treinadores, para treinadores."</p>
     
     <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">

@@ -4,9 +4,30 @@
 <!-- LIGAÇÃO PWA OFICIAL -->
 <link rel="manifest" href="./manifest.json">
 <script>
+  let newWorker;
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW fail:', err));
+      navigator.serviceWorker.register('./sw.js').then(reg => {
+        reg.addEventListener('updatefound', () => {
+          newWorker = reg.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              const toast = document.getElementById('toast');
+              if (toast) {
+                toast.innerHTML = 'Nova versão disponível! <button onclick="if(newWorker) newWorker.postMessage({action:\'skipWaiting\'})" style="margin-left:10px; background:var(--chalk); color:var(--bg); border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold;">Atualizar</button>';
+                toast.classList.add('show');
+              }
+            }
+          });
+        });
+      }).catch(err => console.log('SW fail:', err));
+
+      let refreshing;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        refreshing = true;
+        window.location.reload(); // Força o recarregamento com o novo index.html
+      });
     });
   }
 </script>
@@ -16,7 +37,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Coachfolio">
 <meta name="theme-color" content="#0E211A">
-<title>COACHFOLIO v2.7</title>
+<title>COACHFOLIO v2.8</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{--bg:#0E211A;--surface:#153328;--surface-2:#1C4133;--chalk:#F3EFE6;--muted:#8FA79B;--gold:#D9A441;--gold-dim:#4A3E22;--red:#C8493F;--red-dim:#3F2320;--yellow:#E1C324;--green:#4ade80;--green-dim:#133320;--line:rgba(243,239,230,0.10);--btn-gold-txt:#241B08;--btn-red-txt:#2B0F0C;--btn-green-txt:#0E211A;}
@@ -602,15 +623,15 @@ window.uiUpdateTournamentGame = function(id, field, val){ const g = schForm.game
 window.uiSaveSchedule = function(){
   if(editingSchId) {
     if(!schForm.opp.trim()){ showToast(t('msg_no_opp')); return; } const s = state.schedule.find(x=>x.id===editingSchId);
-    if(s) { s.opponent = schForm.opp.trim(); s.date = schForm.date || s.date; s.time = schForm.time || s.time; s.type = schForm.type; s.location = schForm.loc; s.phase = (schForm.phase || '').trim(); s.matchday = (schForm.matchday || '').trim(); s.tournamentName = (schForm.type === 'torneio') ? (schForm.tournamentName || '').trim() : ''; }
+    if(s) { s.opponent = escapeHTML(schForm.opp.trim()); s.date = schForm.date || s.date; s.time = schForm.time || s.time; s.type = schForm.type; s.location = schForm.loc; s.phase = escapeHTML((schForm.phase || '').trim()); s.matchday = escapeHTML((schForm.matchday || '').trim()); s.tournamentName = (schForm.type === 'torneio') ? escapeHTML((schForm.tournamentName || '').trim()) : ''; }
     state.schedule.sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time)); editingSchId = null; schedulingNew = false; saveState(); render(); showToast(t('msg_sch_saved')); return;
   }
   if(schForm.isBatch){
     if(!schForm.tournamentName.trim()){ showToast(t('msg_no_tour')); return; } const validGames = schForm.games.filter(g => g.opp.trim() !== ''); if(validGames.length === 0){ showToast(t('msg_no_games')); return; }
-    validGames.forEach(g => { state.schedule.push({ id: uid(), opponent: g.opp.trim(), date: g.date || new Date().toISOString().slice(0,10), time: g.time || '09:00', type: 'torneio', phase: g.phase.trim(), matchday: g.matchday.trim(), tournamentName: schForm.tournamentName.trim(), season: state.currentSeason, location: schForm.loc || 'fora', callup: [] }); }); showToast(t('msg_tour_saved'));
+    validGames.forEach(g => { state.schedule.push({ id: uid(), opponent: escapeHTML(g.opp.trim()), date: g.date || new Date().toISOString().slice(0,10), time: g.time || '09:00', type: 'torneio', phase: escapeHTML(g.phase.trim()), matchday: escapeHTML(g.matchday.trim()), tournamentName: escapeHTML(schForm.tournamentName.trim()), season: state.currentSeason, location: schForm.loc || 'fora', callup: [] }); }); showToast(t('msg_tour_saved'));
   } else {
     if(!schForm.opp.trim()){ showToast(t('msg_no_opp')); return; }
-    state.schedule.push({ id: uid(), opponent: schForm.opp.trim(), date: schForm.date || new Date().toISOString().slice(0,10), time: schForm.time || '09:00', type: schForm.type || 'amigavel', phase: (schForm.type==='campeonato'||schForm.type==='torneio' ? (schForm.phase||'').trim() : ''), matchday: (schForm.type==='campeonato'||schForm.type==='torneio' ? (schForm.matchday||'').trim() : ''), tournamentName: schForm.tournamentName || '', season: state.currentSeason, location: schForm.loc || 'casa', callup: [] }); showToast(t('msg_game_saved'));
+    state.schedule.push({ id: uid(), opponent: escapeHTML(schForm.opp.trim()), date: schForm.date || new Date().toISOString().slice(0,10), time: schForm.time || '09:00', type: schForm.type || 'amigavel', phase: (schForm.type==='campeonato'||schForm.type==='torneio' ? escapeHTML((schForm.phase||'').trim()) : ''), matchday: (schForm.type==='campeonato'||schForm.type==='torneio' ? escapeHTML((schForm.matchday||'').trim()) : ''), tournamentName: escapeHTML((schForm.tournamentName || '').trim()), season: state.currentSeason, location: schForm.loc || 'casa', callup: [] }); showToast(t('msg_game_saved'));
   }
   state.schedule.sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time)); schedulingNew = false; saveState(); render();
 };
@@ -819,12 +840,19 @@ function renderModalHTML(){
   if(modalConfig.type === 'settings') {
      const sizeKB = (JSON.stringify(state).length / 1024); const maxKB = 5120; const pct = Math.min(100, (sizeKB/maxKB)*100);
      let strColor = pct > 90 ? 'var(--red)' : (pct > 70 ? 'var(--yellow)' : 'var(--green)');
+     
+     // Forçar a ativação definitiva das funcionalidades core que já não têm botão
+     state.enableDiary = true;
+     state.enableVideos = true;
+     state.enableBirthdays = true;
+
      return `
      <div class="modal-overlay" onclick="if(event.target===this) closeModal()">
        <div class="modal-card" style="padding-bottom:10px;">
          <h3 style="margin-top:0; color:var(--gold);">${t('set_title')}</h3>
          <div style="max-height:65vh; overflow-y:auto; padding-right:5px; margin-bottom:15px;">
              
+             <!-- CLUBE E TEMAS -->
              <div class="field" style="text-align:left;">
                 <label>${t('set_club')}</label>
                 <div style="display:flex; gap:8px;">
@@ -837,6 +865,8 @@ function renderModalHTML(){
 
              <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_lang')}</label><div class="seg"><div class="seg-btn ${state.lang==='pt'?'active':''}" onclick="event.stopPropagation(); setLanguage('pt')">Português</div><div class="seg-btn ${state.lang==='en'?'active':''}" onclick="event.stopPropagation(); setLanguage('en')">English</div></div></div>
              <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_theme')}</label><div class="seg"><div class="seg-btn ${state.theme==='original'?'active':''}" onclick="event.stopPropagation(); setTheme('original')">${t('set_theme_orig')}</div><div class="seg-btn ${state.theme==='luzsolar'?'active':''}" onclick="event.stopPropagation(); setTheme('luzsolar')">${t('set_theme_sun')}</div><div class="seg-btn ${state.theme==='oceanonoturno'?'active':''}" onclick="event.stopPropagation(); setTheme('oceanonoturno')">${t('set_theme_ocean')}</div></div></div>
+             
+             <!-- CORES DOS EQUIPAMENTOS (TÁTICA) -->
              <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_kit')}</label><div class="grid-btns cols-6" style="margin-top:8px;">
                    <div style="background:#D9A441; height:30px; border-radius:50%; border:2px solid ${state.teamColor==='#D9A441'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.teamColor='#D9A441'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
                    <div style="background:#C8493F; height:30px; border-radius:50%; border:2px solid ${state.teamColor==='#C8493F'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.teamColor='#C8493F'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
@@ -853,15 +883,14 @@ function renderModalHTML(){
                    <div style="background:#FFFFFF; height:30px; border-radius:50%; border:2px solid ${state.oppColor==='#FFFFFF'?'var(--muted)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.oppColor='#FFFFFF'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
                    <div style="background:#111111; height:30px; border-radius:50%; border:2px solid ${state.oppColor==='#111111'?'var(--chalk)':'transparent'}; cursor:pointer;" onclick="event.stopPropagation(); state.oppColor='#111111'; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML();"></div>
              </div></div>
-             
+
+             <!-- MÓDULOS ATIVOS -->
              <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_subs')}</label><div class="seg"><div class="seg-btn ${state.trackSubs?'active':''}" onclick="event.stopPropagation(); state.trackSubs=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.trackSubs?'active':''}" onclick="event.stopPropagation(); state.trackSubs=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
              <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_fairplay')}</label><div class="seg"><div class="seg-btn ${state.showFairPlay?'active':''}" onclick="event.stopPropagation(); state.showFairPlay=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.showFairPlay?'active':''}" onclick="event.stopPropagation(); state.showFairPlay=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
              <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_fines')}</label><div class="seg"><div class="seg-btn ${state.enableFines?'active':''}" onclick="event.stopPropagation(); state.enableFines=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.enableFines?'active':''}" onclick="event.stopPropagation(); state.enableFines=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
-             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_birthdays')}</label><div class="seg"><div class="seg-btn ${state.enableBirthdays?'active':''}" onclick="event.stopPropagation(); state.enableBirthdays=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.enableBirthdays?'active':''}" onclick="event.stopPropagation(); state.enableBirthdays=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
-             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_diary')}</label><div class="seg"><div class="seg-btn ${state.enableDiary?'active':''}" onclick="event.stopPropagation(); state.enableDiary=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.enableDiary?'active':''}" onclick="event.stopPropagation(); state.enableDiary=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
-             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_videos')}</label><div class="seg"><div class="seg-btn ${state.enableVideos?'active':''}" onclick="event.stopPropagation(); state.enableVideos=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.enableVideos?'active':''}" onclick="event.stopPropagation(); state.enableVideos=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
              <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_leagues')}</label><div class="seg"><div class="seg-btn ${state.enableLeagues?'active':''}" onclick="event.stopPropagation(); state.enableLeagues=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.enableLeagues?'active':''}" onclick="event.stopPropagation(); state.enableLeagues=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
 
+             <!-- ÁREA DE ÉPOCA -->
              <div style="background:var(--surface); border:1px solid var(--gold); border-radius:8px; padding:10px; margin-top:24px; margin-bottom:14px;">
                  <div style="font-size:10px; color:var(--muted); text-transform:uppercase; font-weight:bold;">Época Atual</div>
                  <div style="display:flex; justify-content:center; align-items:center; gap:14px; margin-top:6px;">
@@ -875,11 +904,22 @@ function renderModalHTML(){
                 </div>
              </div>
 
-             <div style="margin-top:20px; padding:10px; background:var(--surface); border-radius:8px; border:1px solid var(--line);">
-               <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--muted); text-transform:uppercase; font-weight:bold; margin-bottom:6px;"><span>Armazenamento</span><span>${sizeKB.toFixed(1)} KB / ~5 MB</span></div>
+             <!-- ÁREA DE BACKUP PROTEGIDA -->
+             <div style="margin-top:20px; padding:12px; background:var(--surface); border-radius:8px; border:1px solid var(--line); text-align:left;">
+               <div style="font-size:11px; color:var(--gold); font-weight:bold; text-transform:uppercase; margin-bottom:8px;">💾 Gestão de Dados e Backups</div>
+               <div style="font-size:10px; color:var(--muted); margin-bottom:12px; line-height:1.4;">Para evitar a perda de dados, exporta um backup regularmente.</div>
+               <div style="display:flex; gap:8px; margin-bottom:10px;">
+                 <button class="btn btn-outline" style="font-size:10px; flex:1;" onclick="event.stopPropagation(); window.exportDataJSON();">Exportar Backup</button>
+                 <label class="btn btn-outline" style="font-size:10px; flex:1; margin:0; cursor:pointer; text-align:center;">
+                   Importar Backup
+                   <input type="file" accept=".json" style="display:none;" onchange="importData(this)">
+                 </label>
+               </div>
+               <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--muted); text-transform:uppercase; font-weight:bold; margin-bottom:4px;"><span>Armazenamento Local</span><span>${sizeKB.toFixed(1)} KB / ~5 MB</span></div>
                <div style="height:6px; background:var(--surface-2); border-radius:3px; overflow:hidden;"><div style="height:100%; width:${pct}%; background:${strColor};"></div></div>
              </div>
 
+             <!-- RESET / ARQUIVO -->
              <div style="margin-top:20px; text-align:left;">
                 <button class="btn btn-red" style="width:100%; font-size:12px; margin-bottom:10px;" onclick="event.stopPropagation(); wipeAllData();">🗑️ Limpar Todos os Dados (Reset)</button>
                 <button class="btn btn-outline" style="width:100%; font-size:12px;" onclick="event.stopPropagation(); archiveSeason();">${t('set_archive')}</button>
@@ -887,15 +927,14 @@ function renderModalHTML(){
          </div>
          
          <button class="btn" style="width:100%; margin-top:10px; background:#0E211A; color:#fff; border:1px solid var(--line);" onclick="abrirCreditos()">🤝 Créditos & Parceiros</button>
-
          <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="closeModal()">${t('close')}</button>
-         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v2.7 | COACHFOLIO</div>
+         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v2.8 | COACHFOLIO</div>
        </div>
      </div>`;
   }
 
   if(modalConfig.type === 'archiveSeason') {
-     return `<div class="modal-overlay"><div class="modal-card"><h3 style="margin-top:0; color:var(--red);">${t('archive_title')}</h3><p style="font-size:13px; text-align:left; color:var(--chalk);">${t('archive_desc')}</p><div style="background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:20px;"><p style="font-size:12px; font-weight:bold; color:var(--gold); margin-top:0; margin-bottom:10px;">${t('archive_warn')}</p><div style="display:flex; flex-direction:column; gap:8px;"><button class="btn btn-ghost" style="font-size:12px;" onclick="exportReportPDF()">📄 ${t('exp_pdf')}</button><button class="btn btn-ghost" style="font-size:12px;" onclick="exportData()">💾 ${t('exp_json')}</button></div></div><div style="display:flex; gap:10px;"><button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button><button class="btn btn-red" onclick="doArchiveSeason()">${t('archive_btn')}</button></div></div></div>`;
+     return `<div class="modal-overlay"><div class="modal-card"><h3 style="margin-top:0; color:var(--red);">${t('archive_title')}</h3><p style="font-size:13px; text-align:left; color:var(--chalk);">${t('archive_desc')}</p><div style="background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:20px;"><p style="font-size:12px; font-weight:bold; color:var(--gold); margin-top:0; margin-bottom:10px;">${t('archive_warn')}</p><div style="display:flex; flex-direction:column; gap:8px;"><button class="btn btn-ghost" style="font-size:12px;" onclick="exportSeasonPDF()">📄 ${t('exp_pdf')}</button><button class="btn btn-ghost" style="font-size:12px;" onclick="exportData()">💾 ${t('exp_json')}</button></div></div><div style="display:flex; gap:10px;"><button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button><button class="btn btn-red" onclick="doArchiveSeason()">${t('archive_btn')}</button></div></div></div>`;
   }
 
   if(modalConfig.type === 'finishMatch') { 
@@ -939,9 +978,19 @@ function renderHome(){
     if(daysSince > 7) {
       backupWarning = `<div class="warning-banner" style="background:var(--red); color:var(--btn-red-txt); padding:10px 14px; border-radius:10px; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; font-size:11px;">
         <span>⚠️ <b>Backup Atrasado (+7 dias)</b></span>
-        <button class="btn btn-gold" style="padding: 4px 8px; font-size: 10px; flex:none;" onclick="exportData()">Exportar Já</button>
+        <button class="btn btn-gold" style="padding: 4px 8px; font-size: 10px; flex:none;" onclick="window.exportDataJSON()">Exportar Já</button>
       </div>`; 
     }
+  }
+
+  // NOVA LÓGICA: Detetar se NÃO está instalada no Ecrã Principal
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  let installWarning = '';
+  if (!isStandalone) {
+    installWarning = `<div class="warning-banner" style="background:var(--surface-2); border:1px solid var(--gold); color:var(--chalk); padding:10px 14px; border-radius:10px; margin-bottom:12px; text-align:left; font-size:11px; line-height:1.4;">
+      <b style="color:var(--gold); display:block; margin-bottom:4px;">📲 Instalar Aplicação</b>
+      Para evitares a perda de dados, toca em Partilhar e <b>"Adicionar ao Ecrã Principal"</b>.
+    </div>`;
   }
 
   let bdayHtml = ''; 
@@ -1029,6 +1078,7 @@ function renderHome(){
     </div>
     <div class="home-content">
       ${backupWarning}
+	  ${installWarning}
       <div class="topbar-settings" style="position:absolute; top:0; right:0;" onclick="openSettings()">⚙️</div>
       <div class="home-ball">${ballIconSvg()}</div>
       <h1>${t('home_title')}</h1>
@@ -1262,7 +1312,7 @@ window.exportTacticPDF = function() {
           <img src="${imgData}" style="max-width:100%; max-height:650px; border:2px solid #000; border-radius:8px;">
         </div>
         <div style="margin-top:20px; font-size:11px; color:#666; text-align:center;">
-          Coachfolio v2.7 — Documento de Análise Tática
+          Coachfolio v2.8 — Documento de Análise Tática
         </div>
       </div>`;
       
@@ -1549,14 +1599,12 @@ window.saveScoutingData = function(schId) {
   if (!s) return;
   if (!s.scouting) s.scouting = {};
 
-  const cleanText = (str) => (str || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  s.scouting.system = cleanText(document.getElementById('scout-system')?.value);
+  s.scouting.system = escapeHTML(document.getElementById('scout-system')?.value);
   s.scouting.block = document.getElementById('scout-block')?.value || 'Médio';
   s.scouting.buildUp = document.getElementById('scout-buildup')?.value || 'Apoiada desde trás';
-  s.scouting.keyPlayers = cleanText(document.getElementById('scout-keyplayers')?.value);
-  s.scouting.setPieces = cleanText(document.getElementById('scout-setpieces')?.value);
-  s.scouting.gamePlan = cleanText(document.getElementById('scout-gameplan')?.value);
+  s.scouting.keyPlayers = escapeHTML(document.getElementById('scout-keyplayers')?.value);
+  s.scouting.setPieces = escapeHTML(document.getElementById('scout-setpieces')?.value);
+  s.scouting.gamePlan = escapeHTML(document.getElementById('scout-gameplan')?.value);
 
   saveState();
   closeModal();
@@ -1619,7 +1667,7 @@ window.exportScoutingPDF = function(schId) {
 
       <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
         <div style="font-size:10px; color:#666;">
-          <p style="margin:2px 0;">• Documento interno de preparação tática — Coachfolio v2.7</p>
+          <p style="margin:2px 0;">• Documento interno de preparação tática — Coachfolio v2.8</p>
         </div>
         <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">
           A Equipa Técnica
@@ -1925,8 +1973,7 @@ function renderVideos(){
     }).join('') : `<div class="empty">Nenhum vídeo guardado.</div>`}`;
 }
 
-window.exportMatchPDF = function(mId){
-  const m = state.matches.find(x=>x.id===mId); if(!m) return;
+function buildMatchReportHTML(m){
   const sc = m.goals.filter(g=>g.type==='scored').length; 
   const co = m.goals.filter(g=>g.type==='conceded').length;
   const dateStr = m.date.split('-').reverse().join('/');
@@ -2022,8 +2069,42 @@ window.exportMatchPDF = function(mId){
     <p style="white-space:pre-wrap; border:1px solid #CCC; padding:10px; border-radius:6px; background:#FFF; min-height:60px;">${m.notes||'Nenhuma nota registada neste jogo.'}</p>
   </div>`;
 
-  document.getElementById('print-area').innerHTML = html;
+  return html;
+}
+
+window.exportMatchPDF = function(mId){
+  const m = state.matches.find(x=>x.id===mId); if(!m) return;
+  document.getElementById('print-area').innerHTML = buildMatchReportHTML(m);
   window.print();
+};
+
+window.exportSeasonPDF = function(season){
+  const seasonId = season || state.currentSeason;
+  const seasonMatches = (state.matches || [])
+    .filter(m => (m.season || state.currentSeason) === seasonId)
+    .slice()
+    .sort((a,b) => {
+      const dateA = a && a.date ? String(a.date) : '';
+      const dateB = b && b.date ? String(b.date) : '';
+      return dateA.localeCompare(dateB);
+    });
+
+  if (seasonMatches.length === 0) {
+    showToast('Sem jogos registados nesta época para exportar.');
+    return;
+  }
+
+  const combinedHtml = seasonMatches
+    .map(m => `<div style="page-break-after: always;">${buildMatchReportHTML(m)}</div>`)
+    .join('');
+
+  const printArea = document.getElementById('print-area');
+  if (printArea) {
+    printArea.innerHTML = combinedHtml;
+    window.print();
+  } else {
+    showToast('Erro ao aceder à área de impressão.');
+  }
 };
 
 function renderJogos(){
@@ -2411,12 +2492,13 @@ window.switchStaffTab = function(tab) {
 window.saveStaffMember = function() {
   if (!staffForm || !staffForm.name) { showToast('Preencha o nome do elemento.'); return; }
   if (!state.staff) state.staff = [];
-  if (staffForm.id) {
-    const idx = state.staff.findIndex(s => s.id === staffForm.id);
-    if (idx !== -1) state.staff[idx] = { ...staffForm };
+  const cleanStaff = { ...staffForm, name: escapeHTML((staffForm.name||'').trim()), role: escapeHTML((staffForm.role||'').trim()) };
+  if (cleanStaff.id) {
+    const idx = state.staff.findIndex(s => s.id === cleanStaff.id);
+    if (idx !== -1) state.staff[idx] = cleanStaff;
   } else {
-    staffForm.id = 'st_' + Date.now();
-    state.staff.push({ ...staffForm });
+    cleanStaff.id = 'st_' + Date.now();
+    state.staff.push(cleanStaff);
   }
   saveState();
   staffForm = null;
@@ -2522,7 +2604,7 @@ window.exportPlayerPDF = function(playerId) {
       </div>
 
       <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
-        <div style="font-size:10px; color:#666;">Relatório Individual Emitido por Coachfolio v2.7</div>
+        <div style="font-size:10px; color:#666;">Relatório Individual Emitido por Coachfolio v2.8</div>
         <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">O Treinador / Coordenação</div>
       </div>
     </div>`;
@@ -2788,6 +2870,8 @@ function sanitizeData(obj) {
   }
   return obj;
 }
+// Alias global para garantir compatibilidade com todos os botões de exportação
+window.exportDataJSON = window.exportData;
 
 window.importData = function(input){ 
   const file = input.files[0]; 
@@ -2827,99 +2911,6 @@ window.importData = function(input){
   input.value = ''; 
 };
 
-window.exportReportPDF = function() {
-  if (!state.currentMatch) {
-    showToast('Sem jogo ativo para exportar.');
-    return;
-  }
-  const m = state.currentMatch;
-  const dateStr = (m.date || new Date().toISOString().slice(0,10)).split('-').reverse().join('/');
-  const matchTitle = m.location === 'casa' ? `${getMyClub()} ${m.myScore} - ${m.oppScore} ${m.opponent}` : `${m.opponent} ${m.oppScore} - ${m.myScore} ${getMyClub()}`;
-
-  let rowsHtml = '';
-  const playedPlayers = eligiblePlayers().filter(p => (m.playerMinutes && m.playerMinutes[p.id]) || (m.starterIds && m.starterIds.includes(p.id)));
-  
-  if (playedPlayers.length === 0) {
-    rowsHtml = '<tr><td colspan="4" style="text-align:center; padding:15px;">Sem registo de jogadores neste jogo.</td></tr>';
-  } else {
-    sortPlayerObjs(playedPlayers).forEach((p, idx) => {
-      const numVal = (p.number !== null && p.number !== undefined && p.number !== '') ? p.number : (idx + 1);
-      const secs = m.playerMinutes ? (m.playerMinutes[p.id] || 0) : 0;
-      const minsStr = formatMinSec(secs);
-      const isStarter = m.starterIds && m.starterIds.includes(p.id);
-      
-      rowsHtml += `
-        <tr>
-          <td style="text-align:center; font-weight:bold; width:45px;">${numVal}</td>
-          <td style="text-align:left; font-weight:bold; padding-left:12px;">${p.name} ${isStarter ? '<span style="font-size:10px; color:#666;">(Titular)</span>' : ''}</td>
-          <td style="text-align:center; font-weight:bold; width:100px;">${minsStr}</td>
-          <td style="width:150px;"></td>
-        </tr>`;
-    });
-  }
-
-  const selectedStaffIds = m.staffCallup || [];
-  const staffList = (state.staff || []).filter(st => selectedStaffIds.includes(st.id));
-  let staffRowsHtml = '';
-  
-  if (staffList.length === 0) {
-    staffRowsHtml = '<tr><td colspan="3" style="text-align:center; padding:10px; color:#666;">Equipa Técnica / Delegado não registados.</td></tr>';
-  } else {
-    staffList.forEach(st => {
-      staffRowsHtml += `
-        <tr>
-          <td style="text-align:left; font-weight:bold; padding-left:12px;">${st.name}</td>
-          <td style="text-align:center; font-weight:600; color:#444;">${st.role || 'Equipa Técnica'}</td>
-          <td style="width:150px; text-align:center; font-size:11px;">Presente</td>
-        </tr>`;
-    });
-  }
-
-  let html = `
-    <div class="print-card">
-      <div class="print-header">
-        <h1>RELATÓRIO OFICIAL DE JOGO</h1>
-        <p style="font-size:20px; font-weight:bold; margin-top:5px; color:#000;">${matchTitle}</p>
-        <p style="font-size:13px; color:#444;">Data: ${dateStr} | Época: ${state.currentSeason}</p>
-      </div>
-
-      <h3 style="margin-bottom:8px;">Atletas Participantes (${playedPlayers.length})</h3>
-      <table>
-        <thead>
-          <tr>
-            <th style="width:45px; text-align:center;">Núm</th>
-            <th style="text-align:left; padding-left:12px;">Nome do Atleta</th>
-            <th style="width:100px; text-align:center;">Tempo Jogo</th>
-            <th style="width:150px; text-align:center;">Observações</th>
-          </tr>
-        </thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-
-      <h3 style="margin-bottom:8px; margin-top:20px;">Equipa Técnica Presente (${staffList.length})</h3>
-      <table>
-        <thead>
-          <tr>
-            <th style="text-align:left; padding-left:12px;">Nome</th>
-            <th style="text-align:center;">Cargo / Função</th>
-            <th style="width:150px; text-align:center;">Estado</th>
-          </tr>
-        </thead>
-        <tbody>${staffRowsHtml}</tbody>
-      </table>
-
-      ${m.notes ? `<h3 style="margin-top:20px; margin-bottom:6px;">Notas do Treinador</h3><div style="border:1px solid #CCC; padding:10px; border-radius:4px; font-size:12px; white-space:pre-wrap;">${m.notes}</div>` : ''}
-
-      <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
-        <div style="font-size:10px; color:#666;">Documento gerado por Coachfolio v2.7</div>
-        <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">O Treinador / Responsável</div>
-      </div>
-    </div>`;
-
-  document.getElementById('print-area').innerHTML = html;
-  window.print();
-};
-
 function render(){
   try {
       document.getElementById('nav-lbl-match').textContent = t('nav_hub_match'); document.getElementById('nav-lbl-plan').textContent = t('nav_hub_plan'); document.getElementById('nav-lbl-strat').textContent = t('nav_hub_strat'); document.getElementById('nav-lbl-team').textContent = t('nav_hub_team');
@@ -2950,6 +2941,17 @@ setInterval(()=>{
   const el = document.getElementById('live-timer'); if(el) el.textContent = formatMatchTime(getMatchElapsedMs(m));
 }, 1000);
 
+// Sincroniza o cronómetro imediatamente quando o telemóvel acorda / ecrã é desbloqueado
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && currentTab === 'jogo') {
+    const m = getActiveMatch();
+    if (m && m.timer && m.timer.isRunning) {
+      const el = document.getElementById('live-timer');
+      if (el) el.textContent = formatMatchTime(getMatchElapsedMs(m));
+    }
+  }
+});
+
 window.history.pushState({ page: 1 }, "", "");
 
 window.addEventListener('popstate', function(event) {
@@ -2968,6 +2970,17 @@ window.addEventListener('beforeunload', function (e) {
         e.returnValue = '';
     }
 });
+
+window.abrirCreditos = function() {
+  const el = document.getElementById('modalCreditos');
+  if (el) el.style.display = 'flex';
+};
+
+window.fecharCreditos = function() {
+  const el = document.getElementById('modalCreditos');
+  if (el) el.style.display = 'none';
+};
+
 loadState();
 </script>
 
@@ -3000,14 +3013,5 @@ loadState();
     <button onclick="fecharCreditos()" style="background: #0E211A; color: #fff; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; width: 100%; font-size: 1em;">Fechar</button>
   </div>
 </div>
-
-<script>
-  function abrirCreditos() {
-    document.getElementById('modalCreditos').style.display = 'flex';
-  }
-  function fecharCreditos() {
-    document.getElementById('modalCreditos').style.display = 'none';
-  }
-</script>
 </body>
 </html>

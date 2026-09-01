@@ -1,6 +1,23 @@
-const CACHE_NAME = 'coachfolio-v2.8.1';
+const CACHE_NAME = 'coachfolio-v2.8.1a';
+
+// A lista de bagagem obrigatória (Ficheiros base e Ícones)
+const urlsToCache = [
+  './',
+  './index.html',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
+];
 
 self.addEventListener('install', (e) => {
+  // Guarda imediatamente a lista obrigatória assim que instala a app
+  e.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => {
+        return cache.addAll(urlsToCache);
+      })
+  );
+  
   // Retiramos o skipWaiting automático para a app não reiniciar a meio de um jogo.
   // Agora vai esperar pelo clique no botão "Atualizar" do index.html.
 });

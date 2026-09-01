@@ -37,7 +37,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Coachfolio">
 <meta name="theme-color" content="#0E211A">
-<title>COACHFOLIO v2.8</title>
+<title>COACHFOLIO v2.8.1</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{--bg:#0E211A;--surface:#153328;--surface-2:#1C4133;--chalk:#F3EFE6;--muted:#8FA79B;--gold:#D9A441;--gold-dim:#4A3E22;--red:#C8493F;--red-dim:#3F2320;--yellow:#E1C324;--green:#4ade80;--green-dim:#133320;--line:rgba(243,239,230,0.10);--btn-gold-txt:#241B08;--btn-red-txt:#2B0F0C;--btn-green-txt:#0E211A;}
@@ -166,7 +166,7 @@
   .profile-stat{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 6px;text-align:center;}
   .profile-stat .val{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:20px;font-weight:700;color:var(--chalk);}
   .profile-stat .lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-top:4px;font-weight:700;}
-  .tactic-pitch-container{width:100%;max-width:400px;margin:0 auto 16px;position:relative;background:#1B452D;border:2px solid #FFF;overflow:hidden;touch-action:none;border-radius:8px;}
+  .tactic-pitch-container{width:100%; max-width:400px; max-height: 55vh; margin:0 auto 16px; position:relative; background:#1B452D; border:2px solid #FFF; overflow:hidden; touch-action:none; border-radius:8px;}
   .tactic-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
   .tactic-piece{position:absolute;width:34px;height:34px;border-radius:50%;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:grab;user-select:none;box-shadow:0 4px 8px rgba(0,0,0,0.6);z-index:10;touch-action:none;-webkit-user-select:none;}
   .tactic-piece.own{border:2px solid #FFF;}
@@ -578,20 +578,32 @@ function getHalfDuration(m, half) {
 }
 function getPlayersOnPitchAtEndOfHalf(m, half) { let current = [...(m.lineup || [])]; let subs = (m.subs || []).filter(s => s.half <= half).sort((a,b) => { if(a.half !== b.half) return a.half - b.half; let minA = a.isHalftime ? 9999 : (a.minute || 0); let minB = b.isHalftime ? 9999 : (b.minute || 0); return minA - minB; }); subs.forEach(s => { current = current.filter(id => id !== s.outId); current.push(s.inId); }); return current; }
 function calcPlayerMinutes(m, pId) { 
+  if (m.ignoreMinutes) return 0; // Se marcaste a caixa, dá 0 minutos a todos para não estragar a estatística
+
   let totalSecs = 0; 
   [1, 2].forEach(half => { 
-    let durationMins = getHalfDuration(m, half); 
+    let durationSecs = 0;
     
-    // NOVIDADE: Usa o tempo inserido manualmente e divide por 2 para cada parte!
-    if (durationMins === 0 && m.finished) durationMins = (m.manualMatchDuration || 90) / 2; 
+    // Se o jogo foi manual (sem relógio), usa o tempo que escreveste
+    if ((!m.timeline || !m.timeline.kickoff) && m.finished) {
+       durationSecs = ((m.manualMatchDuration || 90) * 60) / 2;
+    } else {
+       // Se usaste o relógio, vamos buscar os SEGUNDOS EXATOS
+       if (half === 1) {
+          if (m.timer && m.timer.half1DurationMs != null) durationSecs = Math.round(m.timer.half1DurationMs / 1000);
+          else if (m.timeline && m.timeline.kickoff) durationSecs = Math.round(getMatchElapsedMs(m) / 1000);
+       } else {
+          if (m.timer && m.timer.half2DurationMs != null) durationSecs = Math.round(m.timer.half2DurationMs / 1000);
+          else if (m.timeline && m.timeline.secondHalfStart) durationSecs = Math.round(getMatchElapsedMs(m) / 1000);
+       }
+    }
     
-    let durationSecs = durationMins * 60; 
     let onPitch = half === 1 ? (m.lineup || []).includes(pId) : getPlayersOnPitchAtEndOfHalf(m, 1).includes(pId); 
     let timeOnSecs = 0; 
     let subsInHalf = (m.subs || []).filter(s => s.half === half && !s.isHalftime).sort((a,b) => (a.minute||0) - (b.minute||0)); 
     
     subsInHalf.forEach(sub => { 
-      let subSecs = (sub.minute || 0) * 60; 
+      let subSecs = (sub.minute || 0) * 60; // subs continuam em minutos exatos
       if (sub.outId === pId && onPitch) { 
         totalSecs += (subSecs - timeOnSecs); 
         onPitch = false; 
@@ -737,16 +749,26 @@ window.uiFinishMatch = function(){
   if(pendingRatings) { doFinishMatch(); } else if(!m.timeline || !m.timeline.kickoff) { modalConfig = { type: 'finishMatch' }; document.getElementById('modal-root').innerHTML = renderModalHTML(); } else { modalConfig = { type: 'askRatings' }; document.getElementById('modal-root').innerHTML = renderModalHTML(); }
 };
 
+window.enableManualMode = function(mId){
+  const m = state.matches.find(x => x.id === mId);
+  if(m){ 
+      m.manualMode = true; 
+      saveState(); 
+      render(); 
+  }
+};
+
 window.confirmFinishMatch = function(action) {
     const m = getActiveMatch(); if(!m) return;
     if(action === 'cancel') { closeModal(); } 
     else if(action === 'save') { 
-        // LER O TEMPO INTRODUZIDO PELO TREINADOR
         const manualInput = document.getElementById('manual-match-duration');
+        const ignoreInput = document.getElementById('ignore-match-mins');
         if(manualInput) {
             let d = parseInt(manualInput.value, 10);
             m.manualMatchDuration = (isNaN(d) || d <= 0) ? 90 : d;
         }
+        if(ignoreInput) { m.ignoreMinutes = ignoreInput.checked; }
         closeModal(); 
         modalConfig = { type: 'askRatings' }; 
         document.getElementById('modal-root').innerHTML = renderModalHTML(); 
@@ -944,7 +966,7 @@ function renderModalHTML(){
          
          <button class="btn" style="width:100%; margin-top:10px; background:#0E211A; color:#fff; border:1px solid var(--line);" onclick="abrirCreditos()">🤝 Créditos & Parceiros</button>
          <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="closeModal()">${t('close')}</button>
-         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v2.8 | COACHFOLIO</div>
+         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v2.8.1 | COACHFOLIO</div>
        </div>
      </div>`;
   }
@@ -957,9 +979,15 @@ function renderModalHTML(){
      return `<div class="modal-overlay"><div class="modal-card">
        <p style="font-weight:600; font-size:16px;">${t('msg_not_started')}</p>
        <p style="font-size:13px;">${t('msg_not_started_desc')}</p>
-       <div class="field" style="text-align:left; margin-bottom:16px; background:var(--surface); padding:10px; border-radius:8px; border:1px solid var(--gold);">
+       <div class="field" style="text-align:left; margin-bottom:12px; background:var(--surface); padding:10px; border-radius:8px; border:1px solid var(--gold);">
          <label style="color:var(--gold);">Duração Total do Jogo (Minutos)</label>
          <input type="number" id="manual-match-duration" value="90" min="10" max="120" style="text-align:center; font-weight:bold; font-size:18px;">
+       </div>
+       <div style="margin-bottom:16px; text-align:left; background:var(--surface-2); padding:10px; border-radius:8px; border:1px solid var(--line);">
+         <label style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--chalk); cursor:pointer;">
+           <input type="checkbox" id="ignore-match-mins" style="width:16px; height:16px; accent-color:var(--gold);">
+           Ignorar minutos deste jogo nas estatísticas (Não tenho substituições apontadas)
+         </label>
        </div>
        <div style="display:flex; flex-direction:column; gap:10px;">
          <button class="btn btn-gold" onclick="confirmFinishMatch('save')">${t('msg_save_game')}</button>
@@ -982,18 +1010,30 @@ function topbarHtml(title){
 function ballIconSvg(){ return `<svg style="width:100%; height:100%;" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="none" stroke="var(--gold)" stroke-width="4"/><polygon points="50,29 63,39 58,55 42,55 37,39" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round"/><path d="M50 29 L50 9 M63 39 L81 30 M58 55 L71 71 M42 55 L29 71 M37 39 L19 30" stroke="var(--gold)" stroke-width="3" fill="none" stroke-linecap="round"/></svg>`; }
 function matchNarrativeHtml(m, isLocked = false){
   const tm = m.timeline || {}; const cards = m.cards || []; const subs = m.subs || [];
+  
   const eventsForHalf = (half) => {
     const goals = m.goals.filter(g=>g.half===half).map(g=>({ type:'goal', minute:g.minute, data:g })); const cds = cards.filter(c=>c.half===half).map(c=>({ type:'card', minute:c.minute, data:c })); const sbs = subs.filter(s=>s.half===half || (half===1 && s.isHalftime)).map(s=>({ type:'sub', minute:s.isHalftime?'INT':s.minute, data:s, isHalftime: s.isHalftime }));
     return [...goals, ...cds, ...sbs].sort((a,b)=>{ if(a.isHalftime && !b.isHalftime) return 1; if(!a.isHalftime && b.isHalftime) return -1; return (a.minute==null?999:a.minute)-(b.minute==null?999:b.minute); });
   };
+
+  const formatExactHalf = (ms) => {
+    if(ms == null) return '';
+    const totalSecs = Math.floor(ms / 1000); const mm = Math.floor(totalSecs / 60); const ss = totalSecs % 60;
+    return `(⏱️ ${mm}' ${String(ss).padStart(2,'0')}'' )`;
+  };
+
   const goalRow = (g) => `<div class="goal-row"><span>${g.minute!=null?`<span class="mono" style="color:var(--gold);">${g.minute}'</span> `:''}${g.type==='scored'?'⚽ '+playerName(g.scorerId)+(g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''):'🥅 '+t('rep_conc')}</span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_goal')}', ()=>deleteGoal('${m.id}', '${g.id}'))">✕</button>` : ''}</div>`;
   const cardRow = (c) => `<div class="goal-row"><span>${c.minute!=null?`<span class="mono" style="color:var(--gold);">${c.minute}'</span> `:''}${c.color==='Amarelo'?'🟨':'🟥'} ${playerName(c.playerId)}</span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_card')}', ()=>deleteCard('${m.id}', '${c.id}'))">✕</button>` : ''}</div>`;
   const subRow = (s) => `<div class="goal-row"><span><span class="mono" style="color:var(--gold);">${s.isHalftime ? 'INT' : (s.minute!=null?s.minute+"'":"")}</span> 🔄 <span style="color:var(--red)">↓ ${playerName(s.data.outId)}</span> <span style="color:var(--green)">↑ ${playerName(s.data.inId)}</span></span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sub')}', ()=>deleteSub('${m.id}', '${s.data.id}'))">✕</button>` : ''}</div>`;
 
   let rows = ''; const h1 = eventsForHalf(1); const h2 = eventsForHalf(2); const h1_regular = h1.filter(e => !e.isHalftime); const h1_int = h1.filter(e => e.isHalftime);
-  if(h1.length || tm.kickoff) { rows += `<div style="font-size:11px; color:var(--gold); font-family:-apple-system, sans-serif; text-transform:uppercase; margin:8px 0 4px; font-weight:600;">⏱️ ${t('match_half1')}</div>`; rows += h1_regular.map(e => e.type==='goal'?goalRow(e.data):(e.type==='card'?cardRow(e.data):subRow(e))).join(''); }
+  
+  let h1TimeLabel = (m.timer && m.timer.half1DurationMs != null) ? formatExactHalf(m.timer.half1DurationMs) : '';
+  let h2TimeLabel = (m.timer && m.timer.half2DurationMs != null) ? formatExactHalf(m.timer.half2DurationMs) : '';
+
+  if(h1.length || tm.kickoff) { rows += `<div style="font-size:11px; color:var(--gold); font-family:-apple-system, sans-serif; text-transform:uppercase; margin:8px 0 4px; font-weight:600; display:flex; justify-content:space-between;"><span>⏱️ ${t('match_half1')}</span><span style="color:var(--muted);">${h1TimeLabel}</span></div>`; rows += h1_regular.map(e => e.type==='goal'?goalRow(e.data):(e.type==='card'?cardRow(e.data):subRow(e))).join(''); }
   if(tm.halftime || h1_int.length > 0) { rows += `<div style="font-size:11px; color:var(--muted); font-family:-apple-system, sans-serif; text-transform:uppercase; margin:12px 0 8px; font-weight:600; text-align:center; border-top:1px dashed var(--line); border-bottom:1px dashed var(--line); padding:6px 0;">⏸️ ${t('match_ht_lbl')}</div>`; rows += h1_int.map(e => e.type==='goal'?goalRow(e.data):(e.type==='card'?cardRow(e.data):subRow(e))).join(''); }
-  if(h2.length || tm.secondHalfStart) { rows += `<div style="font-size:11px; color:var(--gold); font-family:-apple-system, sans-serif; text-transform:uppercase; margin:14px 0 4px; font-weight:600;">⏱️ ${t('match_half2')}</div>`; rows += h2.map(e => e.type==='goal'?goalRow(e.data):(e.type==='card'?cardRow(e.data):subRow(e))).join(''); }
+  if(h2.length || tm.secondHalfStart) { rows += `<div style="font-size:11px; color:var(--gold); font-family:-apple-system, sans-serif; text-transform:uppercase; margin:14px 0 4px; font-weight:600; display:flex; justify-content:space-between;"><span>⏱️ ${t('match_half2')}</span><span style="color:var(--muted);">${h2TimeLabel}</span></div>`; rows += h2.map(e => e.type==='goal'?goalRow(e.data):(e.type==='card'?cardRow(e.data):subRow(e))).join(''); }
   return rows || `<div class="empty">${t('res_none')}</div>`;
 }
 
@@ -1026,9 +1066,8 @@ function renderHome(){
   if(nextBday) {
     let msg = '';
     if(nextBday.days === 0) {
-      let encodedText = encodeURIComponent(`🎉 Parabéns, ${nextBday.player.name}! 🎉\nDesejamos-te um dia muito feliz! 🎂⚽`);
-      msg = `🎂 Hoje é o aniversário de <b>${nextBday.player.name}</b>! <a class="card-mini-btn active-green" href="https://wa.me/?text=${encodedText}" target="_blank" style="text-decoration:none; display:inline-block; margin-left:6px; padding:2px 6px;">WhatsApp ↗</a>`;
-    } else { 
+      msg = `🎂 Hoje é o aniversário de <b>${nextBday.player.name}</b>! 🎉`;
+    } else {
       msg = `🎂 Próximo aniversário: <b>${nextBday.player.name}</b> (${nextBday.days} dia${nextBday.days > 1 ? 's' : ''})`; 
     }
     bdayHtml = `<div style="background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:12px; font-size:12px; text-align:center;">${msg}</div>`;
@@ -1169,7 +1208,7 @@ function renderJogo(){
   const scored = m.goals.filter(g=>g.type==='scored').length; const conceded = m.goals.filter(g=>g.type==='conceded').length;
   const matchStarted = m.timeline && m.timeline.kickoff; const isMatchEnded = m.timeline && m.timeline.fullTime;
   const locLabel = (m.location||'casa') === 'casa' ? t('match_home') : t('match_away');
-
+  const isManualMode = !!m.manualMode;
   let dynamicPanel = '';
   if(pendingCaptain){
     let captainChips = eligiblePlayers().length ? eligiblePlayers().map(p=>`<div class="chip chip-sm ${m.capitao===p.id?'active-green':''}" onclick="setCaptain('${m.id}','${p.id}')">${playerLabel(p)}</div>`).join('') : `<div class="empty" style="grid-column:1/-1;">${t('pl_none')}</div>`;
@@ -1223,11 +1262,11 @@ function renderJogo(){
     ${topbarHtml(t('hub_match_title'))}
     ${renderJogoSubHeader()}
     <div class="card chrono-card">
-      <div class="chrono-time" id="live-timer">${formatMatchTime(getMatchElapsedMs(m))}</div>
-      ${(!m.timeline || !m.timeline.kickoff) ? (!needsLineup ? `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; margin: 10px auto 0; display: block;" onclick="askConfirm('${t('msg_ko')}', ()=>setMatchTimeMark('${m.id}','kickoff'))">${t('match_kickoff')}</button>`:'') : ''}
-       ${(m.timeline && m.timeline.kickoff && !m.timeline.halftime) ? `<div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">${m.timer.isRunning ? `<button class="btn btn-outline" style="padding:8px 20px; font-size:12px; flex:none; border-color:var(--muted); color:var(--muted);" onclick="pauseMatchTimer('${m.id}')">${t('match_pause')}</button>` : `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; flex:none;" onclick="resumeMatchTimer('${m.id}')">${t('match_resume')}</button>`}<button class="btn btn-ghost" style="padding:8px 20px; font-size:12px; flex:none;" onclick="askConfirm('${t('msg_ht')}', ()=>setMatchTimeMark('${m.id}','halftime'))">${t('match_ht')}</button></div>` : ''}
-       ${(m.timeline && m.timeline.halftime && !m.timeline.secondHalfStart) ? `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; margin: 10px auto 0; display: block;" onclick="askConfirm('${t('msg_2nd')}', ()=>setMatchTimeMark('${m.id}','secondHalfStart'))">${t('match_2nd')}</button>` : ''}
-       ${(m.timeline && m.timeline.secondHalfStart && !m.timeline.fullTime) ? `<div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">${m.timer.isRunning ? `<button class="btn btn-outline" style="padding:8px 12px; font-size:12px; flex:none; border-color:var(--muted); color:var(--muted);" onclick="pauseMatchTimer('${m.id}')">${t('match_pause')}</button>` : `<button class="btn btn-gold" style="padding:8px 12px; font-size:12px; flex:none;" onclick="resumeMatchTimer('${m.id}')">${t('match_resume')}</button>`}<button class="btn btn-red" style="padding:8px 12px; font-size:12px; flex:none;" onclick="askConfirm('${t('msg_ft')}', ()=>setMatchTimeMark('${m.id}','fullTime'))">${t('match_ft')}</button></div>` : ''}
+      <div class="chrono-time" id="live-timer">${isManualMode ? 'HISTÓRICO' : formatMatchTime(getMatchElapsedMs(m))}</div>
+      ${(!m.timeline || !m.timeline.kickoff) ? (!needsLineup ? (!isManualMode ? `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; margin: 10px auto 0; display: block;" onclick="askConfirm('${t('msg_ko')}', ()=>setMatchTimeMark('${m.id}','kickoff'), 'btn-green')">${t('match_kickoff')}</button><button class="btn btn-outline" style="padding:6px 16px; font-size:11px; margin: 10px auto 0; display: block; border-style:dashed;" onclick="askConfirm('Tens a certeza que queres registar este jogo em Modo Histórico? O cronómetro não será utilizado.', ()=>enableManualMode('${m.id}'), 'btn-gold')">📝 Registar Jogo Histórico (Sem Relógio)</button>` : `<div style="font-size:11px; color:var(--gold); text-transform:uppercase; margin-top:10px; font-weight:700;">📝 Modo de Registo Histórico Ativo</div>`) : '') : ''}
+       ${(m.timeline && m.timeline.kickoff && !m.timeline.halftime) ? `<div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">${m.timer.isRunning ? `<button class="btn btn-outline" style="padding:8px 20px; font-size:12px; flex:none; border-color:var(--muted); color:var(--muted);" onclick="pauseMatchTimer('${m.id}')">${t('match_pause')}</button>` : `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; flex:none;" onclick="resumeMatchTimer('${m.id}')">${t('match_resume')}</button>`}<button class="btn btn-ghost" style="padding:8px 20px; font-size:12px; flex:none;" onclick="askConfirm('${t('msg_ht')}', ()=>setMatchTimeMark('${m.id}','halftime'), 'btn-gold')">${t('match_ht')}</button></div>` : ''}
+       ${(m.timeline && m.timeline.halftime && !m.timeline.secondHalfStart) ? `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; margin: 10px auto 0; display: block;" onclick="askConfirm('${t('msg_2nd')}', ()=>setMatchTimeMark('${m.id}','secondHalfStart'), 'btn-green')">${t('match_2nd')}</button>` : ''}
+       ${(m.timeline && m.timeline.secondHalfStart && !m.timeline.fullTime) ? `<div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">${m.timer.isRunning ? `<button class="btn btn-outline" style="padding:8px 12px; font-size:12px; flex:none; border-color:var(--muted); color:var(--muted);" onclick="pauseMatchTimer('${m.id}')">${t('match_pause')}</button>` : `<button class="btn btn-gold" style="padding:8px 12px; font-size:12px; flex:none;" onclick="resumeMatchTimer('${m.id}')">${t('match_resume')}</button>`}<button class="btn btn-red" style="padding:8px 12px; font-size:12px; flex:none;" onclick="askConfirm('${t('msg_ft')}', ()=>setMatchTimeMark('${m.id}','fullTime'), 'btn-red')">${t('match_ft')}</button></div>` : ''}
        ${(isMatchEnded && !m.finished) ? `<div style="font-size:11px; color:var(--red); text-transform:uppercase; margin-top:10px; font-weight:700; letter-spacing: 0.05em;">${t('match_ended')}</div>` : ''}
     </div>
     
@@ -1235,7 +1274,7 @@ function renderJogo(){
       <div class="opponent" style="margin-bottom:4px;"><div style="font-size:15px;">${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home' ? `${getMyClub()} <span style="font-weight:700; color:var(--chalk); margin:0 4px;">${t('match_vs')}</span> ${m.opponent}` : `${m.opponent} <span style="font-weight:700; color:var(--chalk); margin:0 4px;">${t('match_vs')}</span> ${getMyClub()}`} <span class="badge-loc ${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home'?'casa':'fora'}">${locLabel}</span></div><span>${m.date}</span></div>
       ${m.capitao ? `<div style="font-size:11px; color:var(--muted); margin-bottom:12px; text-transform:uppercase; font-weight:600; display:flex; align-items:center; gap:8px;"><span>© Capitão: <span style="color:var(--green);">${playerName(m.capitao)}</span></span>${!isMatchEnded ? `<button style="background:none; border:1px solid var(--line); color:var(--chalk); border-radius:4px; padding:2px 6px; font-size:9px; cursor:pointer;" onclick="pendingCaptain=true; render()">${t('match_cap_change')}</button>`:''}</div>` : (!isMatchEnded ? `<div style="margin-bottom:12px;"><button class="card-mini-btn yellow" style="border-color:var(--gold); color:var(--gold);" onclick="pendingCaptain=true; render()">${t('match_cap_btn')}</button></div>` : '')}
       <div class="score-row"><div class="score-block scored"><div class="score-num mono">${scored}</div><div class="score-label">${t('match_scored')}</div></div><div class="score-sep">–</div><div class="score-block conceded"><div class="score-num mono">${conceded}</div><div class="score-label">${t('match_conc')}</div></div></div>
-      ${!isMatchEnded ? `<div class="btn-row"><button class="btn btn-gold" onclick="pending={kind:'scored', half: window.currentHalfFromTimeline(getActiveMatch())||1}; render();" ${(!matchStarted||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_goal')}</button><button class="btn btn-red" onclick="addGoal('${m.id}', 'conceded', window.currentHalfFromTimeline(getActiveMatch())||1, null, null)" ${(!matchStarted||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_conc')}</button></div>${matchStarted ? `<div style="display:flex; gap:8px; justify-content:center; margin-top:10px;"><button class="card-mini-btn yellow" onclick="pendingCard={color:'Amarelo'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_yellow')}</button><button class="card-mini-btn red" onclick="pendingCard={color:'Vermelho'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_red')}</button>${state.trackSubs ? `<button class="card-mini-btn" style="border:1px solid var(--chalk); color:var(--chalk);" onclick="pendingSub={outId:null, inId:null, half: window.currentHalfFromTimeline(getActiveMatch())||1}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_sub_title')}</button>` : ''}</div>` : ''}` : `<div style="margin-top:16px; padding:10px; border-radius:8px; background:var(--surface-2); font-size:11px; text-align:center; color:var(--muted); text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">${t('match_locked')}</div>`}
+      ${!isMatchEnded ? `<div class="btn-row"><button class="btn btn-gold" onclick="pending={kind:'scored', half: window.currentHalfFromTimeline(getActiveMatch())||1}; render();" ${(!(matchStarted || isManualMode)||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_goal')}</button><button class="btn btn-red" onclick="addGoal('${m.id}', 'conceded', window.currentHalfFromTimeline(getActiveMatch())||1, null, null)" ${(!(matchStarted || isManualMode)||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_conc')}</button></div>${(matchStarted || isManualMode) ? `<div style="display:flex; gap:8px; justify-content:center; margin-top:10px;"><button class="card-mini-btn yellow" onclick="pendingCard={color:'Amarelo'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_yellow')}</button><button class="card-mini-btn red" onclick="pendingCard={color:'Vermelho'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_red')}</button>${state.trackSubs ? `<button class="card-mini-btn" style="border:1px solid var(--chalk); color:var(--chalk);" onclick="pendingSub={outId:null, inId:null, half: window.currentHalfFromTimeline(getActiveMatch())||1}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_sub_title')}</button>` : ''}</div>` : ''}` : `<div style="margin-top:16px; padding:10px; border-radius:8px; background:var(--surface-2); font-size:11px; text-align:center; color:var(--muted); text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">${t('match_locked')}</div>`}
       ${dynamicPanel}
       ${lineupPanel}
     </div>
@@ -1362,7 +1401,7 @@ window.exportTacticPDF = function() {
           <img src="${imgData}" style="max-width:100%; max-height:650px; border:2px solid #000; border-radius:8px;">
         </div>
         <div style="margin-top:20px; font-size:11px; color:#666; text-align:center;">
-          Coachfolio v2.8 — Documento de Análise Tática
+          Coachfolio v2.8.1 — Documento de Análise Tática
         </div>
       </div>`;
       
@@ -1717,7 +1756,7 @@ window.exportScoutingPDF = function(schId) {
 
       <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
         <div style="font-size:10px; color:#666;">
-          <p style="margin:2px 0;">• Documento interno de preparação tática — Coachfolio v2.8</p>
+          <p style="margin:2px 0;">• Documento interno de preparação tática — Coachfolio v2.8.1</p>
         </div>
         <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">
           A Equipa Técnica
@@ -2669,7 +2708,7 @@ window.exportPlayerPDF = function(playerId) {
       </div>
 
       <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
-        <div style="font-size:10px; color:#666;">Relatório Individual Emitido por Coachfolio v2.8</div>
+        <div style="font-size:10px; color:#666;">Relatório Individual Emitido por Coachfolio v2.8.1</div>
         <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">O Treinador / Coordenação</div>
       </div>
     </div>`;
@@ -3057,7 +3096,7 @@ loadState();
   <div style="background: #fff; width: 90%; max-width: 400px; padding: 20px; border-radius: 10px; text-align: center; color: #333; font-family: sans-serif;">
     
     <h2 style="margin-top: 0; color: #0E211A; margin-bottom: 5px;">⚽ Coachfolio</h2>
-    <p style="font-size: 0.9em; color: #666; margin: 0;">Versão 2.8</p>
+    <p style="font-size: 0.9em; color: #666; margin: 0;">Versão 2.8.1</p>
     <p style="font-size: 0.9em; font-style: italic; color: #555; margin-top: 5px;">"Feito por treinadores, para treinadores."</p>
     
     <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'coachfolio-v2.8a';
+const CACHE_NAME = 'coachfolio-v2.8.1';
 
 self.addEventListener('install', (e) => {
   // Retiramos o skipWaiting automático para a app não reiniciar a meio de um jogo.

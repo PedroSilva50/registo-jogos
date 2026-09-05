@@ -772,7 +772,7 @@ function calcPlayerMinutes(m, pId) {
   if (m.ignoreMinutes) return 0; 
   let totalSecs = 0; 
 
-  // Se o jogo foi registado manualmente sem relógio
+  // 1. Jogo registado em Modo Manual / Histórico
   if ((!m.timeline || !m.timeline.kickoff) && m.finished) {
      let durationSecs = ((m.manualMatchDuration || 90) * 60) / 2;
      [1, 2].forEach(half => {
@@ -782,21 +782,21 @@ function calcPlayerMinutes(m, pId) {
      return Math.round(totalSecs);
   }
 
-  // Se o jogo usou cronómetro em tempo real
+  // 2. Jogo em Tempo Real (Cronómetro)
   [1, 2].forEach(half => { 
     let durationSecs = 0;
     
     if (half === 1) {
-       if (m.timer && m.timer.half1DurationMs != null) {
+       if (m.timer && m.timer.half1DurationMs != null && m.timer.half1DurationMs > 0) {
           durationSecs = m.timer.half1DurationMs / 1000;
-       } else if (m.timeline && m.timeline.kickoff && !m.timeline.secondHalfStart) {
-          durationSecs = getMatchElapsedMs(m) / 1000;
+       } else if (m.timeline && m.timeline.kickoff) {
+          durationSecs = (m.timer && m.timer.elapsedMs ? m.timer.elapsedMs : getMatchElapsedMs(m)) / 1000;
        }
     } else {
-       if (m.timer && m.timer.half2DurationMs != null) {
+       if (m.timer && m.timer.half2DurationMs != null && m.timer.half2DurationMs > 0) {
           durationSecs = m.timer.half2DurationMs / 1000;
        } else if (m.timeline && m.timeline.secondHalfStart) {
-          durationSecs = getMatchElapsedMs(m) / 1000;
+          durationSecs = (m.timer && m.timer.elapsedMs ? m.timer.elapsedMs : getMatchElapsedMs(m)) / 1000;
        }
     }
 
@@ -819,6 +819,9 @@ function calcPlayerMinutes(m, pId) {
     }); 
     if (onPitch) totalSecs += Math.max(0, durationSecs - timeOnSecs); 
   }); 
+
+  // Se o atleta esteve em campo mas o cálculo arredondou para < 1s, garante 1s para exibição visual
+  if (totalSecs > 0 && totalSecs < 1) totalSecs = 1;
 
   return Math.round(totalSecs); 
 }
@@ -2022,7 +2025,7 @@ function renderCalendario(){
     <div class="panel-title" style="margin-top:12px; margin-bottom:8px; color:var(--gold);">👔 Equipa Técnica Presença</div>
     <div class="grid-btns cols-4">${(state.staff || []).map(st => `<div class="chip chip-sm ${(s.staffCallup || []).includes(st.id)?'active-green':''}" onclick="event.stopPropagation(); window.toggleStaffCallup('${s.id}', '${st.id}')">${st.name}</div>`).join('')}</div>
     
-    <div class="btn-row" style="margin-top:12px;"><button class="btn btn-green" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.copyCallup('${s.id}')">WhatsApp 📋</button><button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.exportCallupPDF('${s.id}')">📄 Folha PDF</button><button class="btn btn-ghost" style="font-size:11px; padding:10px; color:var(--gold); border:1px solid var(--gold-dim);" onclick="event.stopPropagation(); window.openScouting('${s.id}')">👁️ Scouting</button>${s.scouting ? `<button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.exportScoutingPDF('${s.id}')">📄 PDF Scouting</button>` : ''}<button class="btn btn-ghost" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')">${t('sch_start')}</button></div></div>` : ''}</div>`; }).join('') : `<div class="empty">${t('sch_none')}</div>`}`;
+    <div class="btn-row" style="margin-top:12px;"><button class="btn btn-green" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.copyCallup('${s.id}')">Enviar WhatsApp 📋</button><button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.exportCallupPDF('${s.id}')">📄 Imprimir PDF</button><button class="btn btn-ghost" style="font-size:11px; padding:10px; color:var(--gold); border:1px solid var(--gold-dim);" onclick="event.stopPropagation(); window.openScouting('${s.id}')">👁️ Scouting</button>${s.scouting ? `<button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.exportScoutingPDF('${s.id}')">📄 PDF Scouting</button>` : ''}<button class="btn btn-ghost" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')">${t('sch_start')}</button></div></div>` : ''}</div>`; }).join('') : `<div class="empty">${t('sch_none')}</div>`}`;
 }
 
 window.uiSaveTraining = function(){ 
@@ -2197,6 +2200,7 @@ function renderTreinos(){
           </div>
           <div style="display:flex; gap:6px; align-items:center;">
             ${!isCompleted ? `<button class="btn btn-green" style="font-size:10px; padding:4px 8px; flex:none;" onclick="event.stopPropagation(); quickCompleteTraining('${tr.id}')">🟢 Concluir</button>` : ''}
+            <button class="btn btn-outline" style="font-size:10px; padding:4px 8px; flex:none;" onclick="event.stopPropagation(); exportTrainingPDF('${tr.id}')">📄 PDF</button>
             <button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); editTraining('${tr.id}')" title="Editar">✏️</button>
             <button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_tr')}', ()=>deleteTraining('${tr.id}'))">🗑</button>
           </div>
@@ -2669,16 +2673,122 @@ window.exportStatsPlayersPDF = function() {
            <p>${t('rep_gen')} ${new Date().toLocaleDateString('pt-PT')} | Época: ${activeSeason === 'TUDO' ? 'Histórico Total' : activeSeason} | ${getMyClub()}</p>
        </div>
        <table style="width:100%; border-collapse:collapse; text-align:center; font-size:12px;">
-         <tr><th style="text-align:left;">Nome do Jogador</th><th>T</th><th>P(%)</th><th>J</th><th>Mins</th><th>GM</th><th>A</th><th>GS</th><th>🟨</th><th>🟥</th></tr>
+         <tr>
+           <th style="text-align:left;">Nome do Jogador</th>
+           <th>Pres</th>
+           <th>MinT</th>
+           <th>J</th>
+           <th>Mins</th>
+           <th>GM</th>
+           <th>A</th>
+           <th>GS</th>
+           <th>🟨</th>
+           <th>🟥</th>
+         </tr>
          ${roster.map(p => {
              const st = calcularEstatisticaJogador(p.id, activeSeason);
-             const isGK = p.positions && typeof p.positions === 'string' && p.positions.toUpperCase().includes('GR');
-             const pPct = st.totalTreinos > 0 ? Math.round((st.presencasTreino / st.totalTreinos)*100) : 0;
-             return `<tr><td style="text-align:left; font-weight:bold;">${p.name}</td><td>${st.totalTreinos}</td><td>${pPct}%</td><td>${st.jogosConvocado}</td><td>${st.minutos}</td><td>${st.golos}</td><td>${st.assistencias}</td><td>${isGK ? st.golosSofridos : '-'}</td><td>${st.amarelos}</td><td>${st.vermelhos}</td></tr>`;
+             const isGK = p.positions && typeof p.positions === 'string' && (p.positions.toUpperCase().includes('GR') || p.positions.toUpperCase().includes('GK'));
+             return `<tr>
+               <td style="text-align:left; font-weight:bold;">${p.name}</td>
+               <td>${st.presencasTreino}</td>
+               <td>${st.minutosTreinoCumpridos}'</td>
+               <td>${st.jogosConvocado}</td>
+               <td>${st.minutos}</td>
+               <td>${st.golos}</td>
+               <td>${st.assistencias}</td>
+               <td>${isGK ? st.golosSofridos : '-'}</td>
+               <td>${st.amarelos}</td>
+               <td>${st.vermelhos}</td>
+             </tr>`;
          }).join('')}
        </table>
     </div>`;
-    const printArea = document.getElementById('print-area'); printArea.innerHTML = html; window.print();
+    const printArea = document.getElementById('print-area'); 
+    printArea.innerHTML = html; 
+    window.print();
+};
+
+window.exportTrainingPDF = function(trId) {
+  const tr = state.trainings.find(t => t.id === trId);
+  if (!tr) return;
+
+  const dateStr = tr.date.split('-').reverse().join('/');
+  const duration = tr.duration || 90;
+  const isCompleted = tr.status === undefined || tr.status === 'completed';
+
+  let absObj = {};
+  if (Array.isArray(tr.absences)) {
+    tr.absences.forEach(id => absObj[id] = 'injustificada');
+  } else {
+    absObj = tr.absences || {};
+  }
+
+  const allPlayers = eligiblePlayers();
+  
+  let rowsHtml = '';
+  allPlayers.forEach(p => {
+    const reason = absObj[p.id];
+    let statusText = '<span style="color:#059669; font-weight:bold;">🟢 Presente</span>';
+    let minsCumpridos = `${duration}'`;
+
+    if (reason) {
+      if (reason === 'injustificada') statusText = '<span style="color:#DC2626; font-weight:bold;">🔴 Faltou (Injustificada)</span>';
+      else if (reason === 'justificada') statusText = '<span style="color:#D97706; font-weight:bold;">🟡 Ausente (Justificada)</span>';
+      else if (reason === 'lesao') statusText = '<span style="color:#2563EB; font-weight:bold;">🩹 Lesionado / Médico</span>';
+      else if (reason === 'castigo') statusText = '<span style="color:#DC2626; font-weight:bold;">🟥 Castigado</span>';
+      else if (reason === 'dispensado') statusText = '<span style="color:#4B5563; font-weight:bold;">⚪ Dispensado</span>';
+
+      const customMins = tr.customMinutes && tr.customMinutes[p.id] != null ? tr.customMinutes[p.id] : 0;
+      minsCumpridos = `${customMins}' / ${duration}'`;
+    }
+
+    rowsHtml += `
+      <tr>
+        <td style="text-align:left; font-weight:bold; padding-left:12px;">${playerLabel(p)}</td>
+        <td style="text-align:center;">${statusText}</td>
+        <td style="text-align:center; font-family:monospace;">${minsCumpridos}</td>
+      </tr>`;
+  });
+
+  let html = `
+    <div class="print-card">
+      <div class="print-header">
+        <h1>RELATÓRIO DE SESSÃO DE TREINO</h1>
+        <p style="font-size:18px; font-weight:bold; margin-top:5px; color:#000;">Data: ${dateStr} | Duração: ${duration} Min</p>
+        <p style="font-size:13px; color:#444;">Clube: <b>${getMyClub()}</b> | Época: <b>${tr.season || state.currentSeason}</b> | Estado: <b>${isCompleted ? 'Concluído' : 'Agendado'}</b></p>
+      </div>
+
+      <h3 style="margin-bottom:8px; color:#000; border-bottom:2px solid #000; padding-bottom:4px;">📋 Plano de Treino & Observações</h3>
+      <div style="white-space:pre-wrap; border:1px solid #CCC; padding:12px; border-radius:6px; background:#FFF; min-height:80px; font-size:12px; margin-bottom:20px; line-height:1.5;">
+        ${tr.notes || 'Sem plano de treino ou observações registadas.'}
+      </div>
+
+      <h3 style="margin-bottom:10px; color:#000; border-bottom:2px solid #000; padding-bottom:4px;">🏃 Controlo de Presenças & Tempo Efetivo (${allPlayers.length} Atletas)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align:left; padding-left:12px;">Nome do Atleta</th>
+            <th style="text-align:center;">Estado da Presença</th>
+            <th style="text-align:center;">Tempo Cumprido</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+
+      <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
+        <div style="font-size:10px; color:#666;">
+          <p style="margin:2px 0;">• Documento de registo de assiduidade e plano de treino — Coachfolio v3.0</p>
+        </div>
+        <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">
+          A Equipa Técnica
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
 };
 
 function renderStats(){

@@ -779,7 +779,7 @@ function calcPlayerMinutes(m, pId) {
         let onPitch = half === 1 ? (m.lineup || []).includes(pId) : getPlayersOnPitchAtEndOfHalf(m, 1).includes(pId);
         if (onPitch) totalSecs += durationSecs;
      });
-     return totalSecs;
+     return Math.round(totalSecs);
   }
 
   // Se o jogo usou cronómetro em tempo real
@@ -788,19 +788,18 @@ function calcPlayerMinutes(m, pId) {
     
     if (half === 1) {
        if (m.timer && m.timer.half1DurationMs != null) {
-          durationSecs = Math.round(m.timer.half1DurationMs / 1000);
+          durationSecs = m.timer.half1DurationMs / 1000;
        } else if (m.timeline && m.timeline.kickoff && !m.timeline.secondHalfStart) {
-          durationSecs = Math.round(getMatchElapsedMs(m) / 1000);
+          durationSecs = getMatchElapsedMs(m) / 1000;
        }
     } else {
        if (m.timer && m.timer.half2DurationMs != null) {
-          durationSecs = Math.round(m.timer.half2DurationMs / 1000);
+          durationSecs = m.timer.half2DurationMs / 1000;
        } else if (m.timeline && m.timeline.secondHalfStart) {
-          durationSecs = Math.round(getMatchElapsedMs(m) / 1000);
+          durationSecs = getMatchElapsedMs(m) / 1000;
        }
     }
 
-    // Se a parte não teve duração registada, ignora
     if (durationSecs <= 0) return;
 
     let onPitch = half === 1 ? (m.lineup || []).includes(pId) : getPlayersOnPitchAtEndOfHalf(m, 1).includes(pId); 
@@ -808,9 +807,9 @@ function calcPlayerMinutes(m, pId) {
     let subsInHalf = (m.subs || []).filter(s => s.half === half && !s.isHalftime).sort((a,b) => (a.minute||0) - (b.minute||0)); 
     
     subsInHalf.forEach(sub => { 
-      let subSecs = (sub.minute || 0) * 60;
+      let subSecs = sub.subMs != null ? (sub.subMs / 1000) : ((sub.minute || 0) * 60);
       if (sub.outId === pId && onPitch) { 
-        totalSecs += (subSecs - timeOnSecs); 
+        totalSecs += Math.max(0, subSecs - timeOnSecs); 
         onPitch = false; 
       } 
       if (sub.inId === pId && !onPitch) { 
@@ -818,10 +817,10 @@ function calcPlayerMinutes(m, pId) {
         onPitch = true; 
       } 
     }); 
-    if (onPitch) totalSecs += (durationSecs - timeOnSecs); 
+    if (onPitch) totalSecs += Math.max(0, durationSecs - timeOnSecs); 
   }); 
 
-  return totalSecs > 0 ? totalSecs : 0; 
+  return Math.round(totalSecs); 
 }
 
 function formatSecsToMinSec(totalSecs) {
@@ -991,7 +990,27 @@ window.addGoal = function(matchId, type, half, scorerId, assistId){ const m = st
 window.deleteGoal = function(matchId, goalId){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; m.goals = m.goals.filter(g=>g.id!==goalId); saveState(); render(); };
 window.addCard = function(matchId, playerId, color, half){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; if(!m.cards) m.cards = []; m.cards.push({ id: uid(), playerId, color, half: half==='halftime'?1:half, minute: getMatchMinute(m) }); pendingCard = null; saveState(); render(); };
 window.deleteCard = function(matchId, cardId){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; m.cards = m.cards.filter(c=>c.id!==cardId); saveState(); render(); };
-window.confirmSub = function(mId) { const m = state.matches.find(x=>x.id===mId); if(!m) return; if(!m.subs) m.subs = []; const currentH = window.currentHalfFromTimeline(m); const isHT = currentH === 'halftime'; m.subs.push({ id: uid(), outId: pendingSub.outId, inId: pendingSub.inId, half: isHT ? 1 : (currentH || 1), isHalftime: isHT, minute: isHT ? null : getMatchMinute(m) }); pendingSub = null; saveState(); render(); };
+window.confirmSub = function(mId) { 
+  const m = state.matches.find(x=>x.id===mId); 
+  if(!m) return; 
+  if(!m.subs) m.subs = []; 
+  const currentH = window.currentHalfFromTimeline(m); 
+  const isHT = currentH === 'halftime'; 
+
+  m.subs.push({ 
+    id: uid(), 
+    outId: pendingSub.outId, 
+    inId: pendingSub.inId, 
+    half: isHT ? 1 : (currentH || 1), 
+    isHalftime: isHT, 
+    minute: isHT ? null : getMatchMinute(m),
+    subMs: isHT ? null : getMatchElapsedMs(m)
+  }); 
+
+  pendingSub = null; 
+  saveState(); 
+  render(); 
+};
 window.deleteSub = function(mId, subId) { const m = state.matches.find(x=>x.id===mId); if(!m) return; m.subs = m.subs.filter(s => s.id !== subId); saveState(); render(); };
 window.setCaptain = function(matchId, playerId){ const m = state.matches.find(m=>m.id===matchId); if(m){ m.capitao = playerId; saveState(); } pendingCaptain = false; render(); };
 window.setRating = function(matchId, playerId, rating){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; if(!m.ratings) m.ratings = {}; if(m.ratings[playerId] === rating) delete m.ratings[playerId]; else m.ratings[playerId] = rating; saveState(); render(); };

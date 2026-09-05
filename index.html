@@ -4,40 +4,76 @@
 <!-- LIGAÇÃO PWA OFICIAL -->
 <link rel="manifest" href="./manifest.json">
 <script>
-  let newWorker;
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').then(reg => {
-        reg.addEventListener('updatefound', () => {
-          newWorker = reg.installing;
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              const toast = document.getElementById('toast');
-              if (toast) {
-                toast.innerHTML = 'Nova versão disponível! <button onclick="if(newWorker) newWorker.postMessage({action:\'skipWaiting\'})" style="margin-left:10px; background:var(--chalk); color:var(--bg); border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold;">Atualizar</button>';
-                toast.classList.add('show');
-              }
-            }
-          });
-        });
-      }).catch(err => console.log('SW fail:', err));
+    // ==========================================
+    // VERIFICAÇÃO ÚNICA E GLOBAL DE LICENÇA (BLINDADA)
+    // ==========================================
+    const IS_LICENSED = (function() {
+      const currentHost = window.location.hostname.toLowerCase();
 
-      let refreshing;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (refreshing) return;
-        refreshing = true;
-        window.location.reload(); // Força o recarregamento com o novo index.html
+      // 1. Ficheiro local (file://) tem hostname estritamente vazio ""
+      if (currentHost === '') return true;
+
+      // 2. Domínios web autorizados — comparação EXATA (não substring)
+      //    Evita que "pedrosilva50.github.io.atacante.com" passe a verificação.
+      const allowedDomains = [
+        'localhost',
+        '127.0.0.1',
+        'pedrosilva50.github.io'
+        // Se um dia precisares de "www.pedrosilva50.github.io" ou domínio próprio,
+        // adiciona aqui explicitamente (não uses .includes()).
+      ];
+      return allowedDomains.includes(currentHost);
+    })();
+
+    // BLOQUEIO VISÍVEL IMEDIATO SE A LICENÇA FOR INVÁLIDA
+    if (!IS_LICENSED) {
+      document.addEventListener('DOMContentLoaded', function() {
+        document.body.innerHTML = `
+          <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; background:#0E211A; color:#F3EFE6; text-align:center; padding:20px; font-family:sans-serif;">
+            <span style="font-size:50px; margin-bottom:20px;">🚫</span>
+            <h2 style="color:#C8493F; margin:0 0 10px 0; text-transform:uppercase;">Acesso Não Autorizado</h2>
+            <p style="color:#8FA79B; font-size:14px; max-width:400px; line-height:1.5;">
+              Esta cópia do <b>Coachfolio</b> não está licenciada para ser executada neste domínio (<b>${window.location.hostname}</b>).
+            </p>
+          </div>`;
       });
-    });
-  }
-</script>
+      throw new Error("Coachfolio: Licença inválida para este domínio.");
+    }
+
+    // REGISTO DO SERVICE WORKER (PWA)
+    let newWorker;
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+          reg.addEventListener('updatefound', () => {
+            newWorker = reg.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                const toast = document.getElementById('toast');
+                if (toast) {
+                  toast.innerHTML = 'Nova versão disponível! <button onclick="if(newWorker) newWorker.postMessage({action:\'skipWaiting\'})" style="margin-left:10px; background:var(--chalk); color:var(--bg); border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold;">Atualizar</button>';
+                  toast.classList.add('show');
+                }
+              }
+            });
+          });
+        }).catch(err => console.log('SW fail:', err));
+        let refreshing;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload(); 
+        });
+      });
+    }
+  </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Coachfolio">
 <meta name="theme-color" content="#0E211A">
-<title>COACHFOLIO v2.8.1</title>
+<title>COACHFOLIO v3.0</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{--bg:#0E211A;--surface:#153328;--surface-2:#1C4133;--chalk:#F3EFE6;--muted:#8FA79B;--gold:#D9A441;--gold-dim:#4A3E22;--red:#C8493F;--red-dim:#3F2320;--yellow:#E1C324;--green:#4ade80;--green-dim:#133320;--line:rgba(243,239,230,0.10);--btn-gold-txt:#241B08;--btn-red-txt:#2B0F0C;--btn-green-txt:#0E211A;}
@@ -235,9 +271,13 @@
 
 <script>
 window.addEventListener('error', function(e) {
-  const toast = document.getElementById('toast');
-  if(toast) { toast.style.background = 'var(--red)'; toast.style.color = 'white'; toast.textContent = "Erro detetado! Backup recomendado."; toast.classList.add('show'); }
-  console.error(e);
+  // Ignora erros irrelevantes que não afetam os dados do utilizador
+  if (e.message && (e.message.includes('ResizeObserver') || e.message.includes('Script error'))) return;
+  
+  // Aponta apenas para falhas de dados/execução grave
+  if (typeof showToast === 'function') {
+    showToast('⚠️ Erro detetado! Recomenda-se guardar backup.', 'btn-red');
+  }
 });
 
 const dict = {
@@ -324,15 +364,113 @@ const dict = {
     msg_del_lg_team: "Remover equipa?", msg_del_lg_match: "Eliminar resultado?",
     rep_title: "COACHFOLIO — RELATÓRIO DE ÉPOCA", rep_gen: "Gerado em:", rep_conc: "Sofrido",
     st_team: "Equipa", st_players: "Jogadores",
-    fine_title: "Caixinha", fine_new: "+ Nova Multa", fine_reason: "Motivo (Ex: Atraso)", fine_val: "Valor (€)", fine_empty: "Sem registos na Caixinha.", fine_save: "Guardar Multa"
+    fine_title: "Caixinha", fine_new: "+ Nova Multa", fine_reason: "Motivo (Ex: Atraso)", fine_val: "Valor (€)", fine_empty: "Sem registos na Caixinha.", fine_save: "Guardar Multa",
+    pl_tab_players: "Jogadores", pl_tab_compare: "Comparar 1v1", pl_tab_staff: "Equipa Técnica",
+    pl_sort_by: "Ordenar por:", pl_sort_pos: "Posição", pl_sort_name: "Nome", pl_sort_num: "Número",
+    comp_p1: "Jogador 1...", comp_p2: "Jogador 2...",
+    comp_mins: "Minutos Jogados", comp_goals: "Golos Marcados", comp_assists: "Assistências",
+    comp_starts: "Titularidades", comp_abs: "Faltas ao Treino", comp_yel: "Cartões Amarelos", comp_red: "Cartões Vermelhos",
+    comp_season: "Estatísticas da época atual", comp_diff: "Seleciona dois jogadores diferentes.", comp_select: "Seleciona dois jogadores acima para ver o Frente a Frente.",
+    set_screen: "Ecrã Sempre Ligado (Durante o Jogo)"
+  },
+  en: {
+    def_club: "My Team", set_club: "Your Team Name", set_club_ph: "Ex: Local FC",
+    nav_home_lbl: "Home", set_home_tip: "💡 Click the ball icon in the top left to return to the Main Menu anytime.",
+    nav_hub_match: "Matchday", nav_hub_plan: "Planning", nav_hub_strat: "Strategy", nav_hub_team: "Team & Stats",
+    home_title: "COACHFOLIO", home_sub: "Everything about your team. In one place.", home_cont: "Resume Current Match",
+    hub_match_title: "Matchday", hub_match_desc: "Ongoing Match & Saved Results",
+    hub_plan_title: "Planning", hub_plan_desc: "Calendar, Trainings & Locker Room Diary",
+    hub_strat_title: "Strategy", hub_strat_desc: "Interactive Tactics Board & Videos",
+    hub_team_title: "Team & Stats", hub_team_desc: "Roster, Standings & Statistics",
+    set_title: "⚙️ Settings", set_theme: "Visual Theme", set_theme_orig: "Forest", set_theme_sun: "Sun", set_theme_ocean: "Ocean",
+    set_lang: "Idioma / Language",
+    set_subs: "Track Substitutions and Minutes", set_yes: "Yes", set_no: "No", set_subs_desc: "Ask for starting XI before kickoff and track minutes.",
+    set_fairplay: "Show Minutes Indicator (Fair Play)", set_diary: "Enable Locker Room Diary", set_videos: "Enable Video Library", set_leagues: "Enable Standings",
+    set_fines: "Enable Fine Box", set_birthdays: "Enable Birthday Radar",
+    set_kit: "Team Kit Color (Tactics)", set_opp_kit: "Opponent Kit Color (Tactics)", set_archive: "End and Archive Season",
+    set_season_format: "Season Format", set_season_eu: "Europe (Ex: 26/27)", set_season_civ: "Civil Year (Ex: 2026)",
+    archive_title: "End of Season", archive_desc: "You are about to transition to a new season. Calendar, trainings, and diary will be archived. Completed matches move to History and stats reset to zero.", archive_warn: "Save your data before proceeding:", archive_btn: "Yes, Archive Season",
+    cancel: "Cancel", confirm: "Confirm", del: "Delete", save: "Save", edit: "Edit", remove: "Remove", close: "Close",
+    match_curr: "Current Match", match_none: "No match ongoing right now.", match_goto_sch: "Go to Calendar",
+    match_kickoff: "Kickoff", match_ht: "Halftime", match_ht_lbl: "Halftime", match_2nd: "Start 2nd Half", match_ft: "🏁 Full Time",
+    match_pause: "⏸ Pause", match_resume: "▶ Resume", match_ended: "🏁 Match Ended (Save report pending)",
+    match_cap: "Choose Captain", match_cap_btn: "+ Set Captain", match_cap_change: "Change",
+    match_goal_half: "Goal scored — which half?", match_conc_half: "Goal conceded — which half?", match_half1: "1st Half", match_half2: "2nd Half",
+    match_scorer: "Who scored?", match_assist: "Who assisted?", match_nobody: "Nobody",
+    match_card_who: "{color} Card — who?", match_sub_title: "🔄 Substitution", match_sub_out: "🔴 OUT (Pitch)", match_sub_in: "🟢 IN (Bench)",
+    match_start_xi: "⭐ Choose Starters (Starting XI)", match_conf_xi: "Confirm Starters",
+    match_rate_pls: "Rate Players", match_rate_close: "Close Ratings", match_rate_btn: "⭐ Rate Team", match_rate_edit: "⭐ Edit Ratings",
+    match_save_btn: "End and Save Match", match_save_rep: "Save Match Report", match_save_rate: "Save Ratings and Close",
+    match_vs: "vs", match_home: "Home", match_away: "Away", match_scored: "Scored", match_conc: "Conceded", match_add_goal: "+ Scored", match_add_conc: "+ Conceded",
+    match_yellow: "Yellow", match_red: "Red", match_locked: "🔒 Match actions locked (Full Time)",
+    match_notes: "Final match notes", match_notes_ph: "Ex: match notes...",
+    tac_title: "Tactics Board", tac_inst: "Mode [Move]: Drag players | Mode [Draw]: Freehand drawing",
+    tac_box: "Piece Box", tac_clear: "🧹 Clear Pieces", tac_opp: "+ Opponent", tac_ball: "+ Ball ⚽", tac_own: "Your Players", tac_no_pls: "No more players available.",
+    sch_title: "Calendar", sch_new: "+ Schedule New Match", sch_edit: "Edit Schedule", sch_single: "Single Match", sch_multi: "Tournament (Multiple)",
+    sch_tour_name: "Tournament Name", sch_tour_ph: "Ex: Summer Cup", sch_loc_gen: "Location (General)", sch_tour_games: "Tournament Matches", sch_game: "Match",
+    sch_phase: "Phase / Competition", sch_phase_ph: "Ex: Group Stage, Final", sch_matchday: "Matchday", sch_matchday_ph: "Ex: 1, 14", sch_opp: "Opponent", sch_opp_ph: "Team name",
+    sch_date: "Date", sch_time: "Time", sch_add_game: "+ Add Match to Tournament", sch_type: "Match Type", sch_friendly: "Friendly", sch_champ: "League", sch_tour: "Cup/Tourn.",
+    sch_save: "Save Schedule", sch_none: "No matches scheduled.", sch_callup: "Call-up", sch_start: "Start Match", sch_meet: "Meeting Time:",
+    tr_title: "Trainings", tr_new: "+ New Training", tr_notes: "Training Plan & Notes", tr_notes_ph: "Ex: 1. Rondo; 2. Possession 4v4... | Notes: Good intensity.",
+    tr_abs: "Absences", tr_abs_desc: "Everyone is present by default. Tap who was absent.", tr_save: "Save Training",
+    tr_pres: "present", tr_abss: "absent", tr_none: "No trainings recorded yet.",
+    diary_title: "Locker Room Diary", diary_new: "+ New Note / Meeting", diary_heading: "Note Title", diary_heading_ph: "Ex: Parents Meeting / 1-on-1",
+    diary_content: "Content / Notes", diary_content_ph: "Write down the discussed points here...", diary_save: "Save in Diary", diary_none: "No notes recorded in the diary.",
+    vid_title: "Video Library", vid_new: "+ New Video / Drill", vid_name: "Drill / Play Name", vid_name_ph: "Ex: Build-up under pressure 4v3",
+    vid_type: "Category", vid_type_train: "⚽ Training", vid_type_match: "🏟️ Match", vid_type_setpiece: "🎯 Set Pieces",
+    vid_url: "Video Link (URL)", vid_url_ph: "https://youtube.com/... or video link", vid_notes: "Key Points / Notes", vid_notes_ph: "Ex: Focus on pass timing...",
+    vid_save: "Save Video", vid_open: "Open Link ↗", vid_share: "Share WhatsApp 📋", vid_none: "No videos saved in this category.", vid_del_ask: "Delete this video?",
+    res_title: "Results", res_search: "Search by opponent...", res_all: "All", res_edit: "Edit Match Data", res_ongoing: "Ongoing",
+    res_share_matchday: "Share Result 📸", res_none_search: "No matches match your search.", res_none: "No matches recorded in the current season yet.",
+    st_title: "Statistics", st_all: "All", st_all_phases: "All Phases", st_global: "Global Results", st_wins: "Wins", st_draws: "Draws", st_losses: "Losses",
+    st_ga: "Goals and Assists", st_top_s: "Top Scorers", st_top_a: "Top Assists",
+    st_cards: "Cards", st_half: "Performance per Half", st_bal: "Balance", st_form: "Form and Evolution", st_form_last: "Form (Last {n} Matches)",
+    st_evol: "Goal Evolution (Last {n})", st_tap: "Tap bars to see the result",
+    st_no_goals: "No goals scored.", st_no_assists: "No assists recorded.", st_no_cards: "No cards recorded.",
+    pl_title: "Roster", pl_none: "No players in the roster. Add below.", pl_no_name: "No Name", pl_yrs: "yrs",
+    pl_goals: "⚽ Goals", pl_assists: "🎯 Assists", pl_avg: "⭐ Avg Form", pl_mins: "⏱️ Minutes", pl_start: "Starter (XI)", pl_tr_abs: "📉 Training Absences",
+    pl_disc: "Discipline", pl_edit: "✏️ Edit Player Data", pl_mode: "Edit Mode", pl_name: "Name", pl_num: "Number", pl_pos: "Positions",
+    pl_dob: "Birth Date (dd.mm.yyyy)", pl_done: "✓ Done", pl_add_ph: "Player name",
+    lg_title: "Standings", lg_new: "+ New Competition", lg_name: "Competition Name", lg_teams: "Enrolled Teams", lg_add_team: "+ Add Team", lg_matches: "Matchday Results", lg_add_match: "+ Add Result", lg_table: "League Table",
+    fp_balanced: "🟢 Balanced Minutes", fp_medium: "🟡 Below Avg Time", fp_low: "🔴 Rarely Used",
+    exp_title: "Backup & Export", exp_desc: "JSON is the backup to recover data. PDF and CSV are reports for analysis and sharing.",
+    exp_json: "Export JSON", imp_json: "Import JSON", exp_pdf: "Report (PDF)", exp_csv: "Stats (CSV)",
+    msg_quota: "⚠️ Storage Full! Your phone has no more memory allocated for the app.",
+    msg_del_goal: "Delete goal?", msg_del_card: "Delete card?", msg_del_sub: "Delete substitution?",
+    msg_clear_tac: "Clear all pieces from the board?", msg_lim_own: "Limit: Only {n} players in Fut {n}!", msg_lim_opp: "Limit: Only {n} opponents in Fut {n}!",
+    msg_lim_ball: "There is already a ball on the board!", msg_change_fut: "Changing to Fut {n} will clear the current board. Continue?",
+    msg_no_opp: "Enter an opponent!", msg_no_tour: "Enter the tournament name!", msg_no_games: "Enter at least one opponent!",
+    msg_sch_saved: "Schedule updated!", msg_tour_saved: "Tournament scheduled!", msg_game_saved: "Match scheduled!",
+    msg_del_sch: "Delete this schedule?", msg_warn_order: "Warning: This match is not the first on the list. Start out of order?",
+    msg_ongoing: "You already have an ongoing match!", msg_copied: "Ready to share ✓", msg_copy_err: "Error sharing",
+    msg_ko: "Record kickoff?", msg_ht: "Record halftime?", msg_2nd: "Record 2nd half start?", msg_ft: "Are you sure you want to blow the final whistle? The clock will stop permanently.",
+    msg_not_started: "Match not started", msg_not_started_desc: "The timer hasn't started yet. How do you want to close the match?",
+    msg_save_game: "Save Match", msg_exit_nosave: "Exit Without Saving", msg_exit_desc: "(returns match to calendar)",
+    msg_match_ended: "Match ended!", msg_ask_rate: "Do you want to rate player performances now?",
+    msg_yes_rate: "Yes, Rate", msg_no_rate: "No, Save now",
+    msg_del_match: "Delete match?", msg_del_tr: "Delete training?", msg_tr_saved: "Training saved ✓", msg_vid_saved: "Video saved ✓", msg_diary_saved: "Note saved in Diary ✓",
+    msg_del_pl: "Remove player?", msg_err_add_pl: "Error adding player: ", msg_bkp_exp: "Backup exported ✓",
+    msg_bkp_imp: "Backup imported ✓", msg_inv_file: "Invalid file ⚠", msg_overwrite: "This will replace all current data with the backup. Continue?",
+    msg_ask_archive: "Are you sure you want to archive the current Season?",
+    msg_archive_done: "Season archived successfully ✓",
+    msg_del_lg_team: "Remove team?", msg_del_lg_match: "Delete result?",
+    rep_title: "COACHFOLIO — SEASON REPORT", rep_gen: "Generated on:", rep_conc: "Conceded",
+    st_team: "Team", st_players: "Players",
+    fine_title: "Fine Box", fine_new: "+ New Fine", fine_reason: "Reason (Ex: Late)", fine_val: "Value (€)", fine_empty: "No records in the Fine Box.", fine_save: "Save Fine",
+    pl_tab_players: "Players", pl_tab_compare: "Compare 1v1", pl_tab_staff: "Staff",
+    pl_sort_by: "Sort by:", pl_sort_pos: "Position", pl_sort_name: "Name", pl_sort_num: "Number",
+    comp_p1: "Player 1...", comp_p2: "Player 2...",
+    comp_mins: "Minutes Played", comp_goals: "Goals Scored", comp_assists: "Assists",
+    comp_starts: "Starts", comp_abs: "Training Absences", comp_yel: "Yellow Cards", comp_red: "Red Cards",
+    comp_season: "Current season statistics", comp_diff: "Select two different players.", comp_select: "Select two players above to view Head-to-Head.",
+    set_screen: "Keep Screen Awake (During Match)"
   }
 };
-
 let state = { 
   roster: [], matches: [], trainings: [], schedule: [], tactics: [], tacticPaths: [], tacticalNotebook: [], videos: [], diary: [], leagues: [], fines: [], staff: [],
   tacticFormat: 11, lastBackupDate: null, trackSubs: true, theme: 'original', lang: 'pt', myClubName: '',
   showFairPlay: true, enableVideos: true, enableDiary: true, enableLeagues: true, enableFines: false, enableBirthdays: false, teamColor: '#D9A441', oppColor: '#C8493F', currentSeason: '', seasonFormat: 'europeu',
-  tacticHalfPitch: false, rosterSortBy: 'posicao'
+  tacticHalfPitch: false, rosterSortBy: 'posicao', keepScreenAwake: false
 };
 
 function t(key, vars = {}) {
@@ -387,6 +525,48 @@ let selectedPlayerId = null;
 window.matchSeasonFilter = undefined;
 window.planSeasonFilter = undefined;
 
+// --- NOVO: Lógica do Ecrã Sempre Ligado (Wake Lock) ---
+let wakeLock = null;
+
+async function manageWakeLock() {
+    if (!('wakeLock' in navigator)) return; 
+    if (state.keepScreenAwake && currentHub === 'jogo' && currentTab === 'jogo') {
+        if (wakeLock === null && document.visibilityState === 'visible') {
+            try { 
+                wakeLock = await navigator.wakeLock.request('screen'); 
+            } catch (err) { console.log('Wake Lock negado:', err); }
+        }
+    } else {
+        if (wakeLock !== null) {
+            try { 
+                wakeLock.release(); 
+                wakeLock = null; 
+            } catch (err) {}
+        }
+    }
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') manageWakeLock();
+});
+// --------------------------------------------------------
+
+// --- NOVO: Variáveis e função para ordenar as estatísticas ---
+let statsSortCol = 'minutos'; 
+let statsSortAsc = false;
+
+window.setStatsSort = function(col) {
+    if(statsSortCol === col) {
+        statsSortAsc = !statsSortAsc; 
+    } else {
+        statsSortCol = col;
+        statsSortAsc = false; 
+        if(col === 'nome') statsSortAsc = true; 
+    }
+    render();
+};
+// -------------------------------------------------------------
+
 const STORAGE_KEY = 'coach-app-data-v1';
 const usingClaudeStorage = (typeof window.storage !== 'undefined');
 const storageAdapter = {
@@ -396,6 +576,8 @@ const storageAdapter = {
 
 async function loadState(){
   try{
+    if (!IS_LICENSED) return;
+
     const res = await storageAdapter.get(STORAGE_KEY);
     if(res && res.value) {
        state = JSON.parse(res.value);
@@ -410,6 +592,7 @@ async function loadState(){
        if(state.enableFines === undefined) state.enableFines = false;
        if(state.enableBirthdays === undefined) state.enableBirthdays = false;
        if(state.tacticHalfPitch === undefined) state.tacticHalfPitch = false;
+       if(state.keepScreenAwake === undefined) state.keepScreenAwake = false;
        if(!state.teamColor) state.teamColor = '#D9A441';
        if(!state.oppColor) state.oppColor = '#C8493F';
        if(!state.seasonFormat) state.seasonFormat = 'europeu';
@@ -417,12 +600,23 @@ async function loadState(){
        if(!state.theme) state.theme = 'original'; if(!state.lang) state.lang = 'pt'; if(!state.myClubName) state.myClubName = '';
        if(!state.rosterSortBy) state.rosterSortBy = 'posicao';
        if(!state.lastBackupDate && state.matches.length > 0) state.lastBackupDate = Date.now() - (8 * 24 * 60 * 60 * 1000); 
+
+       state.roster.forEach(p => {
+           if (p.positions !== undefined && p.positions !== null && typeof p.positions !== 'string') {
+               p.positions = Array.isArray(p.positions) ? p.positions.join(', ') : '';
+           }
+           if (!p.positions || p.positions === 'null' || p.positions === 'undefined') {
+               p.positions = '';
+           }
+       });
+       
     } else { state.currentSeason = defaultSeason(); }
   }catch(e){}
   applyTheme(state.theme || 'original'); render();
 }
 
 async function saveState(){ 
+  if (!IS_LICENSED) return;
   try { 
     state.lastBackupDate = Date.now();
     await storageAdapter.set(STORAGE_KEY, JSON.stringify(state)); 
@@ -430,7 +624,7 @@ async function saveState(){
     if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || (e.message && e.message.includes('quota'))) { 
       alert(t('msg_quota')); 
     } else { 
-      console.error("Erro:", e); 
+      console.error("Erro ao guardar estado:", e); 
     } 
   } 
 }
@@ -502,10 +696,8 @@ window.shiftSeason = function(dir) {
     }
 };
 
-// ORDENAÇÃO POR POSIÇÃO: CONSIDERA APENAS A PRIMEIRA POSIÇÃO DEFINIDA (ANTES DA PRIMEIRA VÍRGULA)
 function getPosRank(pos) {
-    if(!pos || pos.trim() === '') return 99;
-    // Extrai estritamente a primeira posição (antes da vírgula)
+    if(!pos || typeof pos !== 'string' || pos.trim() === '') return 99;
     let firstPos = pos.split(',')[0].trim().toUpperCase();
     
     if(firstPos.includes('GR') || firstPos.includes('GK')) return 1;
@@ -562,10 +754,9 @@ function getNextBirthday() {
     upcoming.sort((a,b) => a.days - b.days); return upcoming.length > 0 ? upcoming[0] : null;
 }
 
-// FORMATAÇÃO LIMPA: SEM O SÍMBOLO '#'
 function playerLabel(p) { if(!p) return t('pl_no_name'); return p.number ? `${p.number} ${p.name}` : (p.name || t('pl_no_name')); }
 function getActiveMatch(){ return state.matches.find(m => !m.finished) || null; }
-function playerName(id){ if(id === 'unknown') return t('match_nobody'); const p = state.roster.find(p=>p.id===id); return p ? playerLabel(p) : '—'; }
+function playerName(id){ if(id === 'unknown') return t('match_nobody'); if(id === 'opp') return 'Adversário'; const p = state.roster.find(p=>p.id===id); return p ? playerLabel(p) : '—'; }
 function eligiblePlayers(){ return sortPlayerObjs((state.roster || []).filter(p => p && p.active !== false)); }
 function formatMatchTime(ms){ const totalSecs = Math.floor(ms / 1000); const mm = Math.floor(totalSecs / 60); const ss = totalSecs % 60; return String(mm).padStart(2,'0') + ':' + String(ss).padStart(2,'0'); }
 function getMatchElapsedMs(m){ if(!m.timer) return 0; let total = m.timer.elapsedMs; if(m.timer.isRunning) total += (Date.now() - m.timer.lastStartTs); return total; }
@@ -578,32 +769,46 @@ function getHalfDuration(m, half) {
 }
 function getPlayersOnPitchAtEndOfHalf(m, half) { let current = [...(m.lineup || [])]; let subs = (m.subs || []).filter(s => s.half <= half).sort((a,b) => { if(a.half !== b.half) return a.half - b.half; let minA = a.isHalftime ? 9999 : (a.minute || 0); let minB = b.isHalftime ? 9999 : (b.minute || 0); return minA - minB; }); subs.forEach(s => { current = current.filter(id => id !== s.outId); current.push(s.inId); }); return current; }
 function calcPlayerMinutes(m, pId) { 
-  if (m.ignoreMinutes) return 0; // Se marcaste a caixa, dá 0 minutos a todos para não estragar a estatística
-
+  if (m.ignoreMinutes) return 0; 
   let totalSecs = 0; 
+
+  // Se o jogo foi registado manualmente sem relógio
+  if ((!m.timeline || !m.timeline.kickoff) && m.finished) {
+     let durationSecs = ((m.manualMatchDuration || 90) * 60) / 2;
+     [1, 2].forEach(half => {
+        let onPitch = half === 1 ? (m.lineup || []).includes(pId) : getPlayersOnPitchAtEndOfHalf(m, 1).includes(pId);
+        if (onPitch) totalSecs += durationSecs;
+     });
+     return totalSecs;
+  }
+
+  // Se o jogo usou cronómetro em tempo real
   [1, 2].forEach(half => { 
     let durationSecs = 0;
     
-    // Se o jogo foi manual (sem relógio), usa o tempo que escreveste
-    if ((!m.timeline || !m.timeline.kickoff) && m.finished) {
-       durationSecs = ((m.manualMatchDuration || 90) * 60) / 2;
+    if (half === 1) {
+       if (m.timer && m.timer.half1DurationMs != null) {
+          durationSecs = Math.round(m.timer.half1DurationMs / 1000);
+       } else if (m.timeline && m.timeline.kickoff && !m.timeline.secondHalfStart) {
+          durationSecs = Math.round(getMatchElapsedMs(m) / 1000);
+       }
     } else {
-       // Se usaste o relógio, vamos buscar os SEGUNDOS EXATOS
-       if (half === 1) {
-          if (m.timer && m.timer.half1DurationMs != null) durationSecs = Math.round(m.timer.half1DurationMs / 1000);
-          else if (m.timeline && m.timeline.kickoff) durationSecs = Math.round(getMatchElapsedMs(m) / 1000);
-       } else {
-          if (m.timer && m.timer.half2DurationMs != null) durationSecs = Math.round(m.timer.half2DurationMs / 1000);
-          else if (m.timeline && m.timeline.secondHalfStart) durationSecs = Math.round(getMatchElapsedMs(m) / 1000);
+       if (m.timer && m.timer.half2DurationMs != null) {
+          durationSecs = Math.round(m.timer.half2DurationMs / 1000);
+       } else if (m.timeline && m.timeline.secondHalfStart) {
+          durationSecs = Math.round(getMatchElapsedMs(m) / 1000);
        }
     }
-    
+
+    // Se a parte não teve duração registada, ignora
+    if (durationSecs <= 0) return;
+
     let onPitch = half === 1 ? (m.lineup || []).includes(pId) : getPlayersOnPitchAtEndOfHalf(m, 1).includes(pId); 
     let timeOnSecs = 0; 
     let subsInHalf = (m.subs || []).filter(s => s.half === half && !s.isHalftime).sort((a,b) => (a.minute||0) - (b.minute||0)); 
     
     subsInHalf.forEach(sub => { 
-      let subSecs = (sub.minute || 0) * 60; // subs continuam em minutos exatos
+      let subSecs = (sub.minute || 0) * 60;
       if (sub.outId === pId && onPitch) { 
         totalSecs += (subSecs - timeOnSecs); 
         onPitch = false; 
@@ -615,6 +820,7 @@ function calcPlayerMinutes(m, pId) {
     }); 
     if (onPitch) totalSecs += (durationSecs - timeOnSecs); 
   }); 
+
   return totalSecs > 0 ? totalSecs : 0; 
 }
 
@@ -811,7 +1017,6 @@ window.wipeAllData = function() {
         window.location.reload();
     }
 };
-
 function renderModalHTML(){
   if(!modalConfig) return '';
 
@@ -867,9 +1072,9 @@ function renderModalHTML(){
           </div>
 
           <div style="display:flex; gap:10px; margin-top:14px;">
-            <button class="btn btn-outline" style="flex:1;" onclick="closeModal()">Cancelar</button>
+            <button class="btn btn-outline" style="flex:1;" onclick="closeModal()">${t('cancel')}</button>
             ${hasData ? `<button class="btn btn-red" style="flex:none; padding:0 14px;" onclick="deleteScoutingData('${modalConfig.schId}')" title="Apagar Análise">🗑️</button>` : ''}
-            <button class="btn btn-gold" style="flex:1;" onclick="saveScoutingData('${modalConfig.schId}')">💾 Guardar</button>
+            <button class="btn btn-gold" style="flex:1;" onclick="saveScoutingData('${modalConfig.schId}')">💾 ${t('save')}</button>
           </div>
         </div>
       </div>`;
@@ -879,7 +1084,6 @@ function renderModalHTML(){
      const sizeKB = (JSON.stringify(state).length / 1024); const maxKB = 5120; const pct = Math.min(100, (sizeKB/maxKB)*100);
      let strColor = pct > 90 ? 'var(--red)' : (pct > 70 ? 'var(--yellow)' : 'var(--green)');
      
-     // Forçar a ativação definitiva das funcionalidades core que já não têm botão
      state.enableDiary = true;
      state.enableVideos = true;
      state.enableBirthdays = true;
@@ -927,6 +1131,7 @@ function renderModalHTML(){
              <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_fairplay')}</label><div class="seg"><div class="seg-btn ${state.showFairPlay?'active':''}" onclick="event.stopPropagation(); state.showFairPlay=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.showFairPlay?'active':''}" onclick="event.stopPropagation(); state.showFairPlay=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
              <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_fines')}</label><div class="seg"><div class="seg-btn ${state.enableFines?'active':''}" onclick="event.stopPropagation(); state.enableFines=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.enableFines?'active':''}" onclick="event.stopPropagation(); state.enableFines=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
              <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_leagues')}</label><div class="seg"><div class="seg-btn ${state.enableLeagues?'active':''}" onclick="event.stopPropagation(); state.enableLeagues=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_yes')}</div><div class="seg-btn ${!state.enableLeagues?'active':''}" onclick="event.stopPropagation(); state.enableLeagues=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">${t('set_no')}</div></div></div>
+             <div class="field" style="text-align:left; margin-top:14px;"><label>${t('set_screen')}</label><div class="seg"><div class="seg-btn ${state.keepScreenAwake?'active':''}" onclick="event.stopPropagation(); state.keepScreenAwake=true; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); manageWakeLock();">${t('set_yes')}</div><div class="seg-btn ${!state.keepScreenAwake?'active':''}" onclick="event.stopPropagation(); state.keepScreenAwake=false; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); manageWakeLock();">${t('set_no')}</div></div></div>
 
              <!-- ÁREA DE ÉPOCA -->
              <div style="background:var(--surface); border:1px solid var(--gold); border-radius:8px; padding:10px; margin-top:24px; margin-bottom:14px;">
@@ -945,11 +1150,13 @@ function renderModalHTML(){
              <!-- ÁREA DE BACKUP PROTEGIDA -->
              <div style="margin-top:20px; padding:12px; background:var(--surface); border-radius:8px; border:1px solid var(--line); text-align:left;">
                <div style="font-size:11px; color:var(--gold); font-weight:bold; text-transform:uppercase; margin-bottom:8px;">💾 Gestão de Dados e Backups</div>
-               <div style="font-size:10px; color:var(--muted); margin-bottom:12px; line-height:1.4;">Para evitar a perda de dados, exporta um backup regularmente.</div>
+               <div style="font-size:10px; color:var(--muted); margin-bottom:4px; line-height:1.4;">Para evitar a perda de dados, exporta um backup regularmente.</div>
+			   ${getAutoSaveStatusHTML()}
+               <div style="margin-bottom:12px;"></div>
                <div style="display:flex; gap:8px; margin-bottom:10px;">
-                 <button class="btn btn-outline" style="font-size:10px; flex:1;" onclick="event.stopPropagation(); window.exportDataJSON();">Exportar Backup</button>
+                 <button class="btn btn-outline" style="font-size:10px; flex:1;" onclick="event.stopPropagation(); window.exportDataJSON();">${t('exp_json')}</button>
                  <label class="btn btn-outline" style="font-size:10px; flex:1; margin:0; cursor:pointer; text-align:center;">
-                   Importar Backup
+                   ${t('imp_json')}
                    <input type="file" accept=".json" style="display:none;" onchange="importData(this)">
                  </label>
                </div>
@@ -966,7 +1173,7 @@ function renderModalHTML(){
          
          <button class="btn" style="width:100%; margin-top:10px; background:#0E211A; color:#fff; border:1px solid var(--line);" onclick="abrirCreditos()">🤝 Créditos & Parceiros</button>
          <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="closeModal()">${t('close')}</button>
-         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v2.8.1 | COACHFOLIO</div>
+         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v3.0 | COACHFOLIO</div>
        </div>
      </div>`;
   }
@@ -1008,6 +1215,7 @@ function topbarHtml(title){
   return `<div class="topbar"><div style="display:flex; align-items:center;"><span class="topbar-home" onclick="goHome()" title="${t('nav_home_lbl')}"><span class="topbar-home-icon">${ballIconSvg()}</span><span class="topbar-home-label">${t('nav_home_lbl')}</span></span><h1 style="margin-left:10px;">${title}</h1></div><span class="topbar-settings" onclick="openSettings()">⚙️</span></div>`; 
 }
 function ballIconSvg(){ return `<svg style="width:100%; height:100%;" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="none" stroke="var(--gold)" stroke-width="4"/><polygon points="50,29 63,39 58,55 42,55 37,39" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round"/><path d="M50 29 L50 9 M63 39 L81 30 M58 55 L71 71 M42 55 L29 71 M37 39 L19 30" stroke="var(--gold)" stroke-width="3" fill="none" stroke-linecap="round"/></svg>`; }
+
 function matchNarrativeHtml(m, isLocked = false){
   const tm = m.timeline || {}; const cards = m.cards || []; const subs = m.subs || [];
   
@@ -1051,7 +1259,6 @@ function renderHome(){
     }
   }
 
-  // NOVA LÓGICA: Detetar se NÃO está instalada no Ecrã Principal
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   let installWarning = '';
   if (!isStandalone) {
@@ -1131,7 +1338,6 @@ function renderHome(){
       </div>`;
   }
   let formHtml = '';
-  // Vai buscar os últimos 5 jogos concluídos da época atual
   const seasonFinishedMatches = (state.matches || [])
     .filter(m => m.finished && (m.season || state.currentSeason) === state.currentSeason)
     .sort((a,b) => new Date(a.date) - new Date(b.date))
@@ -1176,7 +1382,7 @@ function renderHome(){
       ${bdayHtml}
       ${pendingTrainingsHtml}
       ${nextMatchHtml}
-      ${formHtml} <!-- O GRÁFICO DA FORMA ENTRA AQUI -->
+      ${formHtml}
 
       ${active ? `<button class="home-btn" style="margin-bottom:12px; border-color:var(--gold);" onclick="navigateToHub('jogo')"><span class="home-btn-icon"><svg style="width:24px; height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>${t('home_cont')}</button>` : ''}
       
@@ -1209,6 +1415,8 @@ function renderJogo(){
   const matchStarted = m.timeline && m.timeline.kickoff; const isMatchEnded = m.timeline && m.timeline.fullTime;
   const locLabel = (m.location||'casa') === 'casa' ? t('match_home') : t('match_away');
   const isManualMode = !!m.manualMode;
+  const isGameActive = matchStarted || isManualMode; // Jogo considerado ativo (via cronómetro ou manual)
+
   let dynamicPanel = '';
   if(pendingCaptain){
     let captainChips = eligiblePlayers().length ? eligiblePlayers().map(p=>`<div class="chip chip-sm ${m.capitao===p.id?'active-green':''}" onclick="setCaptain('${m.id}','${p.id}')">${playerLabel(p)}</div>`).join('') : `<div class="empty" style="grid-column:1/-1;">${t('pl_none')}</div>`;
@@ -1226,7 +1434,8 @@ function renderJogo(){
     let assistChips = availableAssisters.length ? availableAssisters.map(p=>`<div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, '${p.id}')">${playerLabel(p)}</div>`).join('') : '<div class="empty" style="grid-column:1/-1;">-</div>';
     dynamicPanel = `<div class="panel"><div class="panel-title">${t('match_assist')}</div><div class="grid-btns cols-4">${assistChips}<div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, 'none')">${t('match_nobody')}</div></div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button></div>`;
   } else if(pendingCard){
-    let cardChips = eligiblePlayers().length ? eligiblePlayers().map(p=>`<div class="chip chip-sm" onclick="addCard('${m.id}', '${p.id}', pendingCard.color, window.currentHalfFromTimeline(getActiveMatch())||1)">${playerLabel(p)}</div>`).join('') : '<div class="empty" style="grid-column:1/-1;">-</div>';
+    let cardChips = `<div class="chip chip-sm" style="border-color:var(--red); color:var(--red);" onclick="addCard('${m.id}', 'opp', pendingCard.color, window.currentHalfFromTimeline(getActiveMatch())||1)">Adversário</div>`;
+    cardChips += eligiblePlayers().length ? eligiblePlayers().map(p=>`<div class="chip chip-sm" onclick="addCard('${m.id}', '${p.id}', pendingCard.color, window.currentHalfFromTimeline(getActiveMatch())||1)">${playerLabel(p)}</div>`).join('') : '';
     dynamicPanel = `<div class="panel"><div class="panel-title">${t('match_card_who', {color: t(pendingCard.color==='Amarelo'?'match_yellow':'match_red')})}</div><div class="grid-btns cols-4">${cardChips}</div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pendingCard=null; render()">${t('cancel')}</button></div>`;
   } else if(pendingSub) {
      const currHalfVal = window.currentHalfFromTimeline(m); const isHT = currHalfVal === 'halftime';
@@ -1242,11 +1451,12 @@ function renderJogo(){
      `;
   }
 
+  // Lógica da Equipa Inicial: O painel amarelo e o botão de edição só aparecem ANTES de o jogo iniciar
   let lineupPanel = '';
   const needsLineup = state.trackSubs && (!m.lineup || m.lineup.length === 0);
-  if(needsLineup && !matchStarted) {
+  if(needsLineup && !isGameActive) {
      lineupPanel = `<div class="panel" style="border-color:var(--gold);"><div class="panel-title" style="color:var(--gold);">${t('match_start_xi')} (${pendingLineupSet.length}/${state.tacticFormat})</div><div class="grid-btns cols-4">${eligiblePlayers().map(p => `<div class="chip chip-sm ${(pendingLineupSet).includes(p.id) ? 'active-green' : ''}" onclick="togglePendingLineup('${p.id}')">${playerLabel(p)}</div>`).join('')}</div><button class="btn btn-gold" style="width:100%; margin-top:10px;" ${pendingLineupSet.length !== state.tacticFormat ? 'disabled':''} onclick="confirmLineup('${m.id}')">${t('match_conf_xi')}</button></div>`;
-  } else if (state.trackSubs && m.lineup && m.lineup.length > 0 && !matchStarted) {
+  } else if (state.trackSubs && m.lineup && m.lineup.length > 0 && !isGameActive && !isMatchEnded) {
      lineupPanel = `<div style="text-align:center; margin-top:12px; margin-bottom:8px;"><button class="card-mini-btn" style="border:1px solid var(--muted); color:var(--muted); background:transparent;" onclick="window.editLineup('${m.id}')">✏️ Alterar Equipa Inicial</button></div>`;
   }
 
@@ -1274,7 +1484,7 @@ function renderJogo(){
       <div class="opponent" style="margin-bottom:4px;"><div style="font-size:15px;">${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home' ? `${getMyClub()} <span style="font-weight:700; color:var(--chalk); margin:0 4px;">${t('match_vs')}</span> ${m.opponent}` : `${m.opponent} <span style="font-weight:700; color:var(--chalk); margin:0 4px;">${t('match_vs')}</span> ${getMyClub()}`} <span class="badge-loc ${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home'?'casa':'fora'}">${locLabel}</span></div><span>${m.date}</span></div>
       ${m.capitao ? `<div style="font-size:11px; color:var(--muted); margin-bottom:12px; text-transform:uppercase; font-weight:600; display:flex; align-items:center; gap:8px;"><span>© Capitão: <span style="color:var(--green);">${playerName(m.capitao)}</span></span>${!isMatchEnded ? `<button style="background:none; border:1px solid var(--line); color:var(--chalk); border-radius:4px; padding:2px 6px; font-size:9px; cursor:pointer;" onclick="pendingCaptain=true; render()">${t('match_cap_change')}</button>`:''}</div>` : (!isMatchEnded ? `<div style="margin-bottom:12px;"><button class="card-mini-btn yellow" style="border-color:var(--gold); color:var(--gold);" onclick="pendingCaptain=true; render()">${t('match_cap_btn')}</button></div>` : '')}
       <div class="score-row"><div class="score-block scored"><div class="score-num mono">${scored}</div><div class="score-label">${t('match_scored')}</div></div><div class="score-sep">–</div><div class="score-block conceded"><div class="score-num mono">${conceded}</div><div class="score-label">${t('match_conc')}</div></div></div>
-      ${!isMatchEnded ? `<div class="btn-row"><button class="btn btn-gold" onclick="pending={kind:'scored', half: window.currentHalfFromTimeline(getActiveMatch())||1}; render();" ${(!(matchStarted || isManualMode)||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_goal')}</button><button class="btn btn-red" onclick="addGoal('${m.id}', 'conceded', window.currentHalfFromTimeline(getActiveMatch())||1, null, null)" ${(!(matchStarted || isManualMode)||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_conc')}</button></div>${(matchStarted || isManualMode) ? `<div style="display:flex; gap:8px; justify-content:center; margin-top:10px;"><button class="card-mini-btn yellow" onclick="pendingCard={color:'Amarelo'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_yellow')}</button><button class="card-mini-btn red" onclick="pendingCard={color:'Vermelho'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_red')}</button>${state.trackSubs ? `<button class="card-mini-btn" style="border:1px solid var(--chalk); color:var(--chalk);" onclick="pendingSub={outId:null, inId:null, half: window.currentHalfFromTimeline(getActiveMatch())||1}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_sub_title')}</button>` : ''}</div>` : ''}` : `<div style="margin-top:16px; padding:10px; border-radius:8px; background:var(--surface-2); font-size:11px; text-align:center; color:var(--muted); text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">${t('match_locked')}</div>`}
+      ${!isMatchEnded ? `<div class="btn-row"><button class="btn btn-gold" onclick="pending={kind:'scored', half: window.currentHalfFromTimeline(getActiveMatch())||1}; render();" ${(!isGameActive||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_goal')}</button><button class="btn btn-red" onclick="addGoal('${m.id}', 'conceded', window.currentHalfFromTimeline(getActiveMatch())||1, null, null)" ${(!isGameActive||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_conc')}</button></div>${isGameActive ? `<div style="display:flex; gap:8px; justify-content:center; margin-top:10px;"><button class="card-mini-btn yellow" onclick="pendingCard={color:'Amarelo'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_yellow')}</button><button class="card-mini-btn red" onclick="pendingCard={color:'Vermelho'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_red')}</button>${state.trackSubs ? `<button class="card-mini-btn" style="border:1px solid var(--chalk); color:var(--chalk);" onclick="pendingSub={outId:null, inId:null, half: window.currentHalfFromTimeline(getActiveMatch())||1}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_sub_title')}</button>` : ''}</div>` : ''}` : `<div style="margin-top:16px; padding:10px; border-radius:8px; background:var(--surface-2); font-size:11px; text-align:center; color:var(--muted); text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">${t('match_locked')}</div>`}
       ${dynamicPanel}
       ${lineupPanel}
     </div>
@@ -1303,7 +1513,18 @@ window.removeTacticPiece = function(id) { if(!state.tactics) return; state.tacti
 let currentTacticMode = 'move'; let currentDrawColor = '#E1C324'; let isDrawing = false; let tacticCtx = null; let canvasRect = null;
 window.setTacticMode = function(mode) { currentTacticMode = mode; render(); };
 window.setDrawColor = function(color) { currentDrawColor = color; render(); };
-window.clearCanvasLines = function() { state.tacticPaths = []; saveState(); render(); };
+window.clearCanvasLines = function() { 
+  state.tacticPaths = []; 
+  saveState(); 
+  render(); 
+};
+
+window.undoLastPath = function() { 
+  if (!state.tacticPaths || state.tacticPaths.length === 0) return; 
+  state.tacticPaths.pop(); 
+  saveState(); 
+  render(); 
+};
 
 window.saveTacticalPlay = function() {
   if((!state.tactics || state.tactics.length === 0) && (!state.tacticPaths || state.tacticPaths.length === 0)) {
@@ -1401,7 +1622,7 @@ window.exportTacticPDF = function() {
           <img src="${imgData}" style="max-width:100%; max-height:650px; border:2px solid #000; border-radius:8px;">
         </div>
         <div style="margin-top:20px; font-size:11px; color:#666; text-align:center;">
-          Coachfolio v2.8.1 — Documento de Análise Tática
+          Coachfolio v3.0 — Documento de Análise Tática
         </div>
       </div>`;
       
@@ -1453,14 +1674,14 @@ function renderTatica(){
     </div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;"><div class="seg" style="margin-top:0; flex:1;"><div class="seg-btn ${format===5?'active':''}" onclick="changeTacticFormat(5)">F5</div><div class="seg-btn ${format===7?'active':''}" onclick="changeTacticFormat(7)">F7</div><div class="seg-btn ${format===9?'active':''}" onclick="changeTacticFormat(9)">F9</div><div class="seg-btn ${format===11?'active':''}" onclick="changeTacticFormat(11)">F11</div></div><div class="seg" style="margin-top:0; margin-left:10px;"><div class="seg-btn ${!isHalf?'active':''}" onclick="state.tacticHalfPitch=false; render();" title="Campo Inteiro">🏟️</div><div class="seg-btn ${isHalf?'active':''}" onclick="state.tacticHalfPitch=true; render();" title="Meio Campo">🥅</div></div></div>
     <div class="seg" style="margin-bottom:12px;"><div class="seg-btn ${currentTacticMode==='move'?'active':''}" onclick="setTacticMode('move')">✋ Mover</div><div class="seg-btn ${currentTacticMode==='draw'?'active':''}" onclick="setTacticMode('draw')">✏️ Desenhar</div></div>
-    ${currentTacticMode === 'draw' ? `<div style="display:flex; justify-content:center; gap:12px; margin-bottom:12px; align-items:center;"><div style="width:24px; height:24px; border-radius:50%; background:#FFFFFF; border:2px solid ${currentDrawColor==='#FFFFFF'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#FFFFFF')"></div><div style="width:24px; height:24px; border-radius:50%; background:var(--yellow); border:2px solid ${currentDrawColor==='#E1C324'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#E1C324')"></div><div style="width:24px; height:24px; border-radius:50%; background:var(--red); border:2px solid ${currentDrawColor==='#C8493F'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#C8493F')"></div><button class="quick-del" style="border:1px solid var(--line); border-radius:4px; font-size:10px; padding:4px 8px; margin-left:10px;" onclick="clearCanvasLines()">🧹 Limpar Risco</button></div>` : `<div style="font-size:10px; color:var(--muted); text-align:center; margin-bottom:10px; text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">${t('tac_inst')}</div>`}
+    ${currentTacticMode === 'draw' ? `<div style="display:flex; justify-content:center; gap:12px; margin-bottom:12px; align-items:center;"><div style="width:24px; height:24px; border-radius:50%; background:#FFFFFF; border:2px solid ${currentDrawColor==='#FFFFFF'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#FFFFFF')"></div><div style="width:24px; height:24px; border-radius:50%; background:var(--yellow); border:2px solid ${currentDrawColor==='#E1C324'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#E1C324')"></div><div style="width:24px; height:24px; border-radius:50%; background:var(--red); border:2px solid ${currentDrawColor==='#C8493F'?'var(--gold)':'transparent'}; cursor:pointer;" onclick="setDrawColor('#C8493F')"></div><button class="quick-del" style="border:1px solid var(--line); border-radius:4px; font-size:10px; padding:4px 8px; margin-left:10px;" onclick="undoLastPath()">↩️ Limpar Último</button></div>` : `<div style="font-size:10px; color:var(--muted); text-align:center; margin-bottom:10px; text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">${t('tac_inst')}</div>`}
     <div id="tactic-pitch" class="tactic-pitch-container" style="aspect-ratio: ${isHalf ? '4/3' : '2/3'};">
       <svg class="tactic-svg" viewBox="${isHalf ? '0 0 100 75' : '0 0 100 150'}" preserveAspectRatio="none"><line x1="0" y1="75" x2="100" y2="75" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/><circle cx="50" cy="75" r="15" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/><rect x="25" y="0" width="50" height="20" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/><rect x="35" y="0" width="30" height="8" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/>${!isHalf ? `<rect x="25" y="130" width="50" height="20" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/><rect x="35" y="142" width="30" height="8" fill="none" stroke="#FFF" stroke-width="0.5" stroke-opacity="0.4"/>` : ''}</svg>
       <canvas id="tactic-canvas" style="position:absolute; inset:0; width:100%; height:100%; z-index:20; touch-action:none; pointer-events:${currentTacticMode==='draw' ? 'auto' : 'none'};"></canvas>
       ${(state.tactics||[]).map(item => { let bg = ''; let clr = ''; if(item.kind==='own') { bg = pieceBg; clr = pieceColor; } if(item.kind==='opp') { bg = oppBg; clr = oppColor; } return `<div class="tactic-piece ${item.kind}" data-id="${item.id}" ondblclick="removeTacticPiece('${item.id}')" style="left:${item.x}%; top:${item.y}%; ${bg?`background:${bg}; color:${clr};`:''} "><span>${item.label}</span></div>`; }).join('')}
     </div>
     <div class="panel" style="margin-top:0;">
-       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;"><div class="panel-title" style="margin-bottom:0;">${t('tac_box')}</div><button class="quick-del" style="font-size:10px; border:1px solid var(--line); border-radius:4px; padding:4px 8px; font-weight:700; text-transform:uppercase;" onclick="askConfirm('${t('msg_clear_tac')}', ()=>{state.tactics=[]; saveState(); render();})">${t('tac_clear')}</button></div>
+       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;"><div class="panel-title" style="margin-bottom:0;">${t('tac_box')}</div><div style="display:flex; gap:6px;"><button class="quick-del" style="font-size:10px; border:1px solid var(--line); border-radius:4px; padding:4px 8px; font-weight:700; text-transform:uppercase;" onclick="askConfirm('Limpar todos os riscos do quadro?', ()=>clearCanvasLines())">🧹 Limpar Risco</button><button class="quick-del" style="font-size:10px; border:1px solid var(--line); border-radius:4px; padding:4px 8px; font-weight:700; text-transform:uppercase;" onclick="askConfirm('${t('msg_clear_tac')}', ()=>{state.tactics=[]; saveState(); render();})">${t('tac_clear')}</button></div></div>
        <div class="seg" style="margin-bottom:16px;"><button class="seg-btn" style="font-size:10px; color:${oppBg}; border:1px solid ${oppBg};" onclick="spawnTacticItem('opp', null)" ${currentOpp >= format ? 'disabled' : ''}>${t('tac_opp')} (${currentOpp}/${format})</button><button class="seg-btn" style="font-size:10px; color:var(--chalk); border:1px solid var(--line);" onclick="spawnTacticItem('ball', null)">${t('tac_ball')}</button></div>
        <div class="panel-title">${t('tac_own')} (${currentOwn}/${format})</div>
        <div class="seg">${availablePlayers.length ? availablePlayers.map(p => `<div class="seg-btn" style="flex:auto; font-size:10px; ${currentOwn >= format ? 'opacity:0.4;' : ''}" onclick="spawnTacticItem('own', '${p.id}')">${playerLabel(p)}</div>`).join('') : `<div class="empty" style="width:100%; padding:10px;">${t('tac_no_pls')}</div>`}</div>
@@ -1627,7 +1848,6 @@ window.exportCallupPDF = function(schId) {
 };
 
 window.openScouting = function(schId) {
-  // 1. Procura o agendamento no Calendário ou Histórico
   let s = state.schedule.find(x => x.id === schId);
   if (!s) {
     const m = state.matches.find(x => x.id === schId || (x.originalSchedule && x.originalSchedule.id === schId));
@@ -1638,11 +1858,9 @@ window.openScouting = function(schId) {
   }
 
   if (s) {
-    // 2. Se a ficha de Scouting estiver vazia, procura se já existe scouting anterior deste mesmo adversário
     if (!s.scouting || (!s.scouting.system && !s.scouting.keyPlayers && !s.scouting.gamePlan)) {
       const oppName = (s.opponent || '').trim().toLowerCase();
       
-      // Procura em jogos anteriores do mesmo adversário
       const prevMatch = state.matches.find(m => 
         m.opponent && m.opponent.trim().toLowerCase() === oppName && 
         m.originalSchedule && m.originalSchedule.scouting && 
@@ -1657,11 +1875,9 @@ window.openScouting = function(schId) {
       const sourceScouting = (prevMatch && prevMatch.originalSchedule.scouting) || (prevSched && prevSched.scouting);
 
       if (sourceScouting) {
-        // Clona a análise do jogo anterior como ponto de partida
         s.scouting = JSON.parse(JSON.stringify(sourceScouting));
         showToast('Base de Scouting do jogo anterior carregada! 👁️');
       } else {
-        // Adversário novo: Ficha em branco
         s.scouting = { system: '', block: 'Médio', buildUp: 'Apoiada desde trás', keyPlayers: '', setPieces: '', gamePlan: '' };
       }
     }
@@ -1675,7 +1891,6 @@ window.openScouting = function(schId) {
 };
 
 window.saveScoutingData = function(schId) {
-  // Procura no Calendário ou na estrutura do jogo no Histórico
   let s = state.schedule.find(x => x.id === schId);
   if (!s) {
     const m = state.matches.find(x => x.id === schId || (x.originalSchedule && x.originalSchedule.id === schId));
@@ -1756,7 +1971,7 @@ window.exportScoutingPDF = function(schId) {
 
       <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
         <div style="font-size:10px; color:#666;">
-          <p style="margin:2px 0;">• Documento interno de preparação tática — Coachfolio v2.8.1</p>
+          <p style="margin:2px 0;">• Documento interno de preparação tática — Coachfolio v3.0</p>
         </div>
         <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">
           A Equipa Técnica
@@ -1792,7 +2007,6 @@ function renderCalendario(){
 }
 
 window.uiSaveTraining = function(){ 
-  // LER OS VALORES DIRETAMENTE DO ECRÃ ANTES DE GRAVAR (À Prova de Android)
   const dateEl = document.getElementById('tr-date-input');
   const durEl = document.getElementById('tr-duration-input');
   const notesEl = document.getElementById('tr-notes-input');
@@ -1801,7 +2015,6 @@ window.uiSaveTraining = function(){
   if(durEl) trainingForm.duration = parseInt(durEl.value, 10);
   if(notesEl) trainingForm.notes = notesEl.value;
 
-  // Validação de Segurança
   if(!trainingForm.duration || isNaN(trainingForm.duration) || trainingForm.duration <= 0){
     showToast('Insere a duração do treino em minutos!'); return;
   }
@@ -1878,7 +2091,6 @@ window.quickCompleteTraining = function(id) {
   const tr = state.trainings.find(t => t.id === id);
   if (!tr) return;
 
-  // Repara na nova frase mais clara e no 'btn-green' no final!
   askConfirm("Concluir este treino? (Os atletas ficarão todos como Presentes).", () => {
     tr.status = 'completed';
     saveState();
@@ -2072,14 +2284,12 @@ function renderVideos(){
       </div>`;
     }).join('') : `<div class="empty">Nenhum vídeo guardado.</div>`}`;
 }
-
 function buildMatchReportHTML(m){
   const sc = m.goals.filter(g=>g.type==='scored').length; 
   const co = m.goals.filter(g=>g.type==='conceded').length;
   const dateStr = m.date.split('-').reverse().join('/');
   let locLabel = (m.location||'casa') === 'casa' ? t('match_home') : t('match_away');
   
-  // DURAÇÃO REAL DO JOGO (SOMA DA 1ª E 2ª PARTES)
   let totalMatchMins = (getHalfDuration(m, 1) || 0) + (getHalfDuration(m, 2) || 0);
   if (totalMatchMins === 0) {
     totalMatchMins = getMatchMinute(m) || 0;
@@ -2105,7 +2315,6 @@ function buildMatchReportHTML(m){
     const isStarter = (m.lineup||[]).includes(p.id);
     const wasSubbedIn = (m.subs||[]).some(s => s.inId === p.id);
     
-    // Minutos calculados estritamente pelo relógio e substituições
     let secs = calcPlayerMinutes(m, p.id);
     let mins = Math.round(secs / 60);
 
@@ -2122,7 +2331,7 @@ function buildMatchReportHTML(m){
 
   let goalsHtml = '';
   (m.goals||[]).forEach(g => {
-     let desc = g.type==='scored' ? `⚽ ${playerName(g.scorerId)} ${g.assistId&&g.assistId!=='none'? '(Ast: '+playerName(g.assistId)+')':''}` : `局 Golo Sofrido`;
+     let desc = g.type==='scored' ? `⚽ ${playerName(g.scorerId)} ${g.assistId&&g.assistId!=='none'? '(Ast: '+playerName(g.assistId)+')':''}` : `🥅 Golo Sofrido`;
      let min = g.minute != null ? g.minute+"'" : (g.half===1?"1ªP":"2ªP");
      goalsHtml += `<tr><td>${min}</td><td style="text-align:left; font-weight:bold;">${desc}</td></tr>`;
   });
@@ -2294,11 +2503,24 @@ window.statsSeasonFilter = undefined;
 
 function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason) {
   let golos = 0, assistencias = 0, amarelos = 0, vermelhos = 0, somaAvaliacoes = 0, numAvaliacoes = 0, faltasTreino = 0, jogosTitular = 0, totalSegundosJogo = 0, presencasTreino = 0, jogosConvocado = 0;
-  let minutosTreinoCumpridos = 0, minutosTreinoTotais = 0;
+  let minutosTreinoCumpridos = 0, minutosTreinoTotais = 0, golosSofridos = 0;
   
-  if (!state || !playerId) {
-    return { golos:0, assistencias:0, amarelos:0, vermelhos:0, media:'-', faltasTreino:0, presencasTreino:0, totalTreinos:0, minutosTreinoCumpridos:0, minutosTreinoTotais:0, jogosTitular:0, jogosConvocado:0, minutos:"0m 0s", totalSegundosJogo:0 };
+  if (!IS_LICENSED || !state || !playerId) {
+    return { golos:0, assistencias:0, amarelos:0, vermelhos:0, media:'-', faltasTreino:0, presencasTreino:0, totalTreinos:0, minutosTreinoCumpridos:0, minutosTreinoTotais:0, jogosTitular:0, jogosConvocado:0, minutos:"0m 0s", totalSegundosJogo:0, golosSofridos:0 };
   }
+
+  // 1. CALCULAR A FASQUIA GLOBAL INAMOVÍVEL DA EQUIPA
+  const validTrainings = (state.trainings || []).filter(tr => tr && (tr.status === undefined || tr.status === 'completed') && (targetSeason === 'TUDO' || getEntitySeason(tr) === targetSeason));
+  
+  let totalTreinos = validTrainings.length;
+
+  validTrainings.forEach(tr => {
+    minutosTreinoTotais += (parseInt(tr.duration, 10) || 90);
+  });
+
+  // 2. ESTATÍSTICAS DE JOGO
+  const pInfo = state.roster.find(x=>x.id===playerId);
+  const isGK = pInfo && typeof pInfo.positions === 'string' && getPosRank(pInfo.positions) === 1;
 
   (state.matches || []).filter(m => m && (targetSeason === 'TUDO' || getEntitySeason(m) === targetSeason)).forEach(m => {
     if ((m.lineup || []).includes(playerId) || (m.subs || []).some(s => s && s.inId === playerId)) jogosConvocado++;
@@ -2306,10 +2528,28 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
       if ((m.lineup || []).includes(playerId)) jogosTitular++; 
       if (typeof calcPlayerMinutes === 'function') totalSegundosJogo += calcPlayerMinutes(m, playerId); 
     }
+    
     (m.goals || []).forEach(g => { 
       if (g && g.type === 'scored' && g.scorerId === playerId) golos++; 
       if (g && g.type === 'scored' && g.assistId === playerId) assistencias++; 
+      
+      if (g && g.type === 'conceded' && isGK) {
+          if (!state.trackSubs || m.ignoreMinutes || !m.lineup || m.lineup.length === 0) {
+              if ((m.lineup || []).includes(playerId) || (m.subs || []).some(s => s && s.inId === playerId)) golosSofridos++;
+          } else {
+              let goalHalf = g.half || 1; let goalMin = g.minute || 0;
+              let currentXI = [...(m.lineup || [])];
+              let subsBeforeGoal = (m.subs || []).filter(s => {
+                  if (s.half < goalHalf) return true;
+                  if (s.half === goalHalf) { if (s.isHalftime) return true; return (s.minute || 0) <= goalMin; }
+                  return false;
+              }).sort((a,b) => (a.half - b.half) || (a.isHalftime ? -1 : 1) || ((a.minute||0) - (b.minute||0)));
+              subsBeforeGoal.forEach(s => { currentXI = currentXI.filter(id => id !== s.outId); currentXI.push(s.inId); });
+              if (currentXI.includes(playerId)) golosSofridos++;
+          }
+      }
     });
+    
     (m.cards || []).forEach(c => { 
       if (c && c.playerId === playerId) { 
         if (c.color === 'Amarelo') amarelos++; else vermelhos++; 
@@ -2318,27 +2558,20 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
     if (m.ratings && m.ratings[playerId]) { somaAvaliacoes += m.ratings[playerId]; numAvaliacoes++; }
   });
   
-  let totalTreinos = 0;
-  (state.trainings || []).filter(tr => tr && (tr.status === undefined || tr.status === 'completed') && (targetSeason === 'TUDO' || getEntitySeason(tr) === targetSeason)).forEach(tr => {
-    totalTreinos++;
+  // 3. CÁLCULO DOS MINUTOS EFETIVOS DO JOGADOR
+  validTrainings.forEach(tr => {
     const dur = parseInt(tr.duration, 10) || 90;
-    minutosTreinoTotais += dur;
-
     let isAbsent = false;
-    if (Array.isArray(tr.absences)) {
-      isAbsent = tr.absences.includes(playerId);
-    } else if (tr.absences && tr.absences[playerId]) {
-      isAbsent = true;
-    }
-
+    if (Array.isArray(tr.absences)) { isAbsent = tr.absences.includes(playerId); } else if (tr.absences && tr.absences[playerId]) { isAbsent = true; }
+    
     if (isAbsent) {
       faltasTreino++;
       if (tr.customMinutes && tr.customMinutes[playerId] != null) {
         minutosTreinoCumpridos += parseInt(tr.customMinutes[playerId], 10);
       }
-    } else {
-      presencasTreino++;
-      minutosTreinoCumpridos += dur;
+    } else { 
+      presencasTreino++; 
+      minutosTreinoCumpridos += dur; 
     }
   });
   
@@ -2349,32 +2582,62 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
     minutosTreinoCumpridos, minutosTreinoTotais,
     jogosTitular, jogosConvocado, 
     minutos: formatSecsToMinSec(totalSegundosJogo),
-    totalSegundosJogo
+    totalSegundosJogo, golosSofridos 
   };
 }
 
-function generatePlayerBarsHTML(stats, maxStats) {
+function generatePlayerBarsHTML(stats, maxStats, isGK = false, isPDF = false) {
+    const playerMins = Math.round((stats.totalSegundosJogo || 0) / 60);
+    const maxMins = Math.round((maxStats.minutos || 1) / 60) || 1;
+
+    // Definição de cores e contrastes automáticos para App (Escuro) vs PDF (Claro)
+    const labelColor = isPDF ? '#333333' : 'var(--muted)';
+    const valColor = isPDF ? '#000000' : 'var(--chalk)';
+    const barBg = isPDF ? '#D1D5DB' : 'var(--surface-2)';
+
     const attrs = [
-        { label: 'MINS', val: Math.round((stats.minutos || 0) / 60), max: Math.round((maxStats.minutos || 1) / 60) || 1, color: 'var(--gold)' },
-        { label: 'GOLOS', val: stats.golos, max: maxStats.golos || 1, color: 'var(--chalk)' },
-        { label: 'ASSIST', val: stats.assistencias, max: maxStats.assist || 1, color: 'var(--muted)' },
-        { label: 'TITUL.', val: stats.jogosTitular, max: maxStats.jogos || 1, color: 'var(--green)' }
+        { label: 'MINS', val: playerMins, max: maxMins, color: '#D9A441' },
+        { label: 'GOLOS', val: stats.golos || 0, max: maxStats.golos || 1, color: isPDF ? '#374151' : 'var(--chalk)' },
+        { label: 'ASSIST', val: stats.assistencias || 0, max: maxStats.assist || 1, color: '#2563EB' },
+        { label: 'TITUL.', val: stats.jogosTitular || 0, max: maxStats.jogos || 1, color: '#059669' }
     ];
+
+    if (isGK) {
+        attrs.push({
+            label: 'SOFRIDOS',
+            val: stats.golosSofridos || 0,
+            max: maxStats.golosSofridos || 1,
+            color: '#DC2626'
+        });
+    }
+
     let html = '<div style="display:flex; flex-direction:column; gap:8px; width:100%; text-align:left;">';
     attrs.forEach(a => {
         let pct = a.max > 0 ? (a.val / a.max) * 100 : 0;
         pct = Math.min(100, Math.max(0, pct));
-        html += `<div style="display:flex; align-items:center; font-size:9px;"><div style="width:45px; color:var(--muted); font-weight:bold;">${a.label}</div><div style="flex:1; background:var(--surface-2); height:6px; border-radius:3px; overflow:hidden; margin:0 8px;"><div style="width:${pct}%; height:100%; background:${a.color}; border-radius:3px;"></div></div><div style="width:20px; text-align:right; font-weight:bold; font-family:ui-monospace, monospace; color:var(--chalk);">${a.val}</div></div>`;
+        
+        html += `<div style="display:flex; align-items:center; font-size:9px;">
+          <div style="width:52px; color:${labelColor}; font-weight:bold;">${a.label}</div>
+          <div style="flex:1; background:${barBg}; height:6px; border-radius:3px; overflow:hidden; margin:0 8px;">
+            <div style="width:${pct}%; height:100%; background:${a.color}; border-radius:3px;"></div>
+          </div>
+          <div style="width:25px; text-align:right; font-weight:bold; font-family:ui-monospace, monospace; color:${valColor};">${a.val}</div>
+        </div>`;
     });
     html += '</div>';
     return html;
 }
 
-function generateDonutChartSVG(presencas, faltas) {
-    const size = 100; const cx = 50; const cy = 50; const r = 35; const total = presencas + faltas;
-    if(total === 0) return `<svg viewBox="0 0 100 100" style="width:100%; height:auto; max-width:100px; margin:0 auto; display:block;"><circle cx="50" cy="50" r="35" fill="none" stroke="var(--surface-2)" stroke-width="12"/></svg>`;
-    const pctP = presencas / total; const dashP = pctP * 2 * Math.PI * r; const dashEmpty = 2 * Math.PI * r;
-    return `<svg viewBox="0 0 100 100" style="width:100%; height:auto; max-width:120px; margin:0 auto; display:block; transform:rotate(-90deg);"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--red)" stroke-width="14"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--green)" stroke-width="14" stroke-dasharray="${dashP} ${dashEmpty}" /><text x="${cx}" y="${cy}" fill="var(--chalk)" font-size="14" font-weight="bold" text-anchor="middle" dominant-baseline="central" transform="rotate(90, ${cx}, ${cy})">${Math.round(pctP*100)}%</text></svg>`;
+function generateDonutChartSVG(minutosCumpridos, minutosTotais) {
+    const size = 100; const cx = 50; const cy = 50; const r = 35;
+    if(!minutosTotais || minutosTotais === 0) return `<svg viewBox="0 0 100 100" style="width:100%; height:auto; max-width:100px; margin:0 auto; display:block;"><circle cx="50" cy="50" r="35" fill="none" stroke="var(--surface-2)" stroke-width="12"/></svg>`;
+    
+    // Calcula a percentagem exata com base nos minutos de treino
+    const pctP = Math.min(1, Math.max(0, minutosCumpridos / minutosTotais)); 
+    const dashP = pctP * 2 * Math.PI * r; 
+    const dashEmpty = 2 * Math.PI * r;
+    
+    return `<svg viewBox="0 0 100 100" style="width:100%; height:auto; max-width:120px; margin:0 auto; display:block; transform:rotate(-90deg);"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--red)" stroke-width="14"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--green)" stroke-width="14" stroke-dasharray="${dashP} ${dashEmpty}" /><text x="${cx}" y="${cy}" fill="currentColor" font-size="14" font-weight="bold" text-anchor="middle" dominant-baseline="central" transform="rotate(90, ${cx}, ${cy})">${Math.round(pctP*100)}%</text></svg>`;
 }
 
 window.exportStatsPlayersPDF = function() {
@@ -2387,11 +2650,12 @@ window.exportStatsPlayersPDF = function() {
            <p>${t('rep_gen')} ${new Date().toLocaleDateString('pt-PT')} | Época: ${activeSeason === 'TUDO' ? 'Histórico Total' : activeSeason} | ${getMyClub()}</p>
        </div>
        <table style="width:100%; border-collapse:collapse; text-align:center; font-size:12px;">
-         <tr><th style="text-align:left;">Nome do Jogador</th><th>T</th><th>P(%)</th><th>J</th><th>Mins</th><th>G</th><th>A</th><th>🟨</th><th>🟥</th></tr>
+         <tr><th style="text-align:left;">Nome do Jogador</th><th>T</th><th>P(%)</th><th>J</th><th>Mins</th><th>GM</th><th>A</th><th>GS</th><th>🟨</th><th>🟥</th></tr>
          ${roster.map(p => {
              const st = calcularEstatisticaJogador(p.id, activeSeason);
+             const isGK = p.positions && typeof p.positions === 'string' && p.positions.toUpperCase().includes('GR');
              const pPct = st.totalTreinos > 0 ? Math.round((st.presencasTreino / st.totalTreinos)*100) : 0;
-             return `<tr><td style="text-align:left; font-weight:bold;">${p.name}</td><td>${st.totalTreinos}</td><td>${pPct}%</td><td>${st.jogosConvocado}</td><td>${st.minutos}</td><td>${st.golos}</td><td>${st.assistencias}</td><td>${st.amarelos}</td><td>${st.vermelhos}</td></tr>`;
+             return `<tr><td style="text-align:left; font-weight:bold;">${p.name}</td><td>${st.totalTreinos}</td><td>${pPct}%</td><td>${st.jogosConvocado}</td><td>${st.minutos}</td><td>${st.golos}</td><td>${st.assistencias}</td><td>${isGK ? st.golosSofridos : '-'}</td><td>${st.amarelos}</td><td>${st.vermelhos}</td></tr>`;
          }).join('')}
        </table>
     </div>`;
@@ -2410,29 +2674,66 @@ function renderStats(){
   
   html += seasonFilterUI;
 
- if (statsViewMode === 'players') {
-      const roster = eligiblePlayers().sort((a,b) => (a.name||'').localeCompare(b.name||''));
-      
-      // MUDANÇA 1: Cabeçalho P(%) muda para MinT
-      let tableHtml = `<div class="stats-table-wrapper"><table class="stats-table"><tr><th class="p-name">Nome</th><th>T</th><th>MinT</th><th>J</th><th>Mins</th><th>G</th><th>A</th><th>🟨</th><th>🟥</th></tr>`;
-      
-      roster.forEach(p => {
+  if (statsViewMode === 'players') {
+      let playerStatsArray = eligiblePlayers().map(p => {
           const st = calcularEstatisticaJogador(p.id, activeSeason); 
           const pPct = st.minutosTreinoTotais > 0 ? Math.round((st.minutosTreinoCumpridos / st.minutosTreinoTotais)*100) : 0;
+          return { player: p, st: st, pPct: pPct };
+      });
 
-          // MUDANÇA 2: Mostra os minutos em vez de pPct%, mas mantém a lógica das cores
+      playerStatsArray.sort((a, b) => {
+          let valA, valB;
+          switch(statsSortCol) {
+              case 'nome': valA = (a.player.name||'').toLowerCase(); valB = (b.player.name||'').toLowerCase(); break;
+              case 'presencas': valA = a.st.presencasTreino; valB = b.st.presencasTreino; break;
+              case 'mint': valA = a.st.minutosTreinoCumpridos; valB = b.st.minutosTreinoCumpridos; break;
+              case 'j': valA = a.st.jogosConvocado; valB = b.st.jogosConvocado; break;
+              case 'minutos': valA = a.st.totalSegundosJogo; valB = b.st.totalSegundosJogo; break;
+              case 'g': valA = a.st.golos; valB = b.st.golos; break;
+              case 'a': valA = a.st.assistencias; valB = b.st.assistencias; break;
+              case 'gs': valA = a.st.golosSofridos; valB = b.st.golosSofridos; break;
+              case 'amarelos': valA = a.st.amarelos; valB = b.st.amarelos; break;
+              case 'vermelhos': valA = a.st.vermelhos; valB = b.st.vermelhos; break;
+              default: valA = a.st.totalSegundosJogo; valB = b.st.totalSegundosJogo;
+          }
+          if (valA < valB) return statsSortAsc ? -1 : 1;
+          if (valA > valB) return statsSortAsc ? 1 : -1;
+          return 0;
+      });
+
+      const getSortIcon = (col) => statsSortCol === col ? (statsSortAsc ? ' ↑' : ' ↓') : '';
+      
+      let tableHtml = `<div class="stats-table-wrapper"><table class="stats-table">
+        <tr>
+          <th class="p-name" onclick="setStatsSort('nome')">${t('pl_sort_name')}${getSortIcon('nome')}</th>
+          <th onclick="setStatsSort('presencas')">Pres${getSortIcon('presencas')}</th>
+          <th onclick="setStatsSort('mint')">MinT${getSortIcon('mint')}</th>
+          <th onclick="setStatsSort('j')">J${getSortIcon('j')}</th>
+          <th onclick="setStatsSort('minutos')">Mins${getSortIcon('minutos')}</th>
+          <th onclick="setStatsSort('g')">GM${getSortIcon('g')}</th>
+          <th onclick="setStatsSort('a')">A${getSortIcon('a')}</th>
+          <th onclick="setStatsSort('gs')">GS${getSortIcon('gs')}</th>
+          <th onclick="setStatsSort('amarelos')">🟨${getSortIcon('amarelos')}</th>
+          <th onclick="setStatsSort('vermelhos')">🟥${getSortIcon('vermelhos')}</th>
+        </tr>`;
+      
+      playerStatsArray.forEach(item => {
+          const p = item.player; const st = item.st; const pPct = item.pPct;
+          const isGK = p.positions && typeof p.positions === 'string' && p.positions.toUpperCase().includes('GR');
           tableHtml += `<tr onclick="expandedPlayer='${p.id}'; navigateToTab('plantel');" style="cursor:pointer;">
             <td class="p-name">${p.name}</td>
-            <td>${st.totalTreinos}</td>
+            <td>${st.presencasTreino}</td>
             <td style="color:${pPct>=80?'var(--green)':(pPct>=50?'var(--yellow)':'var(--red)')}; font-weight:bold;">${st.minutosTreinoCumpridos}'</td>
             <td>${st.jogosConvocado}</td>
             <td style="color:var(--gold); font-weight:bold;">${st.minutos}</td>
             <td>${st.golos}</td>
             <td>${st.assistencias}</td>
+            <td>${isGK ? st.golosSofridos : '-'}</td>
             <td>${st.amarelos}</td>
             <td>${st.vermelhos}</td>
           </tr>`;
       });
+      
       tableHtml += `</table></div><div style="display:flex; gap:10px; margin-top:14px;"><button class="btn btn-outline" style="flex:1; border-style:dashed;" onclick="exportCsv()">${t('exp_csv')}</button><button class="btn btn-gold" style="flex:1;" onclick="exportStatsPlayersPDF()">📄 Exportar PDF</button></div>`;
       return html + tableHtml;
   }
@@ -2493,7 +2794,7 @@ function renderCaixinha() {
     let html = `${topbarHtml(t('fine_title'))}${renderTeamSubHeader()}<div class="card" style="text-align:center; padding:20px; border-color:var(--gold);"><div style="font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:bold; letter-spacing:0.1em;">Saldo Global</div><div style="font-size:36px; color:var(--gold); font-weight:bold; margin-top:4px; font-family:ui-monospace, monospace;">${total.toFixed(2)}€</div></div><button class="btn btn-gold" style="width:100%; margin-bottom:16px;" onclick="fineForm={date: new Date().toISOString().slice(0,10), playerId:'', reason:'', value:''}; render()">${t('fine_new')}</button>`;
     if(state.fines.length === 0) { html += `<div class="empty">${t('fine_empty')}</div>`; } else {
         html += `<div class="fines-list">`;
-        state.fines.forEach(f => { let statusCls = f.paid ? 'paid' : 'pending'; html += `<div class="fine-item"><div class="fine-status ${statusCls}" onclick="toggleFineStatus('${f.id}')"></div><div class="fine-info"><div class="fine-name">${playerName(f.playerId)}</div><div class="fine-reason">${f.date.split('-').reverse().join('/')} · ${f.reason}</div></div><div class="fine-val">${f.value.toFixed(2)}€</div><button class="quick-del" style="margin-left:12px; font-size:12px;" onclick="askConfirm('Apagar multa?', ()=>deleteFine('${f.id}'))">🗑</button></div>`; });
+        state.fines.forEach(f => { let statusCls = f.paid ? 'pending' : 'paid'; html += `<div class="fine-item"><div class="fine-status ${statusCls}" onclick="toggleFineStatus('${f.id}')"></div><div class="fine-info"><div class="fine-name">${playerName(f.playerId)}</div><div class="fine-reason">${f.date.split('-').reverse().join('/')} · ${f.reason}</div></div><div class="fine-val">${f.value.toFixed(2)}€</div><button class="quick-del" style="margin-left:12px; font-size:12px;" onclick="askConfirm('Apagar multa?', ()=>deleteFine('${f.id}'))">🗑</button></div>`; });
         html += `</div><button class="btn btn-outline" style="width:100%; margin-top:14px; border-style:dashed;" onclick="exportExtratoCaixinha()">📄 Exportar Extrato (PDF)</button>`;
     }
     return html;
@@ -2568,7 +2869,8 @@ window.clearPlayerPos = function(id) {
 
 window.togglePlayerPos = function(id, pos) {
     const p = state.roster.find(x=>x.id===id); if(!p) return;
-    let cur = (p.positions||'').split(',').map(x=>x.trim()).filter(Boolean);
+    let safePos = typeof p.positions === 'string' ? p.positions : '';
+    let cur = safePos.split(',').map(x=>x.trim()).filter(Boolean);
     if(cur.includes(pos)) cur = cur.filter(x=>x!==pos);
     else { if(cur.length >= 5) { showToast('Máximo de 5 posições!'); return; } cur.push(pos); }
     p.positions = cur.join(', '); saveState(); render();
@@ -2577,13 +2879,15 @@ window.togglePlayerPos = function(id, pos) {
 window.exportCsv = function() {
   let activeSeason = window.statsSeasonFilter === 'todas' ? 'TUDO' : (window.statsSeasonFilter || state.currentSeason);
   const roster = eligiblePlayers(); 
-  let csv = "Nome_Name,Numero_Number,Posicao_Position,Idade_Age,Golos_Goals,Assistencias_Assists,Amarelos_Yellows,Vermelhos_Reds,FaltasTreino_TrainingAbsences,JogosTitular_Starts,MinutosJogados_MinutesPlayed,AvaliacaoMedia_AvgRating\n";
+  let csv = "Nome_Name,Numero_Number,Posicao_Position,Idade_Age,Golos_Goals,Assistencias_Assists,GolosSofridos_Conceded,Amarelos_Yellows,Vermelhos_Reds,FaltasTreino_TrainingAbsences,JogosTitular_Starts,MinutosJogados_MinutesPlayed,AvaliacaoMedia_AvgRating\n";
   roster.forEach(p => {
      const st = calcularEstatisticaJogador(p.id, activeSeason); 
+     const isGK = p.positions && typeof p.positions === 'string' && p.positions.toUpperCase().includes('GR');
+     const gs = isGK ? st.golosSofridos : '-';
      const idade = p.birthDate ? (computeAge(p.birthDate)||'') : ''; 
      const nome = `"${(p.name||'').replace(/"/g, '""')}"`; 
      const pos = `"${(p.positions||'').replace(/"/g, '""')}"`;
-     csv += `${nome},${p.number||''},${pos},${idade},${st.golos},${st.assistencias},${st.amarelos},${st.vermelhos},${st.faltasTreino},${st.jogosTitular},${st.minutos},${st.media}\n`;
+     csv += `${nome},${p.number||''},${pos},${idade},${st.golos},${st.assistencias},${gs},${st.amarelos},${st.vermelhos},${st.faltasTreino},${st.jogosTitular},${st.minutos},${st.media}\n`;
   });
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `coachfolio-estatisticas-${activeSeason === 'TUDO' ? 'totais' : activeSeason.replace('/','-')}-${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); showToast(t('msg_csv_exp'));
 };
@@ -2617,7 +2921,6 @@ window.deleteStaffMember = function(id) {
   showToast('Elemento removido.');
 };
 
-// EXPORTAÇÃO COMPLETA DA FICHA INDIVIDUAL PDF COM OS GRÁFICOS VISUAIS INCLUÍDOS
 window.exportPlayerPDF = function(playerId) {
   const p = (state.roster || []).find(x => x.id === playerId);
   if (!p) {
@@ -2628,26 +2931,55 @@ window.exportPlayerPDF = function(playerId) {
   const st = calcularEstatisticaJogador(p.id);
   const currentMatches = (state.matches || []).filter(m => (m.season || state.currentSeason) === state.currentSeason);
   const currentTrainings = (state.trainings || []).filter(t => (t.season || state.currentSeason) === state.currentSeason);
-  const trainPct = currentTrainings.length ? Math.round((st.presencasTreino / currentTrainings.length) * 100) : 0;
+  
+  const trainPct = st.minutosTreinoTotais ? Math.round((st.minutosTreinoCumpridos / st.minutosTreinoTotais) * 100) : 0;
 
-  // Cálculo dos máximos para gerar as barras visuais na folha de impressão
-  let maxStats = { minutos: 1, golos: 1, assist: 1, jogos: 1 };
-  eligiblePlayers().forEach(pl => {
-    const s = calcularEstatisticaJogador(pl.id);
-    if (s.totalSegundosJogo > maxStats.minutos) maxStats.minutos = s.totalSegundosJogo;
-    if (s.golos > maxStats.golos) maxStats.golos = s.golos;
-    if (s.assistencias > maxStats.assist) maxStats.assist = s.assistencias;
-    if (s.jogosTitular > maxStats.jogos) maxStats.jogos = s.jogosTitular;
+  // CALCULAR O TETO MÁXIMO GLOBAL EM SEGUNDOS EXATOS DO RELÓGIO
+  let totalMatchSecs = 0;
+  let totalTeamGoals = 0;
+  let totalTeamAssists = 0;
+  let totalTeamConceded = 0;
+  let totalFinishedMatches = 0;
+
+  (state.matches || []).filter(m => m && m.finished && !m.ignoreMinutes && (m.season || state.currentSeason) === state.currentSeason).forEach(m => {
+      totalFinishedMatches++;
+      
+      (m.goals || []).forEach(g => {
+          if (g.type === 'scored') {
+              totalTeamGoals++;
+              if (g.assistId && g.assistId !== 'none' && g.assistId !== 'unknown') {
+                  totalTeamAssists++;
+              }
+          } else if (g.type === 'conceded') {
+              totalTeamConceded++;
+          }
+      });
+
+      if (m.timer && (m.timer.half1DurationMs != null || m.timer.half2DurationMs != null || m.timer.elapsedMs != null)) {
+          let ms1 = m.timer.half1DurationMs || 0;
+          let ms2 = m.timer.half2DurationMs || 0;
+          let msTotal = (ms1 + ms2) > 0 ? (ms1 + ms2) : (m.timer.elapsedMs || 0);
+          totalMatchSecs += Math.round(msTotal / 1000);
+      } else {
+          let durationMins = m.manualMatchDuration || 90;
+          totalMatchSecs += (durationMins * 60);
+      }
   });
 
-  const playerBars = generatePlayerBarsHTML({
-    minutos: st.totalSegundosJogo,
-    golos: st.golos,
-    assistencias: st.assistencias,
-    jogosTitular: st.jogosTitular
-  }, maxStats);
+  let maxStats = { 
+      minutos: totalMatchSecs || 1, 
+      golos: totalTeamGoals || 1, 
+      assist: totalTeamAssists || 1, 
+      jogos: totalFinishedMatches || 1,
+      golosSofridos: totalTeamConceded || 1
+  };
 
-  const donutChart = generateDonutChartSVG(st.presencasTreino, st.faltasTreino);
+  const safePos = typeof p.positions === 'string' ? p.positions : '';
+  const isGK = safePos.toUpperCase().includes('GR') || safePos.toUpperCase().includes('GK');
+
+  // isPDF = true ativa o contraste de impressão (texto preto e fundo cinzento claro)
+  const playerBars = generatePlayerBarsHTML(st, maxStats, isGK, true);
+  const donutChart = generateDonutChartSVG(st.minutosTreinoCumpridos, st.minutosTreinoTotais);
 
   let html = `
     <div class="print-card">
@@ -2665,22 +2997,26 @@ window.exportPlayerPDF = function(playerId) {
       </div>
 
       <h3 style="margin-bottom:10px; border-bottom:2px solid #000; padding-bottom:4px;">📊 Estatísticas de Competição</h3>
-      <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; text-align:center; margin-bottom:20px;">
+      <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:10px; text-align:center; margin-bottom:20px;">
         <div style="border:1px solid #CCC; padding:10px; border-radius:6px;">
-          <span style="font-size:10px; color:#666; text-transform:uppercase;">Convocatórias</span><br>
-          <b style="font-size:18px;">${st.jogosConvocado}</b>
+          <span style="font-size:9px; color:#666; text-transform:uppercase;">Convocatórias</span><br>
+          <b style="font-size:16px;">${st.jogosConvocado}</b>
         </div>
         <div style="border:1px solid #CCC; padding:10px; border-radius:6px;">
-          <span style="font-size:10px; color:#666; text-transform:uppercase;">Tempo Total</span><br>
-          <b style="font-size:18px;">${st.minutos}</b>
+          <span style="font-size:9px; color:#666; text-transform:uppercase;">Tempo Total</span><br>
+          <b style="font-size:16px;">${st.minutos}</b>
         </div>
         <div style="border:1px solid #CCC; padding:10px; border-radius:6px;">
-          <span style="font-size:10px; color:#666; text-transform:uppercase;">Golos / Assist.</span><br>
-          <b style="font-size:18px;">${st.golos} / ${st.assistencias}</b>
+          <span style="font-size:9px; color:#666; text-transform:uppercase;">Golos (GM)</span><br>
+          <b style="font-size:16px;">${st.golos}</b>
         </div>
         <div style="border:1px solid #CCC; padding:10px; border-radius:6px;">
-          <span style="font-size:10px; color:#666; text-transform:uppercase;">Cartões (🟨/🟥)</span><br>
-          <b style="font-size:18px;">${st.amarelos} / ${st.vermelhos}</b>
+          <span style="font-size:9px; color:#666; text-transform:uppercase;">Assist.</span><br>
+          <b style="font-size:16px;">${st.assistencias}</b>
+        </div>
+        <div style="border:1px solid #CCC; padding:10px; border-radius:6px;">
+          <span style="font-size:9px; color:#666; text-transform:uppercase;">Sofridos (GS)</span><br>
+          <b style="font-size:16px;">${isGK ? st.golosSofridos : '-'}</b>
         </div>
       </div>
 
@@ -2708,7 +3044,7 @@ window.exportPlayerPDF = function(playerId) {
       </div>
 
       <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
-        <div style="font-size:10px; color:#666;">Relatório Individual Emitido por Coachfolio v2.8.1</div>
+        <div style="font-size:10px; color:#666;">Relatório Individual Emitido por Coachfolio v3.0</div>
         <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">O Treinador / Coordenação</div>
       </div>
     </div>`;
@@ -2717,7 +3053,6 @@ window.exportPlayerPDF = function(playerId) {
   window.print();
 };
 
-// RENDERPLANTEL: MANTÉM O LAYOUT EXATAMENTE COMO NA FOTO (CLEAN & SOFT)
 window.renderPlantel = function() {
   const activeRoster = eligiblePlayers();
   let totalMins = 0; 
@@ -2734,25 +3069,23 @@ window.renderPlantel = function() {
 
   let html = `${topbarHtml(t('hub_team_title'))}${renderTeamSubHeader()}`;
 
-  // Seletor de Sub-Aba: Jogadores vs Staff
   html += `
     <div class="seg" style="margin-bottom:10px;">
-      <div class="seg-btn ${staffSubTab==='jogadores'?'active':''}" onclick="switchStaffTab('jogadores')">🏃 Jogadores (${activeRoster.length})</div>
-      <div class="seg-btn ${staffSubTab==='staff'?'active':''}" onclick="switchStaffTab('staff')">👔 Equipa Técnica (${(state.staff || []).length})</div>
+      <div class="seg-btn ${staffSubTab==='jogadores'?'active':''}" onclick="switchStaffTab('jogadores')" style="font-size:10px; padding:8px 4px;">🏃 ${t('pl_tab_players')} (${activeRoster.length})</div>
+      <div class="seg-btn ${staffSubTab==='comparar'?'active':''}" onclick="switchStaffTab('comparar')" style="font-size:10px; padding:8px 4px;">⚖️ ${t('pl_tab_compare')}</div>
+      <div class="seg-btn ${staffSubTab==='staff'?'active':''}" onclick="switchStaffTab('staff')" style="font-size:10px; padding:8px 4px;">👔 ${t('pl_tab_staff')} (${(state.staff || []).length})</div>
     </div>
   `;
 
-  // 1. SEPARADOR DE JOGADORES
   if (staffSubTab === 'jogadores') {
-    // BARRA SELETORA DE ORDENAÇÃO
     const currentSort = state.rosterSortBy || 'posicao';
     html += `
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; background:var(--surface-2); padding:6px 10px; border-radius:8px; border:1px solid var(--line);">
-        <span style="font-size:10px; color:var(--muted); font-weight:bold; text-transform:uppercase;">Ordenar por:</span>
+        <span style="font-size:10px; color:var(--muted); font-weight:bold; text-transform:uppercase;">${t('pl_sort_by')}</span>
         <div class="seg" style="margin-top:0; flex:none; gap:4px;">
-          <button class="seg-btn ${currentSort==='posicao'?'active':''}" style="font-size:9px; padding:4px 8px;" onclick="state.rosterSortBy='posicao'; saveState(); render();">Posição</button>
-          <button class="seg-btn ${currentSort==='nome'?'active':''}" style="font-size:9px; padding:4px 8px;" onclick="state.rosterSortBy='nome'; saveState(); render();">Nome</button>
-          <button class="seg-btn ${currentSort==='numero'?'active':''}" style="font-size:9px; padding:4px 8px;" onclick="state.rosterSortBy='numero'; saveState(); render();">Número</button>
+          <button class="seg-btn ${currentSort==='posicao'?'active':''}" style="font-size:9px; padding:4px 8px;" onclick="state.rosterSortBy='posicao'; saveState(); render();">${t('pl_sort_pos')}</button>
+          <button class="seg-btn ${currentSort==='nome'?'active':''}" style="font-size:9px; padding:4px 8px;" onclick="state.rosterSortBy='nome'; saveState(); render();">${t('pl_sort_name')}</button>
+          <button class="seg-btn ${currentSort==='numero'?'active':''}" style="font-size:9px; padding:4px 8px;" onclick="state.rosterSortBy='numero'; saveState(); render();">${t('pl_sort_num')}</button>
         </div>
       </div>
     `;
@@ -2761,14 +3094,44 @@ window.renderPlantel = function() {
       html += `<div class="empty">${t('pl_none')}</div>
         <div class="add-row" style="margin-bottom:15px;"><input id="new-player-input" type="text" placeholder="${t('pl_add_ph')}"><button onclick="uiAddPlayer()">+</button></div>`;
     } else {
-      let maxStats = { minutos: 1, golos: 1, assist: 1, jogos: 1 };
-      activeRoster.forEach(pl => {
-        const s = calcularEstatisticaJogador(pl.id);
-        if (s.totalSegundosJogo > maxStats.minutos) maxStats.minutos = s.totalSegundosJogo;
-        if (s.golos > maxStats.golos) maxStats.golos = s.golos;
-        if (s.assistencias > maxStats.assist) maxStats.assist = s.assistencias;
-        if (s.jogosTitular > maxStats.jogos) maxStats.jogos = s.jogosTitular;
+      let totalMatchSecs = 0;
+      let totalTeamGoals = 0;
+      let totalTeamAssists = 0;
+      let totalTeamConceded = 0;
+      let totalFinishedMatches = 0;
+
+      (state.matches || []).filter(m => m && m.finished && !m.ignoreMinutes && (m.season || state.currentSeason) === state.currentSeason).forEach(m => {
+          totalFinishedMatches++;
+          
+          (m.goals || []).forEach(g => {
+              if (g.type === 'scored') {
+                  totalTeamGoals++;
+                  if (g.assistId && g.assistId !== 'none' && g.assistId !== 'unknown') {
+                      totalTeamAssists++;
+                  }
+              } else if (g.type === 'conceded') {
+                  totalTeamConceded++;
+              }
+          });
+
+          if (m.timer && (m.timer.half1DurationMs != null || m.timer.half2DurationMs != null || m.timer.elapsedMs != null)) {
+              let ms1 = m.timer.half1DurationMs || 0;
+              let ms2 = m.timer.half2DurationMs || 0;
+              let msTotal = (ms1 + ms2) > 0 ? (ms1 + ms2) : (m.timer.elapsedMs || 0);
+              totalMatchSecs += Math.round(msTotal / 1000);
+          } else {
+              let durationMins = m.manualMatchDuration || 90;
+              totalMatchSecs += (durationMins * 60);
+          }
       });
+
+      let maxStats = { 
+          minutos: totalMatchSecs || 1, 
+          golos: totalTeamGoals || 1, 
+          assist: totalTeamAssists || 1, 
+          jogos: totalFinishedMatches || 1,
+          golosSofridos: totalTeamConceded || 1
+      };
 
       html += `<div style="display:flex; flex-direction:column; gap:0px; margin-bottom:15px;">`;
 
@@ -2778,7 +3141,6 @@ window.renderPlantel = function() {
         const st = calcularEstatisticaJogador(p.id);
         const age = p.birthDate ? computeAge(p.birthDate) : null;
 
-        // CÁLCULO DA BOLINHA DE FAIR PLAY
         let fairPlayDot = '';
         if (state.showFairPlay && totalPlayersWithMins > 0) {
           const avgMinsSecs = totalMins / totalPlayersWithMins;
@@ -2792,11 +3154,13 @@ window.renderPlantel = function() {
           }
         }
 
-        // POSIÇÕES EM BADGES DOURADAS
         let posBadges = '';
-        if (p.positions && p.positions.trim() !== '') {
-          posBadges = p.positions.split(',').map(pos => `<span style="background:var(--gold-dim); color:var(--gold); border:1px solid var(--gold); border-radius:4px; padding:1px 5px; font-size:9px; font-weight:bold; margin-right:4px;">${pos.trim()}</span>`).join('');
+        const safePos = typeof p.positions === 'string' ? p.positions : '';
+        if (safePos.trim() !== '') {
+          posBadges = safePos.split(',').map(pos => `<span style="background:var(--gold-dim); color:var(--gold); border:1px solid var(--gold); border-radius:4px; padding:1px 5px; font-size:9px; font-weight:bold; margin-right:4px;">${pos.trim()}</span>`).join('');
         }
+
+        const isGK = safePos.toUpperCase().includes('GR') || safePos.toUpperCase().includes('GK');
 
         html += `<div class="player-item">
           <div class="player-row" style="padding:12px 6px;" onclick="expandedPlayer = expandedPlayer === '${p.id}' ? null : '${p.id}'; editingPlayerId = null; render();">
@@ -2821,11 +3185,11 @@ window.renderPlantel = function() {
               <div class="field" style="margin-bottom:12px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                   <label style="margin:0;">${t('pl_pos')}</label>
-                  ${p.positions ? `<button class="quick-del" style="font-size:9px; border:1px solid var(--line); border-radius:4px; padding:2px 6px;" onclick="clearPlayerPos('${p.id}')">🧹 LIMPAR</button>` : ''}
+                  ${safePos ? `<button class="quick-del" style="font-size:9px; border:1px solid var(--line); border-radius:4px; padding:2px 6px;" onclick="clearPlayerPos('${p.id}')">🧹 LIMPAR</button>` : ''}
                 </div>
-                <div style="font-size:11px; color:var(--gold); font-weight:bold; margin-bottom:8px;">${p.positions || 'Nenhuma'}</div>
+                <div style="font-size:11px; color:var(--gold); font-weight:bold; margin-bottom:8px;">${safePos || 'Nenhuma'}</div>
                 <div class="seg" style="flex-wrap:wrap; gap:4px;">
-                  ${['GR','DC','DD','DE','MDC','MC','MOC','EXT','PL'].map(pos => `<div class="seg-btn ${(p.positions||'').includes(pos)?'active':''}" style="flex:none; padding:5px 8px; font-size:10px;" onclick="togglePlayerPos('${p.id}', '${pos}')">${pos}</div>`).join('')}
+                  ${['GR','DC','DD','DE','MDC','MC','MOC','EXT','PL'].map(pos => `<div class="seg-btn ${safePos.includes(pos)?'active':''}" style="flex:none; padding:5px 8px; font-size:10px;" onclick="togglePlayerPos('${p.id}', '${pos}')">${pos}</div>`).join('')}
                 </div>
               </div>
               <div style="display:flex; gap:8px; margin-top:12px;">
@@ -2834,32 +3198,31 @@ window.renderPlantel = function() {
               </div>
             </div>`;
           } else {
-            const playerBars = generatePlayerBarsHTML({
-              minutos: st.totalSegundosJogo,
-              golos: st.golos,
-              assistencias: st.assistencias,
-              jogosTitular: st.jogosTitular
-            }, maxStats);
-
-            const donutChart = generateDonutChartSVG(st.presencasTreino, st.faltasTreino);
+            const playerBars = generatePlayerBarsHTML(st, maxStats, isGK, false);
+            const donutChart = generateDonutChartSVG(st.minutosTreinoCumpridos, st.minutosTreinoTotais);
 
             html += `<div style="background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px; margin:6px 0 14px; text-align:left;">
-              <div class="profile-stats-grid" style="grid-template-columns:1fr 1fr 1fr 1fr; gap:6px; margin-bottom:10px;">
-                <div class="profile-stat">
-                  <div class="val" style="color:var(--gold); font-size:16px;">${st.minutos}</div>
-                  <div class="lbl" style="font-size:8px;">MIN. JOGO</div>
+              
+              <div class="profile-stats-grid" style="grid-template-columns:repeat(5, 1fr); gap:4px; margin-bottom:10px;">
+                <div class="profile-stat" style="padding:12px 2px;">
+                  <div class="val" style="color:var(--gold); font-size:14px;">${st.minutos}</div>
+                  <div class="lbl" style="font-size:7px;">MIN. JOGO</div>
                 </div>
-                <div class="profile-stat">
-                  <div class="val" style="color:#3b82f6; font-size:16px;">${st.minutosTreinoCumpridos}'</div>
-                  <div class="lbl" style="font-size:8px;">MIN. TREINO</div>
+                <div class="profile-stat" style="padding:12px 2px;">
+                  <div class="val" style="color:#3b82f6; font-size:14px;">${st.minutosTreinoCumpridos}'</div>
+                  <div class="lbl" style="font-size:7px;">TREINO</div>
                 </div>
-                <div class="profile-stat">
-                  <div class="val" style="font-size:16px;">${st.golos}</div>
-                  <div class="lbl" style="font-size:8px;">⚽ GOLOS</div>
+                <div class="profile-stat" style="padding:12px 2px;">
+                  <div class="val" style="font-size:14px;">${st.golos}</div>
+                  <div class="lbl" style="font-size:7px;">⚽ GM</div>
                 </div>
-                <div class="profile-stat">
-                  <div class="val" style="font-size:16px;">${st.assistencias}</div>
-                  <div class="lbl" style="font-size:8px;">🎯 ASSISTÊNCIAS</div>
+                <div class="profile-stat" style="padding:12px 2px;">
+                  <div class="val" style="color:#3b82f6; font-size:14px;">${st.assistencias}</div>
+                  <div class="lbl" style="font-size:7px;">🎯 ASS.</div>
+                </div>
+                <div class="profile-stat" style="padding:12px 2px;">
+                  <div class="val" style="font-size:14px;">${isGK ? st.golosSofridos : '-'}</div>
+                  <div class="lbl" style="font-size:7px;">🥅 GS</div>
                 </div>
               </div>
 
@@ -2899,7 +3262,69 @@ window.renderPlantel = function() {
     }
   }
 
-  // 2. SEPARADOR DE EQUIPA TÉCNICA (STAFF)
+  if (staffSubTab === 'comparar') {
+      let opts1 = `<option value="" ${!window.compareP1?'selected':''}>-- ${t('cancel')} --</option><option value="" disabled>${t('comp_p1')}</option>`;
+      let opts2 = `<option value="" ${!window.compareP2?'selected':''}>-- ${t('cancel')} --</option><option value="" disabled>${t('comp_p2')}</option>`;
+      sortPlayerObjs(activeRoster).forEach(p => {
+          opts1 += `<option value="${p.id}" ${window.compareP1===p.id?'selected':''}>${playerLabel(p)}</option>`;
+          opts2 += `<option value="${p.id}" ${window.compareP2===p.id?'selected':''}>${playerLabel(p)}</option>`;
+      });
+
+      html += `<div class="card" style="min-height: 300px;">
+          <div style="display:flex; gap:10px; margin-bottom:16px;">
+              <select style="flex:1; padding:10px 4px; border-radius:6px; background:var(--surface-2); color:var(--chalk); border:1px solid var(--line); font-size:12px; font-weight:bold;" onchange="window.compareP1=this.value; render()">${opts1}</select>
+              <div style="display:flex; align-items:center; color:var(--gold); font-size:11px; font-weight:bold;">VS</div>
+              <select style="flex:1; padding:10px 4px; border-radius:6px; background:var(--surface-2); color:var(--chalk); border:1px solid var(--line); font-size:12px; font-weight:bold;" onchange="window.compareP2=this.value; render()">${opts2}</select>
+          </div>`;
+
+      if (window.compareP1 && window.compareP2 && window.compareP1 !== window.compareP2) {
+          const st1 = calcularEstatisticaJogador(window.compareP1, state.currentSeason); 
+          const st2 = calcularEstatisticaJogador(window.compareP2, state.currentSeason);
+
+          const p1Obj = (state.roster || []).find(x => x.id === window.compareP1);
+          const p2Obj = (state.roster || []).find(x => x.id === window.compareP2);
+
+          const pos1 = p1Obj && typeof p1Obj.positions === 'string' ? p1Obj.positions.toUpperCase() : '';
+          const pos2 = p2Obj && typeof p2Obj.positions === 'string' ? p2Obj.positions.toUpperCase() : '';
+
+          const isGK1 = pos1.includes('GR') || pos1.includes('GK');
+          const isGK2 = pos2.includes('GR') || pos2.includes('GK');
+          const showConcededRow = isGK1 || isGK2;
+          
+          const renderRow = (label, val1, val2, invert = false) => {
+              let c1 = 'var(--chalk)', c2 = 'var(--chalk)';
+              if (val1 > val2) { c1 = invert ? 'var(--red)' : 'var(--green)'; c2 = invert ? 'var(--green)' : 'var(--red)'; } 
+              else if (val2 > val1) { c2 = invert ? 'var(--red)' : 'var(--green)'; c1 = invert ? 'var(--green)' : 'var(--red)';} 
+              else { c1 = 'var(--yellow)'; c2 = 'var(--yellow)'; }
+              return `<div style="display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--line); font-size:15px;">
+                  <span style="flex:1; text-align:center; color:${c1}; font-weight:bold; font-family:ui-monospace, monospace;">${val1}</span>
+                  <span style="flex:1.5; text-align:center; font-size:10px; color:var(--muted); text-transform:uppercase; line-height:1.6; font-weight:bold;">${label}</span>
+                  <span style="flex:1; text-align:center; color:${c2}; font-weight:bold; font-family:ui-monospace, monospace;">${val2}</span>
+              </div>`;
+          };
+
+          const gs1Str = isGK1 ? st1.golosSofridos : '-';
+          const gs2Str = isGK2 ? st2.golosSofridos : '-';
+
+          html += `<div style="background:var(--surface-2); border-radius:8px; padding:12px; border:1px solid var(--gold-dim);">
+              ${renderRow(t('comp_mins'), Math.round(st1.totalSegundosJogo/60) + "'", Math.round(st2.totalSegundosJogo/60) + "'")}
+              ${renderRow(t('comp_goals'), st1.golos, st2.golos)}
+              ${renderRow(t('comp_assists'), st1.assistencias, st2.assistencias)}
+              ${showConcededRow ? renderRow('GOLOS SOFRIDOS (GS)', gs1Str, gs2Str, true) : ''}
+              ${renderRow(t('comp_starts'), st1.jogosTitular, st2.jogosTitular)}
+              ${renderRow(t('comp_abs'), st1.faltasTreino, st2.faltasTreino, true)}
+              ${renderRow(t('comp_yel'), st1.amarelos, st2.amarelos, true)}
+              ${renderRow(t('comp_red'), st1.vermelhos, st2.vermelhos, true)}
+          </div>
+          <div style="font-size:9px; color:var(--muted); text-align:center; margin-top:10px; text-transform:uppercase;">${t('comp_season')} (${state.currentSeason})</div>`;
+      } else if (window.compareP1 === window.compareP2 && window.compareP1) {
+          html += `<div class="empty">${t('comp_diff')}</div>`;
+      } else {
+          html += `<div class="empty" style="margin-top:40px;">${t('comp_select')}</div>`;
+      }
+      html += `</div>`;
+  }
+
   if (staffSubTab === 'staff') {
     const staffList = state.staff || [];
 
@@ -2961,7 +3386,26 @@ window.updatePlayerBirthDate = function(id, val){
 
 window.removePlayer = function(id){ const p=state.roster.find(x=>x.id===id); if(p){ p.active=false; saveState(); render(); } };
 
-window.exportData = function(){ state.lastBackupDate = Date.now(); const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `coachfolio-backup-${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); saveState(); render(); showToast(t('msg_bkp_exp')); };
+window.exportData = function(){ 
+  if (!IS_LICENSED) {
+    showToast('Ação não permitida nesta licença.', 'btn-red');
+    return;
+  }
+
+  state.lastBackupDate = Date.now(); 
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'}); 
+  const url = URL.createObjectURL(blob); 
+  const a = document.createElement('a'); 
+  a.href = url; 
+  a.download = `coachfolio-backup-${new Date().toISOString().slice(0,10)}.json`; 
+  document.body.appendChild(a); 
+  a.click(); 
+  a.remove(); 
+  URL.revokeObjectURL(url); 
+  saveState(); 
+  render(); 
+  showToast(t('msg_bkp_exp')); 
+};
 
 function sanitizeData(obj) {
   if (typeof obj === 'string') return escapeHTML(obj);
@@ -2977,7 +3421,6 @@ function sanitizeData(obj) {
   }
   return obj;
 }
-// Alias global para garantir compatibilidade com todos os botões de exportação
 window.exportDataJSON = window.exportData;
 
 window.importData = function(input){ 
@@ -3005,6 +3448,7 @@ window.importData = function(input){
         if(state.enableFines===undefined) state.enableFines=false; 
         if(state.enableBirthdays===undefined) state.enableBirthdays=false; 
         if(state.trackSubs===undefined) state.trackSubs=true; 
+        if(state.keepScreenAwake===undefined) state.keepScreenAwake=false;
         state.lastBackupDate = Date.now(); 
         saveState(); 
         render(); 
@@ -3028,6 +3472,9 @@ function render(){
          nav.style.display = 'flex'; 
          if(currentTab==='jogo') app.innerHTML = renderJogo(); else if(currentTab==='jogos') app.innerHTML = renderJogos(); else if(currentTab==='calendario') app.innerHTML = renderCalendario(); else if(currentTab==='treinos') app.innerHTML = renderTreinos(); else if(currentTab==='diario') app.innerHTML = renderDiario(); else if(currentTab==='tatica') { app.innerHTML = renderTatica(); setTimeout(initTacticCanvas, 0); } else if(currentTab==='caderno') app.innerHTML = renderCaderno(); else if(currentTab==='videos') app.innerHTML = renderVideos(); else if(currentTab==='plantel') app.innerHTML = renderPlantel(); else if(currentTab==='stats') app.innerHTML = renderStats(); else if(currentTab==='classificacoes') app.innerHTML = renderClassificacoes(); else if(currentTab==='caixinha') app.innerHTML = renderCaixinha(); 
       }
+      
+      if (typeof manageWakeLock === 'function') manageWakeLock();
+      
   } catch (error) {
       console.error(error);
       const app = document.getElementById('app');
@@ -3048,7 +3495,6 @@ setInterval(()=>{
   const el = document.getElementById('live-timer'); if(el) el.textContent = formatMatchTime(getMatchElapsedMs(m));
 }, 1000);
 
-// Sincroniza o cronómetro imediatamente quando o telemóvel acorda / ecrã é desbloqueado
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && currentTab === 'jogo') {
     const m = getActiveMatch();
@@ -3096,7 +3542,7 @@ loadState();
   <div style="background: #fff; width: 90%; max-width: 400px; padding: 20px; border-radius: 10px; text-align: center; color: #333; font-family: sans-serif;">
     
     <h2 style="margin-top: 0; color: #0E211A; margin-bottom: 5px;">⚽ Coachfolio</h2>
-    <p style="font-size: 0.9em; color: #666; margin: 0;">Versão 2.8.1</p>
+    <p style="font-size: 0.9em; color: #666; margin: 0;">Versão 2.9</p>
     <p style="font-size: 0.9em; font-style: italic; color: #555; margin-top: 5px;">"Feito por treinadores, para treinadores."</p>
     
     <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">

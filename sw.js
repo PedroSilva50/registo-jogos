@@ -1,5 +1,4 @@
-const CACHE_NAME = 'coachfolio-v2.8.1a';
-
+const CACHE_NAME = 'coachfolio-v3.0';
 // A lista de bagagem obrigatória (Ficheiros base e Ícones)
 const urlsToCache = [
   './',
@@ -9,6 +8,10 @@ const urlsToCache = [
   './icon-512.png'
 ];
 
+// Timeout de rede: se a ligação não responder dentro deste prazo,
+// serve a cache imediatamente em vez de deixar a app "encravada".
+const NETWORK_TIMEOUT_MS = 2500;
+
 self.addEventListener('install', (e) => {
   // Guarda imediatamente a lista obrigatória assim que instala a app
   e.waitUntil(
@@ -17,9 +20,12 @@ self.addEventListener('install', (e) => {
         return cache.addAll(urlsToCache);
       })
   );
-  
-  // Retiramos o skipWaiting automático para a app não reiniciar a meio de um jogo.
-  // Agora vai esperar pelo clique no botão "Atualizar" do index.html.
+
+  // IMPORTANTE: NÃO chamar self.skipWaiting() aqui.
+  // A app fica à espera do clique no botão "Atualizar" do index.html
+  // precisamente para não forçar um reload a meio de um jogo em curso.
+  // (Se um dia quiseres skipWaiting automático, faz-o condicional a
+  // currentTab !== 'jogo' no lado do index.html, nunca aqui sem condição.)
 });
 
 self.addEventListener('activate', (e) => {
@@ -44,18 +50,26 @@ self.addEventListener('message', (event) => {
 });
 
 self.addEventListener('fetch', (e) => {
+  if (e.request.method !== 'GET') return;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
+
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { signal: controller.signal })
       .then((response) => {
+        clearTimeout(timeoutId);
         // Caching Dinâmico: Se houver net, guarda uma cópia na cache para usar offline
-        if (e.request.method === 'GET') {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(e.request, clone);
-            });
-        }
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(e.request, clone);
+        });
         return response;
       })
-      .catch(() => caches.match(e.request)) // Se falhar (offline), serve da cache
+      .catch(() => {
+        clearTimeout(timeoutId);
+        // Se falhar ou exceder o timeout (rede fraca/offline), serve da cache
+        return caches.match(e.request);
+      })
   );
 });

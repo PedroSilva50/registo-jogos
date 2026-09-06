@@ -40,7 +40,8 @@
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                 const toast = document.getElementById('toast');
                 if (toast) {
-                  toast.innerHTML = 'Nova versão disponível! <button onclick="if(newWorker) newWorker.postMessage({action:\'skipWaiting\'})" style="margin-left:10px; background:var(--chalk); color:var(--bg); border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold;">Atualizar</button>';
+                  toast.innerHTML = 'Nova versão disponível! <button onclick="if(newWorker) newWorker.postMessage({action:\'skipWaiting\'})" style="pointer-events:auto; margin-left:10px; background:var(--chalk); color:var(--bg); border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-weight:bold;">Atualizar</button>';
+                  toast.style.pointerEvents = 'auto';
                   toast.classList.add('show');
                 }
               }
@@ -628,7 +629,7 @@ function getAutoSaveStatusHTML() {
 }
 function escapeHTML(str) { if(!str) return ''; return String(str).replace(/[&<>'"]/g, match => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[match])); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
-function showToast(msg){ const el = document.getElementById('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(showToast._t); showToast._t = setTimeout(()=>el.classList.remove('show'), 3000); }
+function showToast(msg){ const el = document.getElementById('toast'); el.style.pointerEvents = ''; el.textContent = msg; el.classList.add('show'); clearTimeout(showToast._t); showToast._t = setTimeout(()=>el.classList.remove('show'), 3000); }
 function getMyClub() { return state.myClubName && state.myClubName.trim() !== '' ? state.myClubName : t('def_club'); }
 function getPlanSeasons() { return Array.from(new Set([state.currentSeason, ...state.trainings.map(x=>getEntitySeason(x)), ...state.diary.map(x=>getEntitySeason(x))])).sort().reverse(); }
 function getSeasonsList() { return Array.from(new Set([state.currentSeason, ...state.matches.map(m=>getEntitySeason(m))])).sort().reverse(); }

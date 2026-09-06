@@ -62,7 +62,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Coachfolio">
 <meta name="theme-color" content="#0E211A">
-<title>COACHFOLIO v3.1</title>
+<title>COACHFOLIO v3.2</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{--bg:#0E211A;--surface:#153328;--surface-2:#1C4133;--chalk:#F3EFE6;--muted:#8FA79B;--gold:#D9A441;--gold-dim:#4A3E22;--red:#C8493F;--red-dim:#3F2320;--yellow:#E1C324;--green:#4ade80;--green-dim:#133320;--line:rgba(243,239,230,0.10);--btn-gold-txt:#241B08;--btn-red-txt:#2B0F0C;--btn-green-txt:#0E211A;}
@@ -766,22 +766,14 @@ function getPlayersOnPitchAtEndOfHalf(m, half) { let current = [...(m.lineup || 
 function calcPlayerMinutes(m, pId) { 
   if (m.ignoreMinutes) return 0; 
   let totalSecs = 0; 
+  const isManualHistoric = (!m.timeline || !m.timeline.kickoff) && m.finished;
 
-  // 1. Jogo registado em Modo Manual / Histórico
-  if ((!m.timeline || !m.timeline.kickoff) && m.finished) {
-     let durationSecs = ((m.manualMatchDuration || 90) * 60) / 2;
-     [1, 2].forEach(half => {
-        let onPitch = half === 1 ? (m.lineup || []).includes(pId) : getPlayersOnPitchAtEndOfHalf(m, 1).includes(pId);
-        if (onPitch) totalSecs += durationSecs;
-     });
-     return Math.round(totalSecs);
-  }
-
-  // 2. Jogo em Tempo Real (Cronómetro)
   [1, 2].forEach(half => { 
     let durationSecs = 0;
-    
-    if (half === 1) {
+
+    if (isManualHistoric) {
+       durationSecs = ((m.manualMatchDuration || 90) * 60) / 2;
+    } else if (half === 1) {
        if (m.timer && m.timer.half1DurationMs != null && m.timer.half1DurationMs > 0) {
           durationSecs = m.timer.half1DurationMs / 1000;
        } else if (m.timeline && m.timeline.kickoff) {
@@ -1243,7 +1235,7 @@ function renderModalHTML(){
          
          <button class="btn" style="width:100%; margin-top:10px; background:#0E211A; color:#fff; border:1px solid var(--line);" onclick="abrirCreditos()">🤝 Créditos & Parceiros</button>
          <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="closeModal()">${t('close')}</button>
-         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v3.1 | COACHFOLIO</div>
+         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v3.2 | COACHFOLIO</div>
        </div>
      </div>`;
   }
@@ -1743,7 +1735,7 @@ window.exportTacticPDF = function() {
           <img src="${imgData}" style="max-width:100%; max-height:650px; border:2px solid #000; border-radius:8px;">
         </div>
         <div style="margin-top:20px; font-size:11px; color:#666; text-align:center;">
-          Coachfolio v3.1 — Documento de Análise Tática
+          Coachfolio v3.2 — Documento de Análise Tática
         </div>
       </div>`;
       
@@ -2114,7 +2106,7 @@ window.exportScoutingPDF = function(schId) {
     <!-- RODAPÉ -->
     <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
       <div style="font-size:10px; color:#666;">
-        • Documento de Análise de Scouting — Coachfolio v3.1
+        • Documento de Análise de Scouting — Coachfolio v3.2
       </div>
       <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">
         O Observador / Treinador
@@ -2469,7 +2461,7 @@ function buildMatchReportHTML(m){
   
   let totalMatchMins = (getHalfDuration(m, 1) || 0) + (getHalfDuration(m, 2) || 0);
   if (totalMatchMins === 0) {
-    totalMatchMins = getMatchMinute(m) || 0;
+    totalMatchMins = getMatchMinute(m) || m.manualMatchDuration || 0;
   }
 
   let squadIds = [];
@@ -2485,7 +2477,24 @@ function buildMatchReportHTML(m){
   }
 
   if(squadIds.length === 0) { squadIds = eligiblePlayers().map(p => p.id); }
-  const sortedSquad = sortPlayerObjs(squadIds.map(id => state.roster.find(p=>p.id===id)).filter(Boolean));
+  
+  // Hierarquia: Titulares > Suplentes Utilizados > Não Utilizados
+  const squadPlayers = squadIds.map(id => (state.roster || []).find(p => p.id === id)).filter(Boolean);
+  const starters = []; const usedSubs = []; const unused = [];
+
+  squadPlayers.forEach(p => {
+    const isStarter = (m.lineup || []).includes(p.id);
+    const wasSubbedIn = (m.subs || []).some(s => s.inId === p.id);
+    if (isStarter) starters.push(p);
+    else if (wasSubbedIn) usedSubs.push(p);
+    else unused.push(p);
+  });
+
+  const sortedSquad = [
+    ...sortPlayerObjs(starters),
+    ...sortPlayerObjs(usedSubs),
+    ...sortPlayerObjs(unused)
+  ];
 
   let lineupHtml = '';
   sortedSquad.forEach(p => {
@@ -2589,7 +2598,24 @@ window.exportMatchPDF = function(mId) {
   }
 
   if (squadIds.length === 0) { squadIds = eligiblePlayers().map(p => p.id); }
-  const sortedSquad = sortPlayerObjs(squadIds.map(id => (state.roster || []).find(p => p.id === id)).filter(Boolean));
+  
+  // Hierarquia: Titulares > Suplentes Utilizados > Não Utilizados
+  const squadPlayers = squadIds.map(id => (state.roster || []).find(p => p.id === id)).filter(Boolean);
+  const starters = []; const usedSubs = []; const unused = [];
+
+  squadPlayers.forEach(p => {
+    const isStarter = (m.lineup || []).includes(p.id);
+    const wasSubbedIn = (m.subs || []).some(s => s.inId === p.id);
+    if (isStarter) starters.push(p);
+    else if (wasSubbedIn) usedSubs.push(p);
+    else unused.push(p);
+  });
+
+  const sortedSquad = [
+    ...sortPlayerObjs(starters),
+    ...sortPlayerObjs(usedSubs),
+    ...sortPlayerObjs(unused)
+  ];
 
   let lineupHtml = '';
   sortedSquad.forEach(p => {
@@ -2694,7 +2720,7 @@ window.exportMatchPDF = function(mId) {
     ` : ''}
 
     <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:flex-end;">
-      <div style="font-size:10px; color:#666;">• Ficha de jogo gerada via Coachfolio v3.1</div>
+      <div style="font-size:10px; color:#666;">• Ficha de jogo gerada via Coachfolio v3.2</div>
       <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">A Equipa Técnica</div>
     </div>
   </div>`;
@@ -2806,7 +2832,7 @@ function computeStats(typeFilterVal, seasonFilterVal, phaseFilterVal, tournament
   matches.forEach(m=>{
     const mScored = m.goals.filter(g=>g.type==='scored').length; const mConceded = m.goals.filter(g=>g.type==='conceded').length; const loc = m.location || 'casa';
     if(m.finished){ if(mScored > mConceded){ wins++; loc==='casa'?casaWins++:foraWins++; } else if(mScored === mConceded){ draws++; loc==='casa'?casaDraws++:foraDraws++; } else { losses++; loc==='casa'?casaLosses++:foraLosses++; } }
-    m.goals.forEach(g=>{ if(g.type==='scored'){ scored++; scoredHalf[g.half]++; scorerCount[g.scorerId || 'unknown'] = (scorerCount[g.scorerId || 'unknown']||0)+1; if(g.assistId && g.assistId !== 'none' && g.assistId !== 'unknown') assistCount[g.assistId] = (assistCount[g.assistId]||0)+1; } else { conceded++; concededHalf[g.half]++; } });
+    m.goals.forEach(g=>{ if(g.type==='scored'){ scored++; scoredHalf[g.half]++; if(g.scorerId && g.scorerId !== 'autogolo') scorerCount[g.scorerId] = (scorerCount[g.scorerId]||0)+1; if(g.assistId && g.assistId !== 'none' && g.assistId !== 'unknown') assistCount[g.assistId] = (assistCount[g.assistId]||0)+1; } else { conceded++; concededHalf[g.half]++; } });
     (m.cards||[]).forEach(c=>{ if(c.color==='Amarelo') yellowCount[c.playerId] = (yellowCount[c.playerId]||0)+1; else redCount[c.playerId] = (redCount[c.playerId]||0)+1; });
   });
   
@@ -2834,60 +2860,64 @@ window.uiSavePhaseConclusion = function(val){
 };
 
 // Estatísticas de plantel restritas aos jogos de uma competição/fase específica
-// (reutiliza os mesmos dados por-jogo já usados no PDF individual de cada jogo).
 function computeCompetitionPlayerStats(matches){
-  const squadIds = new Set();
-  matches.forEach(m => {
-    (m.lineup || []).forEach(id => squadIds.add(id));
-    (m.subs || []).forEach(s => { squadIds.add(s.inId); squadIds.add(s.outId); });
-    Object.keys(m.ratings || {}).forEach(id => squadIds.add(id));
-  });
+  // 1. Lê todo o plantel ativo (para ninguém ficar de fora, mesmo com 0 minutos)
+  let activeRoster = (state.roster || []).filter(p => p.active !== false);
+  
+  // 2. Ordena IMEDIATAMENTE os jogadores com base na tua escolha do ecrã PLANTEL (Posição, Nome ou Número)
+  activeRoster = sortPlayerObjs(activeRoster);
 
-  const rows = [...squadIds].filter(Boolean).map(pId => {
-    const p = (state.roster || []).find(x => x.id === pId);
-    if (!p) return null;
+  // 3. Calcula as estatísticas respeitando essa mesma ordem
+  const rows = activeRoster.map(p => {
     let minutes = 0, starts = 0, goals = 0, assists = 0, yellow = 0, red = 0;
     matches.forEach(m => {
-      minutes += Math.round(calcPlayerMinutes(m, pId) / 60);
-      if ((m.lineup || []).includes(pId)) starts++;
+      minutes += Math.round(calcPlayerMinutes(m, p.id) / 60);
+      if ((m.lineup || []).includes(p.id)) starts++;
       (m.goals || []).forEach(g => {
-        if (g.type === 'scored' && g.scorerId === pId) goals++;
-        if (g.type === 'scored' && g.assistId === pId) assists++;
+        if (g.type === 'scored' && g.scorerId === p.id) goals++;
+        if (g.type === 'scored' && g.assistId === p.id) assists++;
       });
       (m.cards || []).forEach(c => {
-        if (c.playerId === pId) { if (c.color === 'Amarelo') yellow++; else red++; }
+        if (c.playerId === p.id) { if (c.color === 'Amarelo') yellow++; else red++; }
       });
     });
-    return { id: pId, name: playerName(pId), minutes, starts, goals, assists, yellow, red };
-  }).filter(Boolean);
+    return { id: p.id, name: playerLabel(p), minutes, starts, goals, assists, yellow, red };
+  });
 
-  rows.sort((a,b) => b.minutes - a.minutes);
+  // Retorna a tabela pronta e selada com a ordem oficial do Plantel!
   return rows;
 }
 
-// Métricas de treino no intervalo de datas coberto pelos jogos da competição/fase.
-// Jogadores só contam a partir da respetiva joinDate (se existir), para não assumir
-// presença/ausência antes de terem sido inseridos no plantel.
+// Métricas de treino: Conta desde o início da época (ou data de entrada) até ao último jogo da fase.
 function computeTrainingMetricsForMatches(matches){
   const finishedMatches = matches.filter(m => m.date);
   if (finishedMatches.length === 0) return { count: 0, pct: null, startDate: null, endDate: null };
 
   const dates = finishedMatches.map(m => m.date).sort();
-  const startDate = dates[0];
-  const endDate = dates[dates.length - 1];
+  const endDate = dates[dates.length - 1]; // Limite é o último jogo da competição
+  const matchSeason = matches[0].season || state.currentSeason;
 
-  const trainingsInRange = (state.trainings || []).filter(tr => tr.date >= startDate && tr.date <= endDate);
-  if (trainingsInRange.length === 0) return { count: 0, pct: null, startDate, endDate };
+  // Vai buscar todos os treinos da época que aconteceram ANTES ou NO DIA do último jogo
+  const trainingsInRange = (state.trainings || [])
+    .filter(tr => getEntitySeason(tr) === matchSeason && tr.date <= endDate && (tr.status === undefined || tr.status === 'completed'))
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
 
+  if (trainingsInRange.length === 0) return { count: 0, pct: null, startDate: dates[0], endDate };
+
+  // O startDate real é o dia do primeiro treino da época!
+  const startDate = trainingsInRange[0].date;
+  
   let minutosOferecidos = 0, minutosCumpridos = 0;
   trainingsInRange.forEach(tr => {
     const dur = parseInt(tr.duration, 10) || 90;
-    (state.roster || []).forEach(p => {
-      if (p.joinDate && tr.date < p.joinDate) return; // ainda não estava no plantel
+    (state.roster || []).filter(p => p.active !== false).forEach(p => {
+      if (p.joinDate && tr.date < p.joinDate) return; // Se ainda não era do clube, não conta
+      
       minutosOferecidos += dur;
       let isAbsent = false;
       if (Array.isArray(tr.absences)) { isAbsent = tr.absences.includes(p.id); }
       else if (tr.absences && tr.absences[p.id]) { isAbsent = true; }
+      
       if (isAbsent) {
         if (tr.customMinutes && tr.customMinutes[p.id] != null) minutosCumpridos += parseInt(tr.customMinutes[p.id], 10);
       } else {
@@ -2989,7 +3019,7 @@ window.exportGlobalStatsPDF = function(){
     </div>
 
     <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
-      <div style="font-size:10px; color:#666;">• Relatório Consolidado — Coachfolio v3.1</div>
+      <div style="font-size:10px; color:#666;">• Relatório Consolidado — Coachfolio v3.2</div>
       <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">O Treinador</div>
     </div>
   </div>`;
@@ -3291,7 +3321,7 @@ window.exportTrainingPDF = function(trId) {
 
       <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
         <div style="font-size:10px; color:#666;">
-          <p style="margin:2px 0;">• Documento de registo de assiduidade e plano de treino — Coachfolio v3.1</p>
+          <p style="margin:2px 0;">• Documento de registo de assiduidade e plano de treino — Coachfolio v3.2</p>
         </div>
         <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">
           A Equipa Técnica
@@ -3685,7 +3715,7 @@ window.exportPlayerPDF = function(pId) {
     <!-- RODAPÉ DE ASSINATURA -->
     <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:flex-end;">
       <div style="font-size:10px; color:#666;">
-        Relatório Individual Emitido por Coachfolio v3.1
+        Relatório Individual Emitido por Coachfolio v3.2
       </div>
       <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">
         O Treinador / Coordenação
@@ -4244,7 +4274,7 @@ loadState();
   <div style="background: #fff; width: 90%; max-width: 400px; padding: 20px; border-radius: 10px; text-align: center; color: #333; font-family: sans-serif;">
     
     <h2 style="margin-top: 0; color: #0E211A; margin-bottom: 5px;">⚽ Coachfolio</h2>
-    <p style="font-size: 0.9em; color: #666; margin: 0;">Versão 3.1</p>
+    <p style="font-size: 0.9em; color: #666; margin: 0;">Versão 3.2</p>
     <p style="font-size: 0.9em; font-style: italic; color: #555; margin-top: 5px;">"Feito por treinadores, para treinadores."</p>
     
     <hr style="border: 0; border-top: 1px solid #ccc; margin: 15px 0;">

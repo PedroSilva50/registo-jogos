@@ -764,6 +764,25 @@ function getHalfDuration(m, half) {
   else { if(m.timeline.fullTime && m.timeline.secondHalfStart) { if(m.timer && m.timer.half2DurationMs != null) return Math.floor(m.timer.half2DurationMs / 60000); let diff = timeToMins(m.timeline.fullTime) - timeToMins(m.timeline.secondHalfStart); return diff < 0 ? diff + 1440 : diff; } if(m.timeline.secondHalfStart && !m.timeline.fullTime) return getMatchMinute(m); return 0; }
 }
 function getPlayersOnPitchAtEndOfHalf(m, half) { let current = [...(m.lineup || [])]; let subs = (m.subs || []).filter(s => s.half <= half).sort((a,b) => { if(a.half !== b.half) return a.half - b.half; let minA = a.isHalftime ? 9999 : (a.minute || 0); let minB = b.isHalftime ? 9999 : (b.minute || 0); return minA - minB; }); subs.forEach(s => { current = current.filter(id => id !== s.outId); current.push(s.inId); }); return current; }
+
+// Converte o Minuto Relativo no Minuto Global para visualização (Timeline/PDF)
+window.getGlobalMinuteDisplay = function(m, half, relMin) {
+    if (relMin == null) return '';
+    if (half === 1) return relMin; // Na 1ª parte, o global é igual ao relativo
+    
+    let h1Mins = 0;
+    if (m.isNewManualModel) { 
+        h1Mins = m.manualHalf1Duration || 0; 
+    } else if (m.timer && m.timer.half1DurationMs != null) { 
+        h1Mins = Math.floor(m.timer.half1DurationMs / 60000); 
+    } else if (!m.timeline || !m.timeline.kickoff) { 
+        h1Mins = Math.floor((m.manualMatchDuration || 90) / 2); 
+    } else { 
+        h1Mins = 45; 
+    }
+    return h1Mins + relMin;
+};
+
 function calcPlayerMinutes(m, pId) { 
   if (m.ignoreMinutes) return 0; 
   let totalSecs = 0; 
@@ -773,25 +792,21 @@ function calcPlayerMinutes(m, pId) {
     let durationSecs = 0;
 
     if (isManualHistoric) {
-       if (m.singleHalf && half === 2) {
-           durationSecs = 0; // A 2ª parte não existe neste jogo
-       } else if (m.singleHalf && half === 1) {
-           durationSecs = (m.manualMatchDuration || 90) * 60; // A 1ª parte fica com o tempo todo
+       if (m.isNewManualModel) {
+           // O NOVO MODELO: A duração vem separadinha. Matemática simples!
+           durationSecs = half === 1 ? (m.manualHalf1Duration * 60) : (m.manualHalf2Duration * 60);
        } else {
-           durationSecs = ((m.manualMatchDuration || 90) * 60) / 2;
+           // O MODELO ANTIGO: Manter a proteção original para não estragar o que já foi guardado
+           if (m.singleHalf && half === 2) { durationSecs = 0; }
+           else if (m.singleHalf && half === 1) { durationSecs = (m.manualMatchDuration || 90) * 60; }
+           else { durationSecs = ((m.manualMatchDuration || 90) * 60) / 2; }
        }
     } else if (half === 1) {
-       if (m.timer && m.timer.half1DurationMs != null && m.timer.half1DurationMs > 0) {
-          durationSecs = m.timer.half1DurationMs / 1000;
-       } else if (m.timeline && m.timeline.kickoff) {
-          durationSecs = (m.timer && m.timer.elapsedMs ? m.timer.elapsedMs : getMatchElapsedMs(m)) / 1000;
-       }
+       if (m.timer && m.timer.half1DurationMs != null && m.timer.half1DurationMs > 0) { durationSecs = m.timer.half1DurationMs / 1000; }
+       else if (m.timeline && m.timeline.kickoff) { durationSecs = (m.timer && m.timer.elapsedMs ? m.timer.elapsedMs : getMatchElapsedMs(m)) / 1000; }
     } else {
-       if (m.timer && m.timer.half2DurationMs != null && m.timer.half2DurationMs > 0) {
-          durationSecs = m.timer.half2DurationMs / 1000;
-       } else if (m.timeline && m.timeline.secondHalfStart) {
-          durationSecs = (m.timer && m.timer.elapsedMs ? m.timer.elapsedMs : getMatchElapsedMs(m)) / 1000;
-       }
+       if (m.timer && m.timer.half2DurationMs != null && m.timer.half2DurationMs > 0) { durationSecs = m.timer.half2DurationMs / 1000; }
+       else if (m.timeline && m.timeline.secondHalfStart) { durationSecs = (m.timer && m.timer.elapsedMs ? m.timer.elapsedMs : getMatchElapsedMs(m)) / 1000; }
     }
 
     if (durationSecs <= 0) return;
@@ -802,21 +817,13 @@ function calcPlayerMinutes(m, pId) {
     
     subsInHalf.forEach(sub => { 
       let subSecs = sub.subMs != null ? (sub.subMs / 1000) : ((sub.minute || 0) * 60);
-      if (sub.outId === pId && onPitch) { 
-        totalSecs += Math.max(0, subSecs - timeOnSecs); 
-        onPitch = false; 
-      } 
-      if (sub.inId === pId && !onPitch) { 
-        timeOnSecs = subSecs; 
-        onPitch = true; 
-      } 
+      if (sub.outId === pId && onPitch) { totalSecs += Math.max(0, subSecs - timeOnSecs); onPitch = false; } 
+      if (sub.inId === pId && !onPitch) { timeOnSecs = subSecs; onPitch = true; } 
     }); 
     if (onPitch) totalSecs += Math.max(0, durationSecs - timeOnSecs); 
   }); 
 
-  // Se o atleta esteve em campo mas o cálculo arredondou para < 1s, garante 1s para exibição visual
   if (totalSecs > 0 && totalSecs < 1) totalSecs = 1;
-
   return Math.round(totalSecs); 
 }
 
@@ -894,8 +901,8 @@ window.shareMatchdayCard = function(matchId) {
   if(m.goals.length > 0) {
      text += `⚽ *GOLOS:*\n`;
      m.goals.forEach(g => {
-        if(g.type==='scored') { text += `- ${playerName(g.scorerId)}${g.minute!=null ? " ("+g.minute+"')" : ""}${g.assistId && g.assistId !== 'none' ? " [ast. "+playerName(g.assistId)+"]" : ""}\n`; } 
-        else { text += `- ${t('rep_conc')}${g.minute!=null ? " ("+g.minute+"')" : ""}\n`; }
+        if(g.type==='scored') { text += `- ${playerName(g.scorerId)}${g.minute!=null ? " ("+window.getGlobalMinuteDisplay(m, g.half, g.minute)+"')" : ""}${g.assistId && g.assistId !== 'none' ? " [ast. "+playerName(g.assistId)+"]" : ""}\n`; } 
+        else { text += `- ${t('rep_conc')}${g.minute!=null ? " ("+window.getGlobalMinuteDisplay(m, g.half, g.minute)+"')" : ""}\n`; }
      });
   }
   text += `\n💪 #Matchday #${getMyClub().replace(/\s+/g,'')}`;
@@ -969,15 +976,21 @@ window.confirmFinishMatch = function(action) {
     const m = getActiveMatch(); if(!m) return;
     if(action === 'cancel') { closeModal(); } 
     else if(action === 'save') { 
-        const manualInput = document.getElementById('manual-match-duration');
+        const h1Input = document.getElementById('manual-half1-duration');
+        const h2Input = document.getElementById('manual-half2-duration');
         const ignoreInput = document.getElementById('ignore-match-mins');
-        const singleHalfInput = document.getElementById('single-half-match');
-        if(manualInput) {
-            let d = parseInt(manualInput.value, 10);
-            m.manualMatchDuration = (isNaN(d) || d <= 0) ? 90 : d;
+        
+        if(h1Input) {
+            let h1 = parseInt(h1Input.value, 10);
+            let h2 = parseInt(h2Input.value, 10);
+            m.manualHalf1Duration = (isNaN(h1) || h1 < 0) ? 45 : h1;
+            m.manualHalf2Duration = (isNaN(h2) || h2 < 0) ? 0 : h2;
+            m.singleHalf = m.manualHalf2Duration === 0;
+            m.isNewManualModel = true; // Flag da nova arquitetura
+            m.manualMatchDuration = m.manualHalf1Duration + m.manualHalf2Duration; // Para as barras não estoirarem
         }
         if(ignoreInput) { m.ignoreMinutes = ignoreInput.checked; }
-        if(singleHalfInput) { m.singleHalf = singleHalfInput.checked; }
+        
         closeModal(); 
         modalConfig = { type: 'askRatings' }; 
         document.getElementById('modal-root').innerHTML = renderModalHTML(); 
@@ -1296,22 +1309,30 @@ function renderModalHTML(){
      return `<div class="modal-overlay"><div class="modal-card"><h3 style="margin-top:0; color:var(--red);">${t('archive_title')}</h3><p style="font-size:13px; text-align:left; color:var(--chalk);">${t('archive_desc')}</p><div style="background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:20px;"><p style="font-size:12px; font-weight:bold; color:var(--gold); margin-top:0; margin-bottom:10px;">${t('archive_warn')}</p><div style="display:flex; flex-direction:column; gap:8px;"><button class="btn btn-ghost" style="font-size:12px;" onclick="exportSeasonPDF()">📄 ${t('exp_pdf')}</button><button class="btn btn-ghost" style="font-size:12px;" onclick="exportData()">💾 ${t('exp_json')}</button></div></div><div style="display:flex; gap:10px;"><button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button><button class="btn btn-red" onclick="doArchiveSeason()">${t('archive_btn')}</button></div></div></div>`;
   }
 
-   if(modalConfig.type === 'finishMatch') { 
+  if(modalConfig.type === 'finishMatch') { 
      return `<div class="modal-overlay"><div class="modal-card">
        <p style="font-weight:600; font-size:16px;">${t('msg_not_started')}</p>
-       <p style="font-size:13px;">${t('msg_not_started_desc')}</p>
-       <div class="field" style="text-align:left; margin-bottom:12px; background:var(--surface); padding:10px; border-radius:8px; border:1px solid var(--gold);">
-         <label style="color:var(--gold);">Duração Total do Jogo (Minutos)</label>
-         <input type="number" id="manual-match-duration" value="90" min="10" max="120" style="text-align:center; font-weight:bold; font-size:18px;">
+       <p style="font-size:13px; margin-bottom:14px;">${t('msg_not_started_desc')}</p>
+       
+       <div style="background:var(--surface); padding:12px; border-radius:8px; border:1px solid var(--gold); margin-bottom:12px; text-align:left;">
+         <div style="font-size:11px; color:var(--gold); text-transform:uppercase; margin-bottom:8px; font-weight:bold;">Duração do Jogo (Minutos)</div>
+         <div style="display:flex; gap:10px;">
+           <div class="field" style="flex:1; margin-bottom:0;">
+             <label>1ª Parte</label>
+             <input type="number" id="manual-half1-duration" value="45" min="1" max="120" style="text-align:center; font-weight:bold;">
+           </div>
+           <div class="field" style="flex:1; margin-bottom:0;">
+             <label>2ª Parte</label>
+             <input type="number" id="manual-half2-duration" value="45" min="0" max="120" placeholder="Ex: 0" style="text-align:center; font-weight:bold;">
+           </div>
+         </div>
+         <div style="font-size:9px; color:var(--muted); margin-top:8px; line-height:1.3;">Deixa a 2ª Parte a 0 para torneios de Parte Única.</div>
        </div>
-       <div style="margin-bottom:16px; text-align:left; background:var(--surface-2); padding:10px; border-radius:8px; border:1px solid var(--line); display:flex; flex-direction:column; gap:10px;">
+
+       <div style="margin-bottom:16px; text-align:left; background:var(--surface-2); padding:10px; border-radius:8px; border:1px solid var(--line);">
          <label style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--chalk); cursor:pointer;">
-           <input type="checkbox" id="single-half-match" style="width:16px; height:16px; accent-color:var(--gold);">
-           Jogo de Parte Única (Ex: Torneios curtos)
-         </label>
-         <label style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--chalk); cursor:pointer; border-top:1px solid var(--line); padding-top:10px;">
            <input type="checkbox" id="ignore-match-mins" style="width:16px; height:16px; accent-color:var(--gold);">
-           Ignorar minutos deste jogo nas estatísticas (Não tenho substituições apontadas)
+           Ignorar minutos deste jogo nas estatísticas (Não apontei substituições)
          </label>
        </div>
        <div style="display:flex; flex-direction:column; gap:10px;">
@@ -1321,6 +1342,7 @@ function renderModalHTML(){
        </div>
      </div></div>`; 
   }
+  
 
   if(modalConfig.type === 'askRatings') { 
      return `<div class="modal-overlay"><div class="modal-card"><p style="font-weight:600; font-size:16px;">${t('msg_match_ended')}</p><p style="font-size:13px;">${t('msg_ask_rate')}</p><div style="display:flex; flex-direction:column; gap:10px;"><button class="btn btn-gold" onclick="closeModal(); pendingRatings=true; render();">${t('msg_yes_rate')}</button><button class="btn btn-outline" onclick="closeModal(); doFinishMatch();">${t('msg_no_rate')}</button></div></div></div>`; 
@@ -1348,9 +1370,9 @@ function matchNarrativeHtml(m, isLocked = false){
     return `(⏱️ ${mm}' ${String(ss).padStart(2,'0')}'' )`;
   };
 
-  const goalRow = (g) => `<div class="goal-row"><span>${g.minute!=null?`<span class="mono" style="color:var(--gold);">${g.minute}'</span> `:''}${g.type==='scored'?'⚽ '+playerName(g.scorerId)+(g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''):'🥅 '+t('rep_conc')}</span>${!isLocked ? `<span><button class="del" style="color:var(--muted); margin-right:2px;" onclick="event.stopPropagation(); editEventMinute('${m.id}','goal','${g.id}')">✎</button><button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_goal')}', ()=>deleteGoal('${m.id}', '${g.id}'))">✕</button></span>` : ''}</div>`;
-  const cardRow = (c) => `<div class="goal-row"><span>${c.minute!=null?`<span class="mono" style="color:var(--gold);">${c.minute}'</span> `:''}${c.color==='Amarelo'?'🟨':'🟥'} ${playerName(c.playerId)}</span>${!isLocked ? `<span><button class="del" style="color:var(--muted); margin-right:2px;" onclick="event.stopPropagation(); editEventMinute('${m.id}','card','${c.id}')">✎</button><button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_card')}', ()=>deleteCard('${m.id}', '${c.id}'))">✕</button></span>` : ''}</div>`;
-  const subRow = (s) => `<div class="goal-row"><span><span class="mono" style="color:var(--gold);">${s.isHalftime ? 'INT' : (s.minute!=null?s.minute+"'":"")}</span> 🔄 <span style="color:var(--red)">↓ ${playerName(s.data.outId)}</span> <span style="color:var(--green)">↑ ${playerName(s.data.inId)}</span></span>${!isLocked ? `<span>${!s.isHalftime ? `<button class="del" style="color:var(--muted); margin-right:2px;" onclick="event.stopPropagation(); editEventMinute('${m.id}','sub','${s.data.id}')">✎</button>` : ''}<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sub')}', ()=>deleteSub('${m.id}', '${s.data.id}'))">✕</button></span>` : ''}</div>`;
+  const goalRow = (g) => `<div class="goal-row"><span>${g.minute!=null?`<span class="mono" style="color:var(--gold);">${window.getGlobalMinuteDisplay(m, g.half, g.minute)}'</span> `:''}${g.type==='scored'?'⚽ '+playerName(g.scorerId)+(g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''):'🥅 '+t('rep_conc')}</span>${!isLocked ? `<span><button class="del" style="color:var(--muted); margin-right:2px;" onclick="event.stopPropagation(); editEventMinute('${m.id}','goal','${g.id}')">✎</button><button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_goal')}', ()=>deleteGoal('${m.id}', '${g.id}'))">✕</button></span>` : ''}</div>`;
+  const cardRow = (c) => `<div class="goal-row"><span>${c.minute!=null?`<span class="mono" style="color:var(--gold);">${window.getGlobalMinuteDisplay(m, c.half, c.minute)}'</span> `:''}${c.color==='Amarelo'?'🟨':'🟥'} ${playerName(c.playerId)}</span>${!isLocked ? `<span><button class="del" style="color:var(--muted); margin-right:2px;" onclick="event.stopPropagation(); editEventMinute('${m.id}','card','${c.id}')">✎</button><button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_card')}', ()=>deleteCard('${m.id}', '${c.id}'))">✕</button></span>` : ''}</div>`;
+  const subRow = (s) => `<div class="goal-row"><span><span class="mono" style="color:var(--gold);">${s.isHalftime ? 'INT' : (s.minute!=null?window.getGlobalMinuteDisplay(m, s.data.half, s.minute)+"'":"")}</span> 🔄 <span style="color:var(--red)">↓ ${playerName(s.data.outId)}</span> <span style="color:var(--green)">↑ ${playerName(s.data.inId)}</span></span>${!isLocked ? `<span>${!s.isHalftime ? `<button class="del" style="color:var(--muted); margin-right:2px;" onclick="event.stopPropagation(); editEventMinute('${m.id}','sub','${s.data.id}')">✎</button>` : ''}<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sub')}', ()=>deleteSub('${m.id}', '${s.data.id}'))">✕</button></span>` : ''}</div>`;
 
 
   let rows = ''; const h1 = eventsForHalf(1); const h2 = eventsForHalf(2); const h1_regular = h1.filter(e => !e.isHalftime); const h1_int = h1.filter(e => e.isHalftime);
@@ -1553,7 +1575,7 @@ function renderJogo(){
     dynamicPanel = `<div class="panel">
       <div class="panel-title">${t('match_scorer')}</div>
       ${isManualMode ? `<div class="field" style="margin-bottom:10px;">
-        <label>Minuto do Golo</label>
+        <label>Minuto (a contar desde o início desta parte)</label>
         <input type="number" id="manual-event-min" placeholder="Ex: 14" value="${document.getElementById('manual-event-min')?.value || ''}" style="text-align:center; font-weight:bold;">
       </div>` : ''}
       <div class="grid-btns cols-4">${scorerChips}</div>
@@ -1596,7 +1618,7 @@ function renderJogo(){
            <div class="panel-title" style="color:var(--gold);">${t('match_sub_title')} ${isHT ? `(${t('match_ht')})` : ''}</div>
            
            ${(!isHT && isManualMode) ? `<div class="field" style="margin-bottom:10px;">
-             <label>Minuto da Substituição</label>
+             <label>Minuto (a contar desde o início desta parte)</label>
              <input type="number" id="manual-sub-min" placeholder="Ex: 22" value="${document.getElementById('manual-sub-min')?.value || ''}" style="text-align:center; font-weight:bold;">
            </div>` : ''}
 
@@ -2573,19 +2595,21 @@ function buildMatchReportHTML(m){
 
   let subsHtml = '';
   (m.subs||[]).forEach(s => {
-    subsHtml += `<tr><td>${s.isHalftime ? 'INT' : (s.minute != null ? s.minute+"'" : '-')}</td><td style="color:#C8493F; text-align:left;">↓ ${playerName(s.outId)}</td><td style="color:#16A34A; text-align:left;">↑ ${playerName(s.inId)}</td></tr>`;
+    let minDisplay = s.isHalftime ? 'INT' : (s.minute != null ? window.getGlobalMinuteDisplay(m, s.half, s.minute) + "'" : '-');
+    subsHtml += `<tr><td>${minDisplay}</td><td style="color:#C8493F; text-align:left;">↓ ${playerName(s.outId)}</td><td style="color:#16A34A; text-align:left;">↑ ${playerName(s.inId)}</td></tr>`;
   });
 
   let goalsHtml = '';
   (m.goals||[]).forEach(g => {
      let desc = g.type==='scored' ? `⚽ ${playerName(g.scorerId)} ${g.assistId&&g.assistId!=='none'? '(Ast: '+playerName(g.assistId)+')':''}` : `🥅 Golo Sofrido`;
-     let min = g.minute != null ? g.minute+"'" : (g.half===1?"1ªP":"2ªP");
-     goalsHtml += `<tr><td>${min}</td><td style="text-align:left; font-weight:bold;">${desc}</td></tr>`;
+     let minDisplay = g.minute != null ? window.getGlobalMinuteDisplay(m, g.half, g.minute) + "'" : (g.half===1?"1ªP":"2ªP");
+     goalsHtml += `<tr><td>${minDisplay}</td><td style="text-align:left; font-weight:bold;">${desc}</td></tr>`;
   });
 
   let cardsHtml = '';
   (m.cards||[]).forEach(c => {
-    cardsHtml += `<tr><td>${c.minute != null ? c.minute+"'" : '-'}</td><td style="text-align:left;">${c.color==='Amarelo'?'🟨':'🟥'} ${playerName(c.playerId)}</td></tr>`;
+    let minDisplay = c.minute != null ? window.getGlobalMinuteDisplay(m, c.half, c.minute) + "'" : '-';
+    cardsHtml += `<tr><td>${minDisplay}</td><td style="text-align:left;">${c.color==='Amarelo'?'🟨':'🟥'} ${playerName(c.playerId)}</td></tr>`;
   });
 
   const selectedStaffIds = m.originalSchedule?.staffCallup || [];
@@ -2695,7 +2719,8 @@ window.exportMatchPDF = function(mId) {
   let subsHtml = '';
   if (m.subs && m.subs.length > 0) {
     m.subs.forEach(s => {
-      subsHtml += `<tr><td>${s.isHalftime ? 'INT' : (s.minute != null ? s.minute + "'" : '-')}</td><td style="color:#C8493F; text-align:left; padding-left:6px;">↓ ${playerName(s.outId)}</td><td style="color:#16A34A; text-align:left; padding-left:6px;">↑ ${playerName(s.inId)}</td></tr>`;
+      let minDisplay = s.isHalftime ? 'INT' : (s.minute != null ? window.getGlobalMinuteDisplay(m, s.half, s.minute) + "'" : '-');
+      subsHtml += `<tr><td>${minDisplay}</td><td style="color:#C8493F; text-align:left; padding-left:6px;">↓ ${playerName(s.outId)}</td><td style="color:#16A34A; text-align:left; padding-left:6px;">↑ ${playerName(s.inId)}</td></tr>`;
     });
   }
 
@@ -2703,15 +2728,16 @@ window.exportMatchPDF = function(mId) {
   if (m.goals && m.goals.length > 0) {
     m.goals.forEach(g => {
        let desc = g.type === 'scored' ? `⚽ ${playerName(g.scorerId)} ${g.assistId && g.assistId !== 'none' ? '(Ast: ' + playerName(g.assistId) + ')' : ''}` : `🥅 Golo Sofrido`;
-       let min = g.minute != null ? g.minute + "'" : (g.half === 1 ? "1ªP" : "2ªP");
-       goalsHtml += `<tr><td style="width:50px;">${min}</td><td style="text-align:left; font-weight:bold; padding-left:10px;">${desc}</td></tr>`;
+       let minDisplay = g.minute != null ? window.getGlobalMinuteDisplay(m, g.half, g.minute) + "'" : (g.half === 1 ? "1ªP" : "2ªP");
+       goalsHtml += `<tr><td style="width:50px;">${minDisplay}</td><td style="text-align:left; font-weight:bold; padding-left:10px;">${desc}</td></tr>`;
     });
   }
 
   let cardsHtml = '';
   if (m.cards && m.cards.length > 0) {
     m.cards.forEach(c => {
-      cardsHtml += `<tr><td style="width:50px;">${c.minute != null ? c.minute + "'" : '-'}</td><td style="text-align:left; padding-left:10px;">${c.color === 'Amarelo' ? '🟨' : '🟥'} ${playerName(c.playerId)}</td></tr>`;
+      let minDisplay = c.minute != null ? window.getGlobalMinuteDisplay(m, c.half, c.minute) + "'" : '-';
+      cardsHtml += `<tr><td style="width:50px;">${minDisplay}</td><td style="text-align:left; padding-left:10px;">${c.color === 'Amarelo' ? '🟨' : '🟥'} ${playerName(c.playerId)}</td></tr>`;
     });
   }
 

@@ -773,7 +773,13 @@ function calcPlayerMinutes(m, pId) {
     let durationSecs = 0;
 
     if (isManualHistoric) {
-       durationSecs = ((m.manualMatchDuration || 90) * 60) / 2;
+       if (m.singleHalf && half === 2) {
+           durationSecs = 0; // A 2ª parte não existe neste jogo
+       } else if (m.singleHalf && half === 1) {
+           durationSecs = (m.manualMatchDuration || 90) * 60; // A 1ª parte fica com o tempo todo
+       } else {
+           durationSecs = ((m.manualMatchDuration || 90) * 60) / 2;
+       }
     } else if (half === 1) {
        if (m.timer && m.timer.half1DurationMs != null && m.timer.half1DurationMs > 0) {
           durationSecs = m.timer.half1DurationMs / 1000;
@@ -930,6 +936,11 @@ window.currentHalfFromTimeline = function(m){
   const now = String(new Date().getHours()).padStart(2,'0') + ':' + String(new Date().getMinutes()).padStart(2,'0');
   if(tl && tl.secondHalfStart && now >= tl.secondHalfStart) return 2; return 1;
 };
+// Resolve a parte a usar num evento novo: em jogos de parte única, nunca pergunta — é sempre a 1ª.
+window.resolveEventHalf = function(m){
+  if (m.singleHalf) return 1;
+  return window.currentHalfFromTimeline(m);
+};
 
 window.doFinishMatch = function() {
     const m = getActiveMatch(); if(!m) return; const notes = (document.getElementById('notes-input') || {}).value;
@@ -960,11 +971,13 @@ window.confirmFinishMatch = function(action) {
     else if(action === 'save') { 
         const manualInput = document.getElementById('manual-match-duration');
         const ignoreInput = document.getElementById('ignore-match-mins');
+        const singleHalfInput = document.getElementById('single-half-match');
         if(manualInput) {
             let d = parseInt(manualInput.value, 10);
             m.manualMatchDuration = (isNaN(d) || d <= 0) ? 90 : d;
         }
         if(ignoreInput) { m.ignoreMinutes = ignoreInput.checked; }
+        if(singleHalfInput) { m.singleHalf = singleHalfInput.checked; }
         closeModal(); 
         modalConfig = { type: 'askRatings' }; 
         document.getElementById('modal-root').innerHTML = renderModalHTML(); 
@@ -1002,6 +1015,44 @@ window.addGoal = function(matchId, type, half, scorerId, assistId, customMin){
   render(); 
 };
 window.deleteGoal = function(matchId, goalId){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; m.goals = m.goals.filter(g=>g.id!==goalId); saveState(); render(); };
+
+window.editEventMinute = function(matchId, kind, eventId){
+  const m = state.matches.find(x => x.id === matchId);
+  if (!m) return;
+
+  let obj, currentMinute;
+  if (kind === 'goal') { obj = (m.goals || []).find(g => g.id === eventId); currentMinute = obj ? obj.minute : null; }
+  else if (kind === 'card') { obj = (m.cards || []).find(c => c.id === eventId); currentMinute = obj ? obj.minute : null; }
+  else if (kind === 'sub') { obj = (m.subs || []).find(s => s.id === eventId); currentMinute = obj ? obj.minute : null; }
+  if (!obj) return;
+
+  const input = prompt('Novo minuto do evento:', currentMinute != null ? currentMinute : '');
+  if (input === null) return; // cancelou
+  const newMin = parseInt(input, 10);
+  if (isNaN(newMin) || newMin < 0) { showToast('Minuto inválido.'); return; }
+
+  obj.minute = newMin;
+  // Substituições alimentam o cálculo de minutos através de subMs, não só do "minute" visual —
+  // têm de ficar sincronizados, senão a edição não afeta os minutos jogados do atleta.
+  if (kind === 'sub') obj.subMs = newMin * 60000;
+
+  saveState();
+  render();
+  showToast('Minuto atualizado. 🕐');
+};
+
+window.editManualDuration = function(matchId){
+  const m = state.matches.find(x => x.id === matchId);
+  if (!m) return;
+  const input = prompt('Duração total do jogo (minutos):', m.manualMatchDuration || 90);
+  if (input === null) return;
+  const newDur = parseInt(input, 10);
+  if (isNaN(newDur) || newDur <= 0) { showToast('Duração inválida.'); return; }
+  m.manualMatchDuration = newDur;
+  saveState();
+  render();
+  showToast('Duração do jogo atualizada. 🕐');
+};
 window.addCard = function(matchId, playerId, color, half){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; if(!m.cards) m.cards = []; m.cards.push({ id: uid(), playerId, color, half: half==='halftime'?1:half, minute: getMatchMinute(m) }); pendingCard = null; saveState(); render(); };
 window.deleteCard = function(matchId, cardId){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; m.cards = m.cards.filter(c=>c.id!==cardId); saveState(); render(); };
 window.confirmSub = function(mId, customMin) { 
@@ -1009,7 +1060,7 @@ window.confirmSub = function(mId, customMin) {
   if(!m) return; 
   if(!m.subs) m.subs = []; 
 
-  const currentH = window.currentHalfFromTimeline(m); 
+  const currentH = pendingSub.half; 
   const isHT = currentH === 'halftime'; 
 
   let minVal = null;
@@ -1253,8 +1304,12 @@ function renderModalHTML(){
          <label style="color:var(--gold);">Duração Total do Jogo (Minutos)</label>
          <input type="number" id="manual-match-duration" value="90" min="10" max="120" style="text-align:center; font-weight:bold; font-size:18px;">
        </div>
-       <div style="margin-bottom:16px; text-align:left; background:var(--surface-2); padding:10px; border-radius:8px; border:1px solid var(--line);">
+       <div style="margin-bottom:16px; text-align:left; background:var(--surface-2); padding:10px; border-radius:8px; border:1px solid var(--line); display:flex; flex-direction:column; gap:10px;">
          <label style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--chalk); cursor:pointer;">
+           <input type="checkbox" id="single-half-match" style="width:16px; height:16px; accent-color:var(--gold);">
+           Jogo de Parte Única (Ex: Torneios curtos)
+         </label>
+         <label style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--chalk); cursor:pointer; border-top:1px solid var(--line); padding-top:10px;">
            <input type="checkbox" id="ignore-match-mins" style="width:16px; height:16px; accent-color:var(--gold);">
            Ignorar minutos deste jogo nas estatísticas (Não tenho substituições apontadas)
          </label>
@@ -1293,9 +1348,10 @@ function matchNarrativeHtml(m, isLocked = false){
     return `(⏱️ ${mm}' ${String(ss).padStart(2,'0')}'' )`;
   };
 
-  const goalRow = (g) => `<div class="goal-row"><span>${g.minute!=null?`<span class="mono" style="color:var(--gold);">${g.minute}'</span> `:''}${g.type==='scored'?'⚽ '+playerName(g.scorerId)+(g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''):'🥅 '+t('rep_conc')}</span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_goal')}', ()=>deleteGoal('${m.id}', '${g.id}'))">✕</button>` : ''}</div>`;
-  const cardRow = (c) => `<div class="goal-row"><span>${c.minute!=null?`<span class="mono" style="color:var(--gold);">${c.minute}'</span> `:''}${c.color==='Amarelo'?'🟨':'🟥'} ${playerName(c.playerId)}</span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_card')}', ()=>deleteCard('${m.id}', '${c.id}'))">✕</button>` : ''}</div>`;
-  const subRow = (s) => `<div class="goal-row"><span><span class="mono" style="color:var(--gold);">${s.isHalftime ? 'INT' : (s.minute!=null?s.minute+"'":"")}</span> 🔄 <span style="color:var(--red)">↓ ${playerName(s.data.outId)}</span> <span style="color:var(--green)">↑ ${playerName(s.data.inId)}</span></span>${!isLocked ? `<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sub')}', ()=>deleteSub('${m.id}', '${s.data.id}'))">✕</button>` : ''}</div>`;
+  const goalRow = (g) => `<div class="goal-row"><span>${g.minute!=null?`<span class="mono" style="color:var(--gold);">${g.minute}'</span> `:''}${g.type==='scored'?'⚽ '+playerName(g.scorerId)+(g.assistId&&g.assistId!=='none'?' (ast. '+playerName(g.assistId)+')':''):'🥅 '+t('rep_conc')}</span>${!isLocked ? `<span><button class="del" style="color:var(--muted); margin-right:2px;" onclick="event.stopPropagation(); editEventMinute('${m.id}','goal','${g.id}')">✎</button><button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_goal')}', ()=>deleteGoal('${m.id}', '${g.id}'))">✕</button></span>` : ''}</div>`;
+  const cardRow = (c) => `<div class="goal-row"><span>${c.minute!=null?`<span class="mono" style="color:var(--gold);">${c.minute}'</span> `:''}${c.color==='Amarelo'?'🟨':'🟥'} ${playerName(c.playerId)}</span>${!isLocked ? `<span><button class="del" style="color:var(--muted); margin-right:2px;" onclick="event.stopPropagation(); editEventMinute('${m.id}','card','${c.id}')">✎</button><button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_card')}', ()=>deleteCard('${m.id}', '${c.id}'))">✕</button></span>` : ''}</div>`;
+  const subRow = (s) => `<div class="goal-row"><span><span class="mono" style="color:var(--gold);">${s.isHalftime ? 'INT' : (s.minute!=null?s.minute+"'":"")}</span> 🔄 <span style="color:var(--red)">↓ ${playerName(s.data.outId)}</span> <span style="color:var(--green)">↑ ${playerName(s.data.inId)}</span></span>${!isLocked ? `<span>${!s.isHalftime ? `<button class="del" style="color:var(--muted); margin-right:2px;" onclick="event.stopPropagation(); editEventMinute('${m.id}','sub','${s.data.id}')">✎</button>` : ''}<button class="del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sub')}', ()=>deleteSub('${m.id}', '${s.data.id}'))">✕</button></span>` : ''}</div>`;
+
 
   let rows = ''; const h1 = eventsForHalf(1); const h2 = eventsForHalf(2); const h1_regular = h1.filter(e => !e.isHalftime); const h1_int = h1.filter(e => e.isHalftime);
   
@@ -1485,7 +1541,7 @@ function renderJogo(){
     let captainChips = eligiblePlayers().length ? eligiblePlayers().map(p=>`<div class="chip chip-sm ${m.capitao===p.id?'active-green':''}" onclick="setCaptain('${m.id}','${p.id}')">${playerLabel(p)}</div>`).join('') : `<div class="empty" style="grid-column:1/-1;">${t('pl_none')}</div>`;
     dynamicPanel = `<div class="panel" style="border-color:var(--gold);"><div class="panel-title" style="color:var(--gold);">${t('match_cap')}</div><div class="grid-btns cols-4">${captainChips}</div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pendingCaptain=false; render()">${t('cancel')}</button></div>`;
   } else if(pending && !pending.half){
-    dynamicPanel = `<div class="panel"><div class="panel-title">${pending.kind==='scored' ? t('match_goal_half') : t('match_conc_half')}</div><div class="grid-btns"><div class="chip" onclick="pending.half=1; render()">${t('match_half1')}</div><div class="chip" onclick="pending.half=2; render()">${t('match_half2')}</div></div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button></div>`;
+    dynamicPanel = `<div class="panel"><div class="panel-title">${pending.kind==='scored' ? t('match_goal_half') : t('match_conc_half')}</div><div class="grid-btns"><div class="chip" onclick="pending.half=1; if(pending.kind==='conceded'){ addGoal('${m.id}','conceded',1,null,null); } else { render(); }">${t('match_half1')}</div><div class="chip" onclick="pending.half=2; if(pending.kind==='conceded'){ addGoal('${m.id}','conceded',2,null,null); } else { render(); }">${t('match_half2')}</div></div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button></div>`;
   } else if(pending && pending.kind==='scored' && !pending.scorerId){
     let currH = pending.half === 'halftime' ? 1 : pending.half; 
     let onPitchIds = (state.trackSubs && m.lineup && m.lineup.length > 0) ? getPlayersOnPitchAtEndOfHalf(m, currH) : eligiblePlayers().map(p=>p.id);
@@ -1520,12 +1576,16 @@ function renderJogo(){
       </div>
       <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button>
     </div>`;
+  } else if(pendingCard && !pendingCard.half){
+    dynamicPanel = `<div class="panel"><div class="panel-title">${t('match_conc_half')}</div><div class="grid-btns"><div class="chip" onclick="pendingCard.half=1; render()">${t('match_half1')}</div><div class="chip" onclick="pendingCard.half=2; render()">${t('match_half2')}</div></div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pendingCard=null; render()">${t('cancel')}</button></div>`;
   } else if(pendingCard){
-    let cardChips = `<div class="chip chip-sm" style="border-color:var(--red); color:var(--red);" onclick="addCard('${m.id}', 'opp', pendingCard.color, window.currentHalfFromTimeline(getActiveMatch())||1)">Adversário</div>`;
-    cardChips += eligiblePlayers().length ? eligiblePlayers().map(p=>`<div class="chip chip-sm" onclick="addCard('${m.id}', '${p.id}', pendingCard.color, window.currentHalfFromTimeline(getActiveMatch())||1)">${playerLabel(p)}</div>`).join('') : '';
+    let cardChips = `<div class="chip chip-sm" style="border-color:var(--red); color:var(--red);" onclick="addCard('${m.id}', 'opp', pendingCard.color, pendingCard.half)">Adversário</div>`;
+    cardChips += eligiblePlayers().length ? eligiblePlayers().map(p=>`<div class="chip chip-sm" onclick="addCard('${m.id}', '${p.id}', pendingCard.color, pendingCard.half)">${playerLabel(p)}</div>`).join('') : '';
     dynamicPanel = `<div class="panel"><div class="panel-title">${t('match_card_who', {color: t(pendingCard.color==='Amarelo'?'match_yellow':'match_red')})}</div><div class="grid-btns cols-4">${cardChips}</div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pendingCard=null; render()">${t('cancel')}</button></div>`;
+  } else if(pendingSub && !pendingSub.half) {
+     dynamicPanel = `<div class="panel"><div class="panel-title">${t('match_conc_half')}</div><div class="grid-btns"><div class="chip" onclick="pendingSub.half=1; render()">${t('match_half1')}</div><div class="chip" onclick="pendingSub.half=2; render()">${t('match_half2')}</div></div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pendingSub=null; render()">${t('cancel')}</button></div>`;
   } else if(pendingSub) {
-     const currHalfVal = window.currentHalfFromTimeline(m); 
+     const currHalfVal = pendingSub.half; 
      const isHT = currHalfVal === 'halftime';
      const onPitchIds = getPlayersOnPitchAtEndOfHalf(m, isHT ? 1 : (currHalfVal||1)); 
      const onPitchPlayers = sortPlayerObjs(onPitchIds.map(id => state.roster.find(p=>p.id===id)).filter(Boolean));
@@ -1595,7 +1655,7 @@ function renderJogo(){
       <div class="opponent" style="margin-bottom:4px;"><div style="font-size:15px;">${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home' ? `${getMyClub()} <span style="font-weight:700; color:var(--chalk); margin:0 4px;">${t('match_vs')}</span> ${m.opponent}` : `${m.opponent} <span style="font-weight:700; color:var(--chalk); margin:0 4px;">${t('match_vs')}</span> ${getMyClub()}`} <span class="badge-loc ${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home'?'casa':'fora'}">${locLabel}</span></div><span>${m.date}</span></div>
       ${m.capitao ? `<div style="font-size:11px; color:var(--muted); margin-bottom:12px; text-transform:uppercase; font-weight:600; display:flex; align-items:center; gap:8px;"><span>© Capitão: <span style="color:var(--green);">${playerName(m.capitao)}</span></span>${!isMatchEnded ? `<button style="background:none; border:1px solid var(--line); color:var(--chalk); border-radius:4px; padding:2px 6px; font-size:9px; cursor:pointer;" onclick="pendingCaptain=true; render()">${t('match_cap_change')}</button>`:''}</div>` : (!isMatchEnded ? `<div style="margin-bottom:12px;"><button class="card-mini-btn yellow" style="border-color:var(--gold); color:var(--gold);" onclick="pendingCaptain=true; render()">${t('match_cap_btn')}</button></div>` : '')}
       <div class="score-row"><div class="score-block scored"><div class="score-num mono">${scored}</div><div class="score-label">${t('match_scored')}</div></div><div class="score-sep">–</div><div class="score-block conceded"><div class="score-num mono">${conceded}</div><div class="score-label">${t('match_conc')}</div></div></div>
-      ${!isMatchEnded ? `<div class="btn-row"><button class="btn btn-gold" onclick="pending={kind:'scored', half: window.currentHalfFromTimeline(getActiveMatch())||1}; render();" ${(!isGameActive||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_goal')}</button><button class="btn btn-red" onclick="addGoal('${m.id}', 'conceded', window.currentHalfFromTimeline(getActiveMatch())||1, null, null)" ${(!isGameActive||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_conc')}</button></div>${isGameActive ? `<div style="display:flex; gap:8px; justify-content:center; margin-top:10px;"><button class="card-mini-btn yellow" onclick="pendingCard={color:'Amarelo'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_yellow')}</button><button class="card-mini-btn red" onclick="pendingCard={color:'Vermelho'}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_red')}</button>${state.trackSubs ? `<button class="card-mini-btn" style="border:1px solid var(--chalk); color:var(--chalk);" onclick="pendingSub={outId:null, inId:null, half: window.currentHalfFromTimeline(getActiveMatch())||1}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_sub_title')}</button>` : ''}</div>` : ''}` : `<div style="margin-top:16px; padding:10px; border-radius:8px; background:var(--surface-2); font-size:11px; text-align:center; color:var(--muted); text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">${t('match_locked')}</div>`}
+      ${!isMatchEnded ? `<div class="btn-row"><button class="btn btn-gold" onclick="pending={kind:'scored', half: window.resolveEventHalf(getActiveMatch())}; render();" ${(!isGameActive||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_goal')}</button><button class="btn btn-red" onclick="const h=window.resolveEventHalf(getActiveMatch()); if(h){ addGoal('${m.id}', 'conceded', h, null, null); } else { pending={kind:'conceded', half:null}; render(); }" ${(!isGameActive||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_conc')}</button></div>${isGameActive ? `<div style="display:flex; gap:8px; justify-content:center; margin-top:10px;"><button class="card-mini-btn yellow" onclick="pendingCard={color:'Amarelo', half: window.resolveEventHalf(getActiveMatch())}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_yellow')}</button><button class="card-mini-btn red" onclick="pendingCard={color:'Vermelho', half: window.resolveEventHalf(getActiveMatch())}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_red')}</button>${state.trackSubs ? `<button class="card-mini-btn" style="border:1px solid var(--chalk); color:var(--chalk);" onclick="pendingSub={outId:null, inId:null, half: window.resolveEventHalf(getActiveMatch())}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_sub_title')}</button>` : ''}</div>` : ''}` : `<div style="margin-top:16px; padding:10px; border-radius:8px; background:var(--surface-2); font-size:11px; text-align:center; color:var(--muted); text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">${t('match_locked')}</div>`}
       ${dynamicPanel}
       ${lineupPanel}
     </div>
@@ -2810,6 +2870,7 @@ function renderJogos(){
             ${m.originalSchedule ? `<button class="btn btn-ghost" style="font-size:10px; padding:8px; color:var(--gold); border:1px solid var(--gold-dim);" onclick="event.stopPropagation(); window.openScouting('${schedId}')">👁️ Scouting</button>` : ''}
             ${hasScouting ? `<button class="btn btn-outline" style="font-size:10px; padding:8px;" onclick="event.stopPropagation(); window.exportScoutingPDF('${schedId}')">📄 PDF Scouting</button>` : ''}
             ${m.finished ? `<button class="btn btn-outline" style="font-size:10px; padding:8px;" onclick="event.stopPropagation(); reopenMatch('${m.id}')">${t('res_edit')}</button>` : ''}
+            ${(m.finished && m.manualMode) ? `<button class="btn btn-outline" style="font-size:10px; padding:8px;" onclick="event.stopPropagation(); editManualDuration('${m.id}')">🕐 Duração</button>` : ''}
           </div>
         </div>` : ''}
       </div>`; 

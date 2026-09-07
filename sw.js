@@ -1,4 +1,4 @@
-const CACHE_NAME = 'coachfolio-v3.2a';
+const CACHE_NAME = 'coachfolio-v3.3';
 // A lista de bagagem obrigatória (Ficheiros base e Ícones)
 const urlsToCache = [
   './',

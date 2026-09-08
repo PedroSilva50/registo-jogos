@@ -777,23 +777,16 @@ function getHalfDuration(m, half) {
   else { if(m.timeline.fullTime && m.timeline.secondHalfStart) { if(m.timer && m.timer.half2DurationMs != null) return Math.floor(m.timer.half2DurationMs / 60000); let diff = timeToMins(m.timeline.fullTime) - timeToMins(m.timeline.secondHalfStart); return diff < 0 ? diff + 1440 : diff; } if(m.timeline.secondHalfStart && !m.timeline.fullTime) return getMatchMinute(m); return 0; }
 }
 function getPlayersOnPitchAtEndOfHalf(m, half) { let current = [...(m.lineup || [])]; let subs = (m.subs || []).filter(s => s.half <= half).sort((a,b) => { if(a.half !== b.half) return a.half - b.half; let minA = a.isHalftime ? 9999 : (a.minute || 0); let minB = b.isHalftime ? 9999 : (b.minute || 0); return minA - minB; }); subs.forEach(s => { current = current.filter(id => id !== s.outId); current.push(s.inId); }); return current; }
-
-// Converte o Minuto Relativo no Minuto Global para visualização (Timeline/PDF)
 window.getGlobalMinuteDisplay = function(m, half, relMin) {
     if (relMin == null) return '';
-    if (half === 1) return relMin; // Na 1ª parte, o global é igual ao relativo
+    if (half === 1) return relMin; // Na 1ª parte é direto
     
-    let h1Mins = 0;
-    if (m.isNewManualModel) { 
-        h1Mins = m.manualHalf1Duration || 0; 
-    } else if (m.timer && m.timer.half1DurationMs != null) { 
-        h1Mins = Math.floor(m.timer.half1DurationMs / 60000); 
-    } else if (!m.timeline || !m.timeline.kickoff) { 
-        h1Mins = Math.floor((m.manualMatchDuration || 90) / 2); 
-    } else { 
-        h1Mins = 45; 
+    // Na 2ª parte, a base é SEMPRE a duração planeada por parte (Tempo de TV)
+    let plannedHalfMins = m.halfDuration || state.defaultHalfDuration || 30;
+    if (m.isNewManualModel && m.manualHalf1Duration) {
+        plannedHalfMins = m.manualHalf1Duration;
     }
-    return h1Mins + relMin;
+    return plannedHalfMins + relMin;
 };
 function calcPlayerMinutes(m, pId) { 
   if (m.ignoreMinutes) return 0; 
@@ -2576,9 +2569,13 @@ function buildMatchReportHTML(m){
   const dateStr = m.date.split('-').reverse().join('/');
   let locLabel = (m.location||'casa') === 'casa' ? t('match_home') : t('match_away');
   
-  let totalMatchMins = (getHalfDuration(m, 1) || 0) + (getHalfDuration(m, 2) || 0);
-  if (totalMatchMins === 0) {
-    totalMatchMins = getMatchMinute(m) || m.manualMatchDuration || 0;
+  let totalMatchMins = 0;
+  if (m.isNewManualModel) {
+    totalMatchMins = (m.manualHalf1Duration || 0) + (m.manualHalf2Duration || 0);
+  } else if (m.singleHalf) {
+    totalMatchMins = m.halfDuration || state.defaultHalfDuration || 30;
+  } else {
+    totalMatchMins = (m.halfDuration || state.defaultHalfDuration || 30) * (m.numberOfHalves || 2);
   }
 
   let squadIds = [];
@@ -2694,9 +2691,13 @@ window.exportMatchPDF = function(mId) {
   const dateStr = m.date ? m.date.split('-').reverse().join('/') : '-';
   let locLabel = (m.location || 'casa') === 'casa' ? t('match_home') : t('match_away');
   
-  let totalMatchMins = (getHalfDuration(m, 1) || 0) + (getHalfDuration(m, 2) || 0);
-  if (totalMatchMins === 0) {
-    totalMatchMins = getMatchMinute(m) || m.manualMatchDuration || 0;
+  let totalMatchMins = 0;
+  if (m.isNewManualModel) {
+    totalMatchMins = (m.manualHalf1Duration || 0) + (m.manualHalf2Duration || 0);
+  } else if (m.singleHalf) {
+    totalMatchMins = m.halfDuration || state.defaultHalfDuration || 30;
+  } else {
+    totalMatchMins = (m.halfDuration || state.defaultHalfDuration || 30) * (m.numberOfHalves || 2);
   }
 
   let squadIds = [];

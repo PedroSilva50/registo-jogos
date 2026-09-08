@@ -1,11 +1,18 @@
-const CACHE_NAME = 'coachfolio-v3.3a';
-// A lista de bagagem obrigatória (Ficheiros base e Ícones)
+const CACHE_NAME = 'coachfolio-v3.4';
+// A lista de bagagem obrigatória (Ficheiros base e Ícones) — tem de funcionar sempre,
+// mesmo sem internet nem acesso a CDNs externos.
 const urlsToCache = [
   './',
   './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
+];
+// Biblioteca externa (tática → imagem). Guardada à parte, porque cache.addAll() é
+// tudo-ou-nada: se isto falhasse dentro da lista principal, a instalação do service
+// worker falhava por completo, incluindo os ficheiros base que são sempre fiáveis.
+const EXTERNAL_ASSETS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
 ];
 
 // Timeout de rede: se a ligação não responder dentro deste prazo,
@@ -16,16 +23,20 @@ self.addEventListener('install', (e) => {
   // Guarda imediatamente a lista obrigatória assim que instala a app
   e.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => {
-        return cache.addAll(urlsToCache);
+      .then(async (cache) => {
+        await cache.addAll(urlsToCache);
+        // Tentativa "best effort": se o CDN falhar agora, não bloqueia a instalação.
+        // A app vai tentar guardá-lo mais tarde, através do cache dinâmico do fetch().
+        try {
+          await cache.addAll(EXTERNAL_ASSETS);
+        } catch (err) {
+          console.warn('Não foi possível pré-cachear recursos externos:', err);
+        }
       })
   );
-
   // IMPORTANTE: NÃO chamar self.skipWaiting() aqui.
   // A app fica à espera do clique no botão "Atualizar" do index.html
   // precisamente para não forçar um reload a meio de um jogo em curso.
-  // (Se um dia quiseres skipWaiting automático, faz-o condicional a
-  // currentTab !== 'jogo' no lado do index.html, nunca aqui sem condição.)
 });
 
 self.addEventListener('activate', (e) => {
@@ -51,10 +62,8 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
-
   e.respondWith(
     fetch(e.request, { signal: controller.signal })
       .then((response) => {

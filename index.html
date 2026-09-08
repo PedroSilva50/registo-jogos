@@ -63,7 +63,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Coachfolio">
 <meta name="theme-color" content="#0E211A">
-<title>COACHFOLIO v3.3</title>
+<title>COACHFOLIO v3.4</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{--bg:#0E211A;--surface:#153328;--surface-2:#1C4133;--chalk:#F3EFE6;--muted:#8FA79B;--gold:#D9A441;--gold-dim:#4A3E22;--red:#C8493F;--red-dim:#3F2320;--yellow:#E1C324;--green:#4ade80;--green-dim:#133320;--line:rgba(243,239,230,0.10);--btn-gold-txt:#241B08;--btn-red-txt:#2B0F0C;--btn-green-txt:#0E211A;}
@@ -583,6 +583,8 @@ async function loadState(){
        if(state.enableBirthdays === undefined) state.enableBirthdays = false;
        if(state.tacticHalfPitch === undefined) state.tacticHalfPitch = false;
        if(state.keepScreenAwake === undefined) state.keepScreenAwake = false;
+       if(state.defaultHalfDuration === undefined) state.defaultHalfDuration = 30;
+       if(state.escalao === undefined) state.escalao = '';
        if(!state.teamColor) state.teamColor = '#D9A441';
        if(!state.oppColor) state.oppColor = '#C8493F';
        if(!state.seasonFormat) state.seasonFormat = 'europeu';
@@ -608,8 +610,8 @@ async function loadState(){
 async function saveState(){ 
   if (!IS_LICENSED) return;
   try { 
-    state.lastBackupDate = Date.now();
     await storageAdapter.set(STORAGE_KEY, JSON.stringify(state)); 
+    state.lastBackupDate = Date.now();
   } catch(e) { 
     if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || (e.message && e.message.includes('quota'))) { 
       alert(t('msg_quota')); 
@@ -631,9 +633,9 @@ function escapeHTML(str) { if(!str) return ''; return String(str).replace(/[&<>'
 function uid(){ return Math.random().toString(36).slice(2,10); }
 function showToast(msg){ const el = document.getElementById('toast'); el.style.pointerEvents = ''; el.textContent = msg; el.classList.add('show'); clearTimeout(showToast._t); showToast._t = setTimeout(()=>el.classList.remove('show'), 3000); }
 function getMyClub() { return state.myClubName && state.myClubName.trim() !== '' ? state.myClubName : t('def_club'); }
+function getClubAndEscalao() { let c = getMyClub(); if(state.escalao && state.escalao.trim() !== '') c += ' • ' + state.escalao; return c; }
 function getPlanSeasons() { return Array.from(new Set([state.currentSeason, ...state.trainings.map(x=>getEntitySeason(x)), ...state.diary.map(x=>getEntitySeason(x))])).sort().reverse(); }
 function getSeasonsList() { return Array.from(new Set([state.currentSeason, ...state.matches.map(m=>getEntitySeason(m))])).sort().reverse(); }
-
 window.shareContent = function(text) {
   if (navigator.share) { navigator.share({ title: 'Coachfolio', text: text }).then(()=>showToast(t('msg_copied'))).catch((e)=>{ if(e.name !== 'AbortError') fallbackCopy(text); }); } 
   else { fallbackCopy(text); }
@@ -756,6 +758,17 @@ function playerName(id){
 function eligiblePlayers(){ return sortPlayerObjs((state.roster || []).filter(p => p && p.active !== false)); }
 function formatMatchTime(ms){ const totalSecs = Math.floor(ms / 1000); const mm = Math.floor(totalSecs / 60); const ss = totalSecs % 60; return String(mm).padStart(2,'0') + ':' + String(ss).padStart(2,'0'); }
 function getMatchElapsedMs(m){ if(!m.timer) return 0; let total = m.timer.elapsedMs; if(m.timer.isRunning) total += (Date.now() - m.timer.lastStartTs); return total; }
+window.getMatchDisplayTimeMs = function(m) {
+    if(!m.timer) return 0;
+    const totalElapsed = getMatchElapsedMs(m);
+    if(m.timeline && m.timeline.secondHalfStart) {
+        // A Magia da TV: 2ª Parte arranca no tempo base (planeado), independentemente
+        // de a 1ª parte real ter durado mais por causa de descontos.
+        const baseMs = (m.halfDuration || state.defaultHalfDuration || 30) * 60 * 1000;
+        return baseMs + totalElapsed;
+    }
+    return totalElapsed;
+};
 function getMatchMinute(m){ return Math.floor(getMatchElapsedMs(m) / 60000); }
 function timeToMins(tStr) { if(!tStr) return 0; const parts = tStr.split(':'); return parseInt(parts[0], 10)*60 + parseInt(parts[1], 10); }
 function getHalfDuration(m, half) {
@@ -782,7 +795,6 @@ window.getGlobalMinuteDisplay = function(m, half, relMin) {
     }
     return h1Mins + relMin;
 };
-
 function calcPlayerMinutes(m, pId) { 
   if (m.ignoreMinutes) return 0; 
   let totalSecs = 0; 
@@ -793,20 +805,19 @@ function calcPlayerMinutes(m, pId) {
 
     if (isManualHistoric) {
        if (m.isNewManualModel) {
-           // O NOVO MODELO: A duração vem separadinha. Matemática simples!
            durationSecs = half === 1 ? (m.manualHalf1Duration * 60) : (m.manualHalf2Duration * 60);
        } else {
-           // O MODELO ANTIGO: Manter a proteção original para não estragar o que já foi guardado
            if (m.singleHalf && half === 2) { durationSecs = 0; }
            else if (m.singleHalf && half === 1) { durationSecs = (m.manualMatchDuration || 90) * 60; }
            else { durationSecs = ((m.manualMatchDuration || 90) * 60) / 2; }
        }
     } else if (half === 1) {
-       if (m.timer && m.timer.half1DurationMs != null && m.timer.half1DurationMs > 0) { durationSecs = m.timer.half1DurationMs / 1000; }
-       else if (m.timeline && m.timeline.kickoff) { durationSecs = (m.timer && m.timer.elapsedMs ? m.timer.elapsedMs : getMatchElapsedMs(m)) / 1000; }
+       // Math.floor para cortar milissegundos e bater certo com o que os olhos vêem no relógio
+       if (m.timer && m.timer.half1DurationMs != null && m.timer.half1DurationMs > 0) { durationSecs = Math.floor(m.timer.half1DurationMs / 1000); }
+       else if (m.timeline && m.timeline.kickoff) { durationSecs = Math.floor((m.timer && m.timer.elapsedMs ? m.timer.elapsedMs : getMatchElapsedMs(m)) / 1000); }
     } else {
-       if (m.timer && m.timer.half2DurationMs != null && m.timer.half2DurationMs > 0) { durationSecs = m.timer.half2DurationMs / 1000; }
-       else if (m.timeline && m.timeline.secondHalfStart) { durationSecs = (m.timer && m.timer.elapsedMs ? m.timer.elapsedMs : getMatchElapsedMs(m)) / 1000; }
+       if (m.timer && m.timer.half2DurationMs != null && m.timer.half2DurationMs > 0) { durationSecs = Math.floor(m.timer.half2DurationMs / 1000); }
+       else if (m.timeline && m.timeline.secondHalfStart) { durationSecs = Math.floor((m.timer && m.timer.elapsedMs ? m.timer.elapsedMs : getMatchElapsedMs(m)) / 1000); }
     }
 
     if (durationSecs <= 0) return;
@@ -816,7 +827,8 @@ function calcPlayerMinutes(m, pId) {
     let subsInHalf = (m.subs || []).filter(s => s.half === half && !s.isHalftime).sort((a,b) => (a.minute||0) - (b.minute||0)); 
     
     subsInHalf.forEach(sub => { 
-      let subSecs = sub.subMs != null ? (sub.subMs / 1000) : ((sub.minute || 0) * 60);
+      // Arredonda também o momento exato das substituições
+      let subSecs = sub.subMs != null ? Math.floor(sub.subMs / 1000) : ((sub.minute || 0) * 60);
       if (sub.outId === pId && onPitch) { totalSecs += Math.max(0, subSecs - timeOnSecs); onPitch = false; } 
       if (sub.inId === pId && !onPitch) { timeOnSecs = subSecs; onPitch = true; } 
     }); 
@@ -826,7 +838,6 @@ function calcPlayerMinutes(m, pId) {
   if (totalSecs > 0 && totalSecs < 1) totalSecs = 1;
   return Math.round(totalSecs); 
 }
-
 function formatSecsToMinSec(totalSecs) {
   if (!totalSecs || isNaN(totalSecs) || totalSecs <= 0) return "0m 0s";
   const m = Math.floor(totalSecs / 60);
@@ -848,27 +859,38 @@ window.uiUpdateTournamentGame = function(id, field, val){ const g = schForm.game
 window.uiSaveSchedule = function(){
   if(editingSchId) {
     if(!schForm.opp.trim()){ showToast(t('msg_no_opp')); return; } const s = state.schedule.find(x=>x.id===editingSchId);
-    if(s) { s.opponent = escapeHTML(schForm.opp.trim()); s.date = schForm.date || s.date; s.time = schForm.time || s.time; s.type = schForm.type; s.location = schForm.loc; s.phase = escapeHTML((schForm.phase || '').trim()); s.matchday = escapeHTML((schForm.matchday || '').trim()); s.tournamentName = (schForm.type === 'torneio') ? escapeHTML((schForm.tournamentName || '').trim()) : ''; }
+    if(s) { s.opponent = escapeHTML(schForm.opp.trim()); s.date = schForm.date || s.date; s.time = schForm.time || s.time; s.type = schForm.type; s.location = schForm.loc; s.phase = escapeHTML((schForm.phase || '').trim()); s.matchday = escapeHTML((schForm.matchday || '').trim()); s.tournamentName = (schForm.type === 'torneio') ? escapeHTML((schForm.tournamentName || '').trim()) : ''; s.numberOfHalves = schForm.numberOfHalves || 2; s.halfDuration = schForm.halfDuration || state.defaultHalfDuration || 30; }
     state.schedule.sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time)); editingSchId = null; schedulingNew = false; saveState(); render(); showToast(t('msg_sch_saved')); return;
   }
   if(schForm.isBatch){
     if(!schForm.tournamentName.trim()){ showToast(t('msg_no_tour')); return; } const validGames = schForm.games.filter(g => g.opp.trim() !== ''); if(validGames.length === 0){ showToast(t('msg_no_games')); return; }
-    validGames.forEach(g => { state.schedule.push({ id: uid(), opponent: escapeHTML(g.opp.trim()), date: g.date || new Date().toISOString().slice(0,10), time: g.time || '09:00', type: 'torneio', phase: escapeHTML(g.phase.trim()), matchday: escapeHTML(g.matchday.trim()), tournamentName: escapeHTML(schForm.tournamentName.trim()), season: state.currentSeason, location: schForm.loc || 'fora', callup: [] }); }); showToast(t('msg_tour_saved'));
+    validGames.forEach(g => { state.schedule.push({ id: uid(), opponent: escapeHTML(g.opp.trim()), date: g.date || new Date().toISOString().slice(0,10), time: g.time || '09:00', type: 'torneio', phase: escapeHTML(g.phase.trim()), matchday: escapeHTML(g.matchday.trim()), tournamentName: escapeHTML(schForm.tournamentName.trim()), season: state.currentSeason, location: schForm.loc || 'fora', callup: [], numberOfHalves: schForm.numberOfHalves || 2, halfDuration: schForm.halfDuration || state.defaultHalfDuration || 30 }); }); showToast(t('msg_tour_saved'));
   } else {
     if(!schForm.opp.trim()){ showToast(t('msg_no_opp')); return; }
-    state.schedule.push({ id: uid(), opponent: escapeHTML(schForm.opp.trim()), date: schForm.date || new Date().toISOString().slice(0,10), time: schForm.time || '09:00', type: schForm.type || 'amigavel', phase: (schForm.type==='campeonato'||schForm.type==='torneio' ? escapeHTML((schForm.phase||'').trim()) : ''), matchday: (schForm.type==='campeonato'||schForm.type==='torneio' ? escapeHTML((schForm.matchday||'').trim()) : ''), tournamentName: escapeHTML((schForm.tournamentName || '').trim()), season: state.currentSeason, location: schForm.loc || 'casa', callup: [] }); showToast(t('msg_game_saved'));
+    state.schedule.push({ id: uid(), opponent: escapeHTML(schForm.opp.trim()), date: schForm.date || new Date().toISOString().slice(0,10), time: schForm.time || '09:00', type: schForm.type || 'amigavel', phase: (schForm.type==='campeonato'||schForm.type==='torneio' ? escapeHTML((schForm.phase||'').trim()) : ''), matchday: (schForm.type==='campeonato'||schForm.type==='torneio' ? escapeHTML((schForm.matchday||'').trim()) : ''), tournamentName: escapeHTML((schForm.tournamentName || '').trim()), season: state.currentSeason, location: schForm.loc || 'casa', callup: [], numberOfHalves: schForm.numberOfHalves || 2, halfDuration: schForm.halfDuration || state.defaultHalfDuration || 30 }); showToast(t('msg_game_saved'));
   }
   state.schedule.sort((a,b) => new Date(a.date+'T'+a.time) - new Date(b.date+'T'+b.time)); schedulingNew = false; saveState(); render();
 };
 
-window.editSchedule = function(id){ const s = state.schedule.find(x=>x.id===id); if(s){ schForm = { isBatch: false, opp: s.opponent, date: s.date, time: s.time, type: s.type, phase: s.phase||'', matchday: s.matchday||'', loc: s.location, tournamentName: s.tournamentName||'', games: [] }; editingSchId = id; schedulingNew = true; render(); } };
-window.duplicateSchedule = function(id){ const s = state.schedule.find(x=>x.id===id); if(s){ schForm = { isBatch: false, opp: '', date: s.date, time: s.time, type: s.type, phase: s.phase||'', matchday: s.matchday||'', loc: s.location, tournamentName: s.tournamentName||'', games: [] }; editingSchId = null; schedulingNew = true; render(); } };
+window.editSchedule = function(id){ const s = state.schedule.find(x=>x.id===id); if(s){ schForm = { isBatch: false, opp: s.opponent, date: s.date, time: s.time, type: s.type, phase: s.phase||'', matchday: s.matchday||'', loc: s.location, tournamentName: s.tournamentName||'', games: [], numberOfHalves: s.numberOfHalves || 2, halfDuration: s.halfDuration || state.defaultHalfDuration || 30 }; editingSchId = id; schedulingNew = true; render(); } };
+window.duplicateSchedule = function(id){ const s = state.schedule.find(x=>x.id===id); if(s){ schForm = { isBatch: false, opp: '', date: s.date, time: s.time, type: s.type, phase: s.phase||'', matchday: s.matchday||'', loc: s.location, tournamentName: s.tournamentName||'', games: [], numberOfHalves: s.numberOfHalves || 2, halfDuration: s.halfDuration || state.defaultHalfDuration || 30 }; editingSchId = null; schedulingNew = true; render(); } };
 window.deleteSchedule = function(id){ state.schedule = state.schedule.filter(x=>x.id!==id); saveState(); render(); };
-
 window.startScheduledMatch = function(schedId){
   const s = state.schedule.find(x => x.id === schedId); if(!s) return;
   if(getActiveMatch()) { showToast(t('msg_ongoing')); return; }
-  const doStart = () => { state.matches.unshift({ id: uid(), opponent: s.opponent, date: s.date, type: s.type, phase: s.phase || '', matchday: s.matchday || '', season: s.season || state.currentSeason, location: s.location, originalSchedule: s, tournamentName: s.tournamentName || '', finished:false, goals: [], cards: [], subs: [], lineup: [], ratings: {}, capitao: null, timer: { isRunning:false, elapsedMs:0, lastStartTs:null } }); state.schedule = state.schedule.filter(x => x.id !== schedId); saveState(); navigateToTab('jogo'); };
+  const doStart = () => { 
+      state.matches.unshift({ 
+          id: uid(), opponent: s.opponent, date: s.date, type: s.type, phase: s.phase || '', matchday: s.matchday || '', 
+          season: s.season || state.currentSeason, location: s.location, originalSchedule: s, tournamentName: s.tournamentName || '', 
+          finished:false, goals: [], cards: [], subs: [], lineup: [], ratings: {}, capitao: null, 
+          timer: { isRunning:false, elapsedMs:0, lastStartTs:null },
+          numberOfHalves: s.numberOfHalves || 2,
+          halfDuration: s.halfDuration || state.defaultHalfDuration || 30,
+          singleHalf: ((s.numberOfHalves || 2) === 1)
+      }); 
+      state.schedule = state.schedule.filter(x => x.id !== schedId); 
+      saveState(); navigateToHub('jogo'); 
+  };
   
   const currentSch = state.schedule.filter(x => (x.season || state.currentSeason) === state.currentSeason);
   if (currentSch.length > 0 && currentSch[0].id !== schedId) askConfirm(t('msg_warn_order'), doStart); else doStart();
@@ -940,8 +962,8 @@ window.setMatchTimeMark = function(matchId, key){
 
 window.currentHalfFromTimeline = function(m){
   const tl = m.timeline; if(!tl || !tl.kickoff) return null; if(tl.halftime && !tl.secondHalfStart) return 'halftime';
-  const now = String(new Date().getHours()).padStart(2,'0') + ':' + String(new Date().getMinutes()).padStart(2,'0');
-  if(tl && tl.secondHalfStart && now >= tl.secondHalfStart) return 2; return 1;
+  if(tl.secondHalfStart) return 2;
+  return 1;
 };
 // Resolve a parte a usar num evento novo: em jogos de parte única, nunca pergunta — é sempre a 1ª.
 window.resolveEventHalf = function(m){
@@ -1015,20 +1037,16 @@ window.addGoal = function(matchId, type, half, scorerId, assistId, customMin){
   }
 
   m.goals.push({ 
-    id: uid(), 
-    type, 
-    half: half === 'halftime' ? 1 : half, 
+    id: uid(), type, half: half === 'halftime' ? 1 : half, 
     scorerId: type === 'scored' ? scorerId : null, 
     assistId: type === 'scored' ? (assistId || 'none') : null, 
-    minute: minVal 
+    minute: minVal,
+    timestamp: Date.now() 
   }); 
 
-  pending = null; 
-  saveState(); 
-  render(); 
+  pending = null; saveState(); render(); 
 };
 window.deleteGoal = function(matchId, goalId){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; m.goals = m.goals.filter(g=>g.id!==goalId); saveState(); render(); };
-
 window.editEventMinute = function(matchId, kind, eventId){
   const m = state.matches.find(x => x.id === matchId);
   if (!m) return;
@@ -1053,7 +1071,6 @@ window.editEventMinute = function(matchId, kind, eventId){
   render();
   showToast('Minuto atualizado. 🕐');
 };
-
 window.editManualDuration = function(matchId){
   const m = state.matches.find(x => x.id === matchId);
   if (!m) return;
@@ -1066,7 +1083,12 @@ window.editManualDuration = function(matchId){
   render();
   showToast('Duração do jogo atualizada. 🕐');
 };
-window.addCard = function(matchId, playerId, color, half){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; if(!m.cards) m.cards = []; m.cards.push({ id: uid(), playerId, color, half: half==='halftime'?1:half, minute: getMatchMinute(m) }); pendingCard = null; saveState(); render(); };
+window.addCard = function(matchId, playerId, color, half){ 
+    const m = state.matches.find(m=>m.id===matchId); if(!m) return; 
+    if(!m.cards) m.cards = []; 
+    m.cards.push({ id: uid(), playerId, color, half: half==='halftime'?1:half, minute: getMatchMinute(m), timestamp: Date.now() }); 
+    pendingCard = null; saveState(); render(); 
+};
 window.deleteCard = function(matchId, cardId){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; m.cards = m.cards.filter(c=>c.id!==cardId); saveState(); render(); };
 window.confirmSub = function(mId, customMin) { 
   const m = state.matches.find(x => x.id === mId); 
@@ -1086,18 +1108,14 @@ window.confirmSub = function(mId, customMin) {
   }
 
   m.subs.push({ 
-    id: uid(), 
-    outId: pendingSub.outId, 
-    inId: pendingSub.inId, 
-    half: isHT ? 1 : (currentH || 1), 
-    isHalftime: isHT, 
+    id: uid(), outId: pendingSub.outId, inId: pendingSub.inId, 
+    half: isHT ? 1 : (currentH || 1), isHalftime: isHT, 
     minute: minVal,
-    subMs: isHT ? null : (minVal != null ? minVal * 60 * 1000 : getMatchElapsedMs(m))
+    subMs: isHT ? null : (minVal != null ? minVal * 60 * 1000 : getMatchElapsedMs(m)),
+    timestamp: Date.now()
   }); 
 
-  pendingSub = null; 
-  saveState(); 
-  render(); 
+  pendingSub = null; saveState(); render(); 
 };
 window.deleteSub = function(mId, subId) { const m = state.matches.find(x=>x.id===mId); if(!m) return; m.subs = m.subs.filter(s => s.id !== subId); saveState(); render(); };
 window.setCaptain = function(matchId, playerId){ const m = state.matches.find(m=>m.id===matchId); if(m){ m.capitao = playerId; saveState(); } pendingCaptain = false; render(); };
@@ -1205,7 +1223,7 @@ function renderModalHTML(){
          <h3 style="margin-top:0; color:var(--gold);">${t('set_title')}</h3>
          <div style="max-height:65vh; overflow-y:auto; padding-right:5px; margin-bottom:15px;">
              
-             <!-- CLUBE E TEMAS -->
+             <!-- CLUBE, ESCALÃO E TEMPO BASE -->
              <div class="field" style="text-align:left;">
                 <label>${t('set_club')}</label>
                 <div style="display:flex; gap:8px;">
@@ -1215,6 +1233,27 @@ function renderModalHTML(){
                    </button>
                 </div>
              </div>
+             
+             <div class="field" style="text-align:left; margin-top:12px;">
+                <label>Escalão / Categoria</label>
+                <div style="display:flex; gap:8px;">
+                   <input id="escalao-input" type="text" placeholder="Ex: Sub-13" value="${state.escalao||''}" ${state.escalao ? 'disabled style="opacity:0.6;"' : ''} onchange="state.escalao=escapeHTML(this.value); saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">
+                   <button class="btn btn-outline" style="flex:none; padding:0 14px;" onclick="event.stopPropagation(); const inp = document.getElementById('escalao-input'); inp.disabled = !inp.disabled; inp.style.opacity = inp.disabled ? '0.6' : '1'; if(!inp.disabled) inp.focus();">
+                      ${state.escalao ? '🔒' : '✏️'}
+                   </button>
+                </div>
+             </div>
+             
+             <div class="field" style="text-align:left;">
+                <label>Tempo por Parte (Min)</label>
+                <div style="display:flex; gap:8px;">
+                   <input id="tempo-input" type="number" placeholder="Ex: 30" value="${state.defaultHalfDuration||30}" disabled style="opacity:0.6;" onchange="state.defaultHalfDuration=parseInt(this.value, 10)||30; saveState(); document.getElementById('modal-root').innerHTML = renderModalHTML(); render();">
+                   <button class="btn btn-outline" style="flex:none; padding:0 14px;" onclick="event.stopPropagation(); const inp = document.getElementById('tempo-input'); inp.disabled = !inp.disabled; inp.style.opacity = inp.disabled ? '0.6' : '1'; if(!inp.disabled) inp.focus();">
+                      🔒
+                   </button>
+                </div>
+             </div>
+             <div style="font-size:9px; color:var(--muted); text-align:left; margin-top:-4px; margin-bottom:12px;">O Escalão aparecerá nos PDFs. O Tempo será a base para o cronómetro.</div>
 
              <!-- EMBLEMA DO CLUBE COM LOCK -->
              <div class="field" style="text-align:left; margin-top:12px;">
@@ -1300,7 +1339,7 @@ function renderModalHTML(){
          
          <button class="btn" style="width:100%; margin-top:10px; background:#0E211A; color:#fff; border:1px solid var(--line);" onclick="abrirCreditos()">🤝 Créditos & Parceiros</button>
          <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="closeModal()">${t('close')}</button>
-         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v3.3 | COACHFOLIO</div>
+         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v3.4 | COACHFOLIO</div>
        </div>
      </div>`;
   }
@@ -1357,13 +1396,20 @@ function topbarHtml(title){
 function ballIconSvg(){ return `<svg style="width:100%; height:100%;" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="none" stroke="var(--gold)" stroke-width="4"/><polygon points="50,29 63,39 58,55 42,55 37,39" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linejoin="round"/><path d="M50 29 L50 9 M63 39 L81 30 M58 55 L71 71 M42 55 L29 71 M37 39 L19 30" stroke="var(--gold)" stroke-width="3" fill="none" stroke-linecap="round"/></svg>`; }
 
 function matchNarrativeHtml(m, isLocked = false){
-  const tm = m.timeline || {}; const cards = m.cards || []; const subs = m.subs || [];
-  
+  const tm = m.timeline || {}; const cards = m.cards || []; const subs = m.subs || [];  
   const eventsForHalf = (half) => {
-    const goals = m.goals.filter(g=>g.half===half).map(g=>({ type:'goal', minute:g.minute, data:g })); const cds = cards.filter(c=>c.half===half).map(c=>({ type:'card', minute:c.minute, data:c })); const sbs = subs.filter(s=>s.half===half || (half===1 && s.isHalftime)).map(s=>({ type:'sub', minute:s.isHalftime?'INT':s.minute, data:s, isHalftime: s.isHalftime }));
-    return [...goals, ...cds, ...sbs].sort((a,b)=>{ if(a.isHalftime && !b.isHalftime) return 1; if(!a.isHalftime && b.isHalftime) return -1; return (a.minute==null?999:a.minute)-(b.minute==null?999:b.minute); });
+    const goals = m.goals.filter(g=>g.half===half).map(g=>({ type:'goal', minute:g.minute, timestamp:g.timestamp||0, data:g })); 
+    const cds = cards.filter(c=>c.half===half).map(c=>({ type:'card', minute:c.minute, timestamp:c.timestamp||0, data:c })); 
+    const sbs = subs.filter(s=>s.half===half || (half===1 && s.isHalftime)).map(s=>({ type:'sub', minute:s.isHalftime?'INT':s.minute, timestamp:s.timestamp||0, data:s, isHalftime: s.isHalftime }));
+    return [...goals, ...cds, ...sbs].sort((a,b)=>{ 
+      if(a.isHalftime && !b.isHalftime) return 1; 
+      if(!a.isHalftime && b.isHalftime) return -1; 
+      const minA = a.minute==null?999:a.minute;
+      const minB = b.minute==null?999:b.minute;
+      if(minA !== minB) return minA - minB;
+      return a.timestamp - b.timestamp; // Desempate por milissegundo exato
+    });
   };
-
   const formatExactHalf = (ms) => {
     if(ms == null) return '';
     const totalSecs = Math.floor(ms / 1000); const mm = Math.floor(totalSecs / 60); const ss = totalSecs % 60;
@@ -1517,7 +1563,7 @@ function renderHome(){
       <div class="topbar-settings" style="position:absolute; top:0; right:0;" onclick="openSettings()">⚙️</div>
       <div class="home-ball">${ballIconSvg()}</div>
       <h1>${t('home_title')}</h1>
-      <div class="home-sub" style="margin-bottom:2px;">${t('home_sub')}</div>
+      <div class="home-sub" style="margin-bottom:2px; font-size:13px; color:var(--gold);">${getClubAndEscalao()}</div>
       <div style="font-size:11px; color:var(--gold); margin-bottom:14px; font-weight:bold; letter-spacing:0.5px;">by Pedro Silva</div>
       
       ${bdayHtml}
@@ -1547,16 +1593,19 @@ function renderStratSubHeader() {
   </div>`; 
 }
 function renderTeamSubHeader() { return `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${currentTab==='plantel'?'active':''}" onclick="navigateToTab('plantel')" style="font-size:9px; padding:8px 4px;">${t('pl_title')}</div><div class="seg-btn ${currentTab==='stats'?'active':''}" onclick="navigateToTab('stats')" style="font-size:9px; padding:8px 4px;">${t('st_title')}</div>${state.enableFines ? `<div class="seg-btn ${currentTab==='caixinha'?'active':''}" onclick="navigateToTab('caixinha')" style="font-size:9px; padding:8px 4px;">${t('fine_title')}</div>` : ''}${state.enableLeagues ? `<div class="seg-btn ${currentTab==='classificacoes'?'active':''}" onclick="navigateToTab('classificacoes')" style="font-size:9px; padding:8px 4px;">${t('lg_title')}</div>` : ''}</div>`; }
-
 function renderJogo(){
   const m = getActiveMatch();
   if(!m) return `${topbarHtml(t('hub_match_title'))}${renderJogoSubHeader()}<div style="text-align:center; margin-top:40px;"><div class="empty">${t('match_none')}</div><button class="btn btn-gold" style="width:100%; max-width:300px; margin:20px auto 0;" onclick="navigateToTab('calendario')">${t('match_goto_sch')}</button></div>`;
 
-  const scored = m.goals.filter(g=>g.type==='scored').length; const conceded = m.goals.filter(g=>g.type==='conceded').length;
-  const matchStarted = m.timeline && m.timeline.kickoff; const isMatchEnded = m.timeline && m.timeline.fullTime;
+  const scored = m.goals.filter(g=>g.type==='scored').length; 
+  const conceded = m.goals.filter(g=>g.type==='conceded').length;
+  const matchStarted = m.timeline && m.timeline.kickoff; 
+  const isMatchEnded = m.timeline && m.timeline.fullTime;
   const locLabel = (m.location||'casa') === 'casa' ? t('match_home') : t('match_away');
   const isManualMode = !!m.manualMode;
-  const isGameActive = matchStarted || isManualMode; // Jogo considerado ativo (via cronómetro ou manual)
+  const isGameActive = matchStarted || isManualMode; 
+  const isSingleHalf = m.singleHalf || m.numberOfHalves === 1;
+  const needsLineup = state.trackSubs && (!m.lineup || m.lineup.length === 0);
 
   let dynamicPanel = '';
   if(pendingCaptain){
@@ -1574,10 +1623,7 @@ function renderJogo(){
 
     dynamicPanel = `<div class="panel">
       <div class="panel-title">${t('match_scorer')}</div>
-      ${isManualMode ? `<div class="field" style="margin-bottom:10px;">
-        <label>Minuto (a contar desde o início desta parte)</label>
-        <input type="number" id="manual-event-min" placeholder="Ex: 14" value="${document.getElementById('manual-event-min')?.value || ''}" style="text-align:center; font-weight:bold;">
-      </div>` : ''}
+      ${isManualMode ? `<div class="field" style="margin-bottom:10px;"><label>Minuto</label><input type="number" id="manual-event-min" placeholder="Ex: 14" value="${document.getElementById('manual-event-min')?.value || ''}" style="text-align:center; font-weight:bold;"></div>` : ''}
       <div class="grid-btns cols-4">${scorerChips}</div>
       <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button>
     </div>`;
@@ -1585,17 +1631,12 @@ function renderJogo(){
     let currH = pending.half === 'halftime' ? 1 : pending.half; 
     let onPitchIds = (state.trackSubs && m.lineup && m.lineup.length > 0) ? getPlayersOnPitchAtEndOfHalf(m, currH) : eligiblePlayers().map(p=>p.id);
     let availableAssisters = eligiblePlayers().filter(p => onPitchIds.includes(p.id) && p.id !== pending.scorerId);
-    
     let eventMin = document.getElementById('manual-event-min')?.value;
-
     let assistChips = availableAssisters.length ? availableAssisters.map(p=>`<div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, '${p.id}', '${eventMin||''}')">${playerLabel(p)}</div>`).join('') : '';
     
     dynamicPanel = `<div class="panel">
       <div class="panel-title">${t('match_assist')}</div>
-      <div class="grid-btns cols-4">
-        ${assistChips}
-        <div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, 'none', '${eventMin||''}')">${t('match_nobody')}</div>
-      </div>
+      <div class="grid-btns cols-4">${assistChips}<div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, 'none', '${eventMin||''}')">${t('match_nobody')}</div></div>
       <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button>
     </div>`;
   } else if(pendingCard && !pendingCard.half){
@@ -1616,12 +1657,7 @@ function renderJogo(){
      dynamicPanel = `
         <div class="panel" style="border-color:var(--gold);">
            <div class="panel-title" style="color:var(--gold);">${t('match_sub_title')} ${isHT ? `(${t('match_ht')})` : ''}</div>
-           
-           ${(!isHT && isManualMode) ? `<div class="field" style="margin-bottom:10px;">
-             <label>Minuto (a contar desde o início desta parte)</label>
-             <input type="number" id="manual-sub-min" placeholder="Ex: 22" value="${document.getElementById('manual-sub-min')?.value || ''}" style="text-align:center; font-weight:bold;">
-           </div>` : ''}
-
+           ${(!isHT && isManualMode) ? `<div class="field" style="margin-bottom:10px;"><label>Minuto</label><input type="number" id="manual-sub-min" placeholder="Ex: 22" value="${document.getElementById('manual-sub-min')?.value || ''}" style="text-align:center; font-weight:bold;"></div>` : ''}
            <div style="display:flex; gap:10px;">
              <div style="flex:1;">
                <div style="font-size:10px; color:var(--red); text-transform:uppercase; font-weight:600;">${t('match_sub_out')}</div>
@@ -1644,9 +1680,7 @@ function renderJogo(){
      `;
   }
 
-  // Lógica da Equipa Inicial: O painel amarelo e o botão de edição só aparecem ANTES de o jogo iniciar
   let lineupPanel = '';
-  const needsLineup = state.trackSubs && (!m.lineup || m.lineup.length === 0);
   if(needsLineup && !isGameActive) {
      lineupPanel = `<div class="panel" style="border-color:var(--gold);"><div class="panel-title" style="color:var(--gold);">${t('match_start_xi')} (${pendingLineupSet.length}/${state.tacticFormat})</div><div class="grid-btns cols-4">${eligiblePlayers().map(p => `<div class="chip chip-sm ${(pendingLineupSet).includes(p.id) ? 'active-green' : ''}" onclick="togglePendingLineup('${p.id}')">${playerLabel(p)}</div>`).join('')}</div><button class="btn btn-gold" style="width:100%; margin-top:10px;" ${pendingLineupSet.length !== state.tacticFormat ? 'disabled':''} onclick="confirmLineup('${m.id}')">${t('match_conf_xi')}</button></div>`;
   } else if (state.trackSubs && m.lineup && m.lineup.length > 0 && !isGameActive && !isMatchEnded) {
@@ -1665,10 +1699,10 @@ function renderJogo(){
     ${topbarHtml(t('hub_match_title'))}
     ${renderJogoSubHeader()}
     <div class="card chrono-card">
-      <div class="chrono-time" id="live-timer">${isManualMode ? 'HISTÓRICO' : formatMatchTime(getMatchElapsedMs(m))}</div>
-      ${(!m.timeline || !m.timeline.kickoff) ? (!needsLineup ? (!isManualMode ? `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; margin: 10px auto 0; display: block;" onclick="askConfirm('${t('msg_ko')}', ()=>setMatchTimeMark('${m.id}','kickoff'), 'btn-green')">${t('match_kickoff')}</button><button class="btn btn-outline" style="padding:6px 16px; font-size:11px; margin: 10px auto 0; display: block; border-style:dashed;" onclick="askConfirm('Tens a certeza que queres registar este jogo em Modo Histórico? O cronómetro não será utilizado.', ()=>enableManualMode('${m.id}'), 'btn-gold')">📝 Registar Jogo Histórico (Sem Relógio)</button>` : `<div style="font-size:11px; color:var(--gold); text-transform:uppercase; margin-top:10px; font-weight:700;">📝 Modo de Registo Histórico Ativo</div>`) : '') : ''}
-       ${(m.timeline && m.timeline.kickoff && !m.timeline.halftime) ? `<div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">${m.timer.isRunning ? `<button class="btn btn-outline" style="padding:8px 20px; font-size:12px; flex:none; border-color:var(--muted); color:var(--muted);" onclick="pauseMatchTimer('${m.id}')">${t('match_pause')}</button>` : `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; flex:none;" onclick="resumeMatchTimer('${m.id}')">${t('match_resume')}</button>`}<button class="btn btn-ghost" style="padding:8px 20px; font-size:12px; flex:none;" onclick="askConfirm('${t('msg_ht')}', ()=>setMatchTimeMark('${m.id}','halftime'), 'btn-gold')">${t('match_ht')}</button></div>` : ''}
-       ${(m.timeline && m.timeline.halftime && !m.timeline.secondHalfStart) ? `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; margin: 10px auto 0; display: block;" onclick="askConfirm('${t('msg_2nd')}', ()=>setMatchTimeMark('${m.id}','secondHalfStart'), 'btn-green')">${t('match_2nd')}</button>` : ''}
+      <div class="chrono-time" id="live-timer">${isManualMode ? 'HISTÓRICO' : formatMatchTime(window.getMatchDisplayTimeMs(m))}</div>
+      ${(!m.timeline || !m.timeline.kickoff) ? (!needsLineup ? (!isManualMode ? `<button class="btn btn-green" style="padding:8px 20px; font-size:12px; margin: 10px auto 0; display: block;" onclick="askConfirm('${t('msg_ko')}', ()=>setMatchTimeMark('${m.id}','kickoff'), 'btn-green')">${t('match_kickoff')}</button><button class="btn btn-outline" style="padding:6px 16px; font-size:11px; margin: 10px auto 0; display: block; border-style:dashed;" onclick="askConfirm('Tens a certeza que queres registar este jogo em Modo Histórico? O cronómetro não será utilizado.', ()=>enableManualMode('${m.id}'), 'btn-gold')">📝 Registar Jogo Histórico (Sem Relógio)</button>` : `<div style="font-size:11px; color:var(--gold); text-transform:uppercase; margin-top:10px; font-weight:700;">📝 Modo Histórico Ativo</div>`) : '') : ''}
+       ${(m.timeline && m.timeline.kickoff && !m.timeline.halftime && !m.timeline.fullTime) ? `<div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">${m.timer.isRunning ? `<button class="btn btn-outline" style="padding:8px 20px; font-size:12px; flex:none; border-color:var(--muted); color:var(--muted);" onclick="pauseMatchTimer('${m.id}')">${t('match_pause')}</button>` : `<button class="btn btn-gold" style="padding:8px 20px; font-size:12px; flex:none;" onclick="resumeMatchTimer('${m.id}')">${t('match_resume')}</button>`}${isSingleHalf ? `<button class="btn btn-red" style="padding:8px 20px; font-size:12px; flex:none;" onclick="askConfirm('${t('msg_ft')}', ()=>setMatchTimeMark('${m.id}','fullTime'), 'btn-red')">${t('match_ft')}</button>` : `<button class="btn btn-ghost" style="padding:8px 20px; font-size:12px; flex:none;" onclick="askConfirm('${t('msg_ht')}', ()=>setMatchTimeMark('${m.id}','halftime'), 'btn-gold')">${t('match_ht')}</button>`}</div>` : ''}
+       ${(m.timeline && m.timeline.halftime && !m.timeline.secondHalfStart) ? `<button class="btn btn-green" style="padding:8px 20px; font-size:12px; margin: 10px auto 0; display: block;" onclick="askConfirm('${t('msg_2nd')}', ()=>setMatchTimeMark('${m.id}','secondHalfStart'), 'btn-green')">${t('match_2nd')}</button>` : ''}
        ${(m.timeline && m.timeline.secondHalfStart && !m.timeline.fullTime) ? `<div style="display:flex; justify-content:center; gap:8px; margin-top:10px;">${m.timer.isRunning ? `<button class="btn btn-outline" style="padding:8px 12px; font-size:12px; flex:none; border-color:var(--muted); color:var(--muted);" onclick="pauseMatchTimer('${m.id}')">${t('match_pause')}</button>` : `<button class="btn btn-gold" style="padding:8px 12px; font-size:12px; flex:none;" onclick="resumeMatchTimer('${m.id}')">${t('match_resume')}</button>`}<button class="btn btn-red" style="padding:8px 12px; font-size:12px; flex:none;" onclick="askConfirm('${t('msg_ft')}', ()=>setMatchTimeMark('${m.id}','fullTime'), 'btn-red')">${t('match_ft')}</button></div>` : ''}
        ${(isMatchEnded && !m.finished) ? `<div style="font-size:11px; color:var(--red); text-transform:uppercase; margin-top:10px; font-weight:700; letter-spacing: 0.05em;">${t('match_ended')}</div>` : ''}
     </div>
@@ -1686,7 +1720,6 @@ function renderJogo(){
     <button class="btn ${finalBtnStyle}" style="width:100%; margin-top:6px;" onclick="uiFinishMatch()">${finalBtnLabel}</button>
   `;
 }
-
 window.spawnTacticItem = function(kind, playerId) {
     if(!state.tactics) state.tactics = []; const format = state.tacticFormat || 11;
     if(kind === 'own') { const currentOwn = state.tactics.filter(t => t.kind === 'own').length; if(currentOwn >= format) { showToast(t('msg_lim_own', {n:format})); return; } } 
@@ -1818,7 +1851,7 @@ window.exportTacticPDF = function() {
           <img src="${imgData}" style="max-width:100%; max-height:650px; border:2px solid #000; border-radius:8px;">
         </div>
         <div style="margin-top:20px; font-size:11px; color:#666; text-align:center;">
-          Coachfolio v3.3 — Documento de Análise Tática
+          Coachfolio v3.4 — Documento de Análise Tática
         </div>
       </div>`;
       
@@ -2122,7 +2155,6 @@ window.deleteScoutingData = function(schId) {
     render();
   }
 };
-
 window.exportScoutingPDF = function(schId) {
   let s = state.schedule.find(x => x.id === schId);
   if (!s) {
@@ -2147,7 +2179,7 @@ window.exportScoutingPDF = function(schId) {
       <div>
         <h1 style="font-size:22px; margin:0; text-transform:uppercase; color:#000;">RELATÓRIO DE SCOUTING — ADVERSÁRIO</h1>
         <p style="font-size:18px; font-weight:bold; margin:4px 0 0 0; color:#333;">Adversário: ${s.opponent || 'N/D'}</p>
-        <p style="font-size:11px; color:#555; margin:3px 0 0 0;">Clube: <b>${getMyClub()}</b> | Época: <b>${s.season || state.currentSeason}</b></p>
+        <p style="font-size:11px; color:#555; margin:3px 0 0 0;">Clube: <b>${getClubAndEscalao()}</b> | Época: <b>${s.season || state.currentSeason}</b></p>
       </div>
       ${getClubLogoHtml()}
     </div>
@@ -2189,7 +2221,7 @@ window.exportScoutingPDF = function(schId) {
     <!-- RODAPÉ -->
     <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
       <div style="font-size:10px; color:#666;">
-        • Documento de Análise de Scouting — Coachfolio v3.3
+        • Documento de Análise de Scouting — Coachfolio v3.4
       </div>
       <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">
         O Observador / Treinador
@@ -2200,30 +2232,32 @@ window.exportScoutingPDF = function(schId) {
   printArea.innerHTML = html;
   window.print();
 };
-
 function renderCalendario(){
   if(schedulingNew){
     if(!schForm.date) schForm.date = new Date().toISOString().slice(0,10);
+    if(schForm.numberOfHalves === undefined) schForm.numberOfHalves = 2;
+    if(schForm.halfDuration === undefined) schForm.halfDuration = state.defaultHalfDuration || 30;
     if(!schForm.games || schForm.games.length===0) schForm.games = [{id: uid(), phase: '', matchday: '', opp: '', date: schForm.date, time: '09:00'}];
     return `${topbarHtml(editingSchId ? t('sch_edit') : t('sch_title'))}${renderPlanSubHeader()}
       ${!editingSchId ? `<div class="seg" style="margin-bottom:16px;"><div class="seg-btn ${!schForm.isBatch?'active':''}" onclick="schForm.isBatch=false; render()">${t('sch_single')}</div><div class="seg-btn ${schForm.isBatch?'active':''}" onclick="schForm.isBatch=true; render()">${t('sch_multi')}</div></div>` : ''}
-      ${schForm.isBatch ? `<div class="card"><div class="field"><label>${t('sch_tour_name')}</label><input type="text" placeholder="${t('sch_tour_ph')}" value="${schForm.tournamentName||''}" oninput="schForm.tournamentName=this.value"></div><div class="field"><label>${t('sch_loc_gen')}</label><div class="seg"><div class="seg-btn ${schForm.loc==='casa'?'active':''}" onclick="schForm.loc='casa'; render()">${t('match_home')}</div><div class="seg-btn ${schForm.loc==='fora'?'active':''}" onclick="schForm.loc='fora'; render()">${t('match_away')}</div></div></div></div><div class="section-title">${t('sch_tour_games')}</div>
-      ${schForm.games.map((g, i) => `<div class="card" style="background:var(--surface-2); border-color:var(--gold-dim); margin-bottom:8px; padding:12px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"><b style="font-size:13px; color:var(--gold);">${t('sch_game')} ${i+1}</b><button class="quick-del" onclick="uiRemoveTournamentGame('${g.id}')">✕</button></div><div class="grid-btns" style="margin-bottom:8px;"><div class="field" style="margin-bottom:0;"><input type="text" placeholder="${t('sch_phase_ph')}" value="${g.phase}" oninput="uiUpdateTournamentGame('${g.id}', 'phase', this.value)"></div><div class="field" style="margin-bottom:0;"><input type="text" placeholder="${t('sch_matchday_ph')}" value="${g.matchday}" oninput="uiUpdateTournamentGame('${g.id}', 'matchday', this.value)"></div></div><div class="field" style="margin-bottom:8px;"><input type="text" placeholder="${t('sch_opp')}" value="${g.opp}" oninput="uiUpdateTournamentGame('${g.id}', 'opp', this.value)"></div><div class="grid-btns"><div class="field" style="margin-bottom:0;"><input type="date" value="${g.date}" oninput="uiUpdateTournamentGame('${g.id}', 'date', this.value)"></div><div class="field" style="margin-bottom:0;"><input type="time" value="${g.time}" oninput="uiUpdateTournamentGame('${g.id}', 'time', this.value)"></div></div></div>`).join('')}<button class="btn btn-outline" style="width:100%; margin-bottom:16px; border-style:dashed;" onclick="uiAddTournamentGame()">${t('sch_add_game')}</button>` : `<div class="card"><div class="field"><label>${t('sch_opp')}</label><input id="sch-opp" type="text" placeholder="${t('sch_opp_ph')}" value="${schForm.opp}" oninput="schForm.opp=this.value"></div><div class="grid-btns"><div class="field"><label>${t('sch_date')}</label><input id="sch-date" type="date" value="${schForm.date}" oninput="schForm.date=this.value"></div><div class="field"><label>${t('sch_time')}</label><input id="sch-time" type="time" value="${schForm.time}" oninput="schForm.time=this.value"></div></div><div class="field"><label>${t('sch_loc_gen')}</label><div class="seg"><div class="seg-btn ${schForm.loc==='casa'?'active':''}" onclick="schForm.loc='casa'; render()">${t('match_home')}</div><div class="seg-btn ${schForm.loc==='fora'?'active':''}" onclick="schForm.loc='fora'; render()">${t('match_away')}</div></div></div><div class="field" style="margin-bottom: ${schForm.type!=='amigavel' ? '12px' : '0'};"><label>${t('sch_type')}</label><div class="seg"><div class="seg-btn ${schForm.type==='amigavel'?'active':''}" onclick="schForm.type='amigavel'; render()">${t('sch_friendly')}</div><div class="seg-btn ${schForm.type==='campeonato'?'active':''}" onclick="schForm.type='campeonato'; render()">${t('sch_champ')}</div><div class="seg-btn ${schForm.type==='torneio'?'active':''}" onclick="schForm.type='torneio'; render()">${t('sch_tour')}</div></div></div>${schForm.type === 'torneio' ? `<div class="field" style="margin-bottom:12px;"><label>${t('sch_tour_name')}</label><input type="text" placeholder="${t('sch_tour_ph')}" value="${schForm.tournamentName||''}" oninput="schForm.tournamentName=this.value"></div>` : ''}${schForm.type === 'torneio' || schForm.type === 'campeonato' ? `<div class="grid-btns"><div class="field" style="margin-bottom:0;"><label>${t('sch_phase')}</label><input type="text" placeholder="${t('sch_phase_ph')}" value="${schForm.phase||''}" oninput="schForm.phase=this.value"></div><div class="field" style="margin-bottom:0;"><label>${t('sch_matchday')}</label><input type="text" placeholder="${t('sch_matchday_ph')}" value="${schForm.matchday||''}" oninput="schForm.matchday=this.value"></div></div>` : ''}</div>`}
+      ${schForm.isBatch ? `<div class="card"><div class="field"><label>${t('sch_tour_name')}</label><input type="text" placeholder="${t('sch_tour_ph')}" value="${schForm.tournamentName||''}" oninput="schForm.tournamentName=this.value"></div>
+      <div class="grid-btns"><div class="field" style="margin-bottom:0;"><label>Nº de Partes</label><div class="seg" style="margin-top:0;"><div class="seg-btn ${schForm.numberOfHalves===1?'active':''}" onclick="schForm.numberOfHalves=1; render()">1 Parte</div><div class="seg-btn ${schForm.numberOfHalves!==1?'active':''}" onclick="schForm.numberOfHalves=2; render()">2 Partes</div></div></div><div class="field" style="margin-bottom:0;"><label>Tempo/Parte (Min)</label><input type="number" value="${schForm.halfDuration}" oninput="schForm.halfDuration=parseInt(this.value, 10)||30"></div></div>
+      <div class="field" style="margin-top:12px;"><label>${t('sch_loc_gen')}</label><div class="seg"><div class="seg-btn ${schForm.loc==='casa'?'active':''}" onclick="schForm.loc='casa'; render()">${t('match_home')}</div><div class="seg-btn ${schForm.loc==='fora'?'active':''}" onclick="schForm.loc='fora'; render()">${t('match_away')}</div></div></div></div><div class="section-title">${t('sch_tour_games')}</div>
+      ${schForm.games.map((g, i) => `<div class="card" style="background:var(--surface-2); border-color:var(--gold-dim); margin-bottom:8px; padding:12px;"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"><b style="font-size:13px; color:var(--gold);">${t('sch_game')} ${i+1}</b><button class="quick-del" onclick="uiRemoveTournamentGame('${g.id}')">✕</button></div><div class="grid-btns" style="margin-bottom:8px;"><div class="field" style="margin-bottom:0;"><input type="text" placeholder="${t('sch_phase_ph')}" value="${g.phase}" oninput="uiUpdateTournamentGame('${g.id}', 'phase', this.value)"></div><div class="field" style="margin-bottom:0;"><input type="text" placeholder="${t('sch_matchday_ph')}" value="${g.matchday}" oninput="uiUpdateTournamentGame('${g.id}', 'matchday', this.value)"></div></div><div class="field" style="margin-bottom:8px;"><input type="text" placeholder="${t('sch_opp')}" value="${g.opp}" oninput="uiUpdateTournamentGame('${g.id}', 'opp', this.value)"></div><div class="grid-btns"><div class="field" style="margin-bottom:0;"><input type="date" value="${g.date}" oninput="uiUpdateTournamentGame('${g.id}', 'date', this.value)"></div><div class="field" style="margin-bottom:0;"><input type="time" value="${g.time}" oninput="uiUpdateTournamentGame('${g.id}', 'time', this.value)"></div></div></div>`).join('')}<button class="btn btn-outline" style="width:100%; margin-bottom:16px; border-style:dashed;" onclick="uiAddTournamentGame()">${t('sch_add_game')}</button>` : `<div class="card"><div class="field"><label>${t('sch_opp')}</label><input id="sch-opp" type="text" placeholder="${t('sch_opp_ph')}" value="${schForm.opp}" oninput="schForm.opp=this.value"></div><div class="grid-btns"><div class="field"><label>${t('sch_date')}</label><input id="sch-date" type="date" value="${schForm.date}" oninput="schForm.date=this.value"></div><div class="field"><label>${t('sch_time')}</label><input id="sch-time" type="time" value="${schForm.time}" oninput="schForm.time=this.value"></div></div>
+      <div class="grid-btns"><div class="field" style="margin-bottom:0;"><label>Nº de Partes</label><div class="seg" style="margin-top:0;"><div class="seg-btn ${schForm.numberOfHalves===1?'active':''}" onclick="schForm.numberOfHalves=1; render()">1 Parte</div><div class="seg-btn ${schForm.numberOfHalves!==1?'active':''}" onclick="schForm.numberOfHalves=2; render()">2 Partes</div></div></div><div class="field" style="margin-bottom:0;"><label>Tempo/Parte (Min)</label><input type="number" value="${schForm.halfDuration}" oninput="schForm.halfDuration=parseInt(this.value, 10)||30"></div></div>
+      <div class="field" style="margin-top:12px;"><label>${t('sch_loc_gen')}</label><div class="seg"><div class="seg-btn ${schForm.loc==='casa'?'active':''}" onclick="schForm.loc='casa'; render()">${t('match_home')}</div><div class="seg-btn ${schForm.loc==='fora'?'active':''}" onclick="schForm.loc='fora'; render()">${t('match_away')}</div></div></div><div class="field" style="margin-bottom: ${schForm.type!=='amigavel' ? '12px' : '0'};"><label>${t('sch_type')}</label><div class="seg"><div class="seg-btn ${schForm.type==='amigavel'?'active':''}" onclick="schForm.type='amigavel'; render()">${t('sch_friendly')}</div><div class="seg-btn ${schForm.type==='campeonato'?'active':''}" onclick="schForm.type='campeonato'; render()">${t('sch_champ')}</div><div class="seg-btn ${schForm.type==='torneio'?'active':''}" onclick="schForm.type='torneio'; render()">${t('sch_tour')}</div></div></div>${schForm.type === 'torneio' ? `<div class="field" style="margin-bottom:12px;"><label>${t('sch_tour_name')}</label><input type="text" placeholder="${t('sch_tour_ph')}" value="${schForm.tournamentName||''}" oninput="schForm.tournamentName=this.value"></div>` : ''}${schForm.type === 'torneio' || schForm.type === 'campeonato' ? `<div class="grid-btns"><div class="field" style="margin-bottom:0;"><label>${t('sch_phase')}</label><input type="text" placeholder="${t('sch_phase_ph')}" value="${schForm.phase||''}" oninput="schForm.phase=this.value"></div><div class="field" style="margin-bottom:0;"><label>${t('sch_matchday')}</label><input type="text" placeholder="${t('sch_matchday_ph')}" value="${schForm.matchday||''}" oninput="schForm.matchday=this.value"></div></div>` : ''}</div>`}
       <button class="btn btn-gold" style="width:100%; margin-bottom:10px;" onclick="uiSaveSchedule()">${t('sch_save')}</button><button class="btn btn-outline" style="width:100%;" onclick="schedulingNew=false; editingSchId=null; render()">${t('cancel')}</button>`;
   }
   
   const currentSch = state.schedule.filter(s => (s.season || state.currentSeason) === state.currentSeason);
   
-  return `${topbarHtml(t('hub_plan_title'))}${renderPlanSubHeader()}<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="schForm={isBatch:false, opp:'', date:'', time:'09:00', type:'amigavel', loc:'casa', phase:'', matchday:'', tournamentName:'', games:[]}; editingSchId=null; schedulingNew=true; render()">${t('sch_new')}</button>${currentSch.length ? currentSch.map(s => { const open = expandedSchedule === s.id; const locLabel = s.location === 'casa' ? t('match_home') : t('match_away'); return `<div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('.chip')) { expandedSchedule = expandedSchedule==='${s.id}' ? null : '${s.id}'; render(); }"><div class="match-head-row"><div class="match-head" style="flex:1;"><div><div class="opp">${s.type==='torneio'?`<span style="color:var(--gold); font-size:11px; display:block; text-transform:uppercase; margin-bottom:2px;">🏆 ${s.tournamentName}${s.phase?' - '+s.phase:''}${s.matchday?' (Jornada '+s.matchday+')':''}</span>`:''}${s.type==='campeonato'&&s.phase?`<span style="color:var(--gold); font-size:11px; display:block; text-transform:uppercase; margin-bottom:2px;">🏆 ${s.phase}${s.matchday?' (Jornada '+s.matchday+')':''}</span>`:''}${s.opponent} <span class="badge-loc ${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home'?'casa':'fora'}">${locLabel}</span></div><div class="date">${s.date.split('-').reverse().join('/')} às ${s.time}</div></div></div><div style="display:flex; gap:6px;"><button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); editSchedule('${s.id}')" title="${t('edit')}"><svg style="width:16px; height:16px; transform:translateY(2px);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); duplicateSchedule('${s.id}')" title="Duplicar">📑</button><button class="quick-del" style="color:var(--gold);" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')" title="Iniciar">▶</button><button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sch')}', () => deleteSchedule('${s.id}'))" title="${t('del')}">🗑</button></div></div>${open ? `<div class="goal-list">
+  return `${topbarHtml(t('hub_plan_title'))}${renderPlanSubHeader()}<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="schForm={isBatch:false, opp:'', date:'', time:'09:00', type:'amigavel', loc:'casa', phase:'', matchday:'', tournamentName:'', games:[], numberOfHalves: 2, halfDuration: state.defaultHalfDuration||30 }; editingSchId=null; schedulingNew=true; render()">${t('sch_new')}</button>${currentSch.length ? currentSch.map(s => { const open = expandedSchedule === s.id; const locLabel = s.location === 'casa' ? t('match_home') : t('match_away'); return `<div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('.chip')) { expandedSchedule = expandedSchedule==='${s.id}' ? null : '${s.id}'; render(); }"><div class="match-head-row"><div class="match-head" style="flex:1;"><div><div class="opp">${s.type==='torneio'?`<span style="color:var(--gold); font-size:11px; display:block; text-transform:uppercase; margin-bottom:2px;">🏆 ${s.tournamentName}${s.phase?' - '+s.phase:''}${s.matchday?' (Jornada '+s.matchday+')':''}</span>`:''}${s.type==='campeonato'&&s.phase?`<span style="color:var(--gold); font-size:11px; display:block; text-transform:uppercase; margin-bottom:2px;">🏆 ${s.phase}${s.matchday?' (Jornada '+s.matchday+')':''}</span>`:''}${s.opponent} <span class="badge-loc ${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home'?'casa':'fora'}">${locLabel}</span></div><div class="date">${s.date.split('-').reverse().join('/')} às ${s.time} | ${s.numberOfHalves || 2}P de ${s.halfDuration || state.defaultHalfDuration || 30}'</div></div></div><div style="display:flex; gap:6px;"><button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); editSchedule('${s.id}')" title="${t('edit')}"><svg style="width:16px; height:16px; transform:translateY(2px);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="quick-del" style="color:var(--muted);" onclick="event.stopPropagation(); duplicateSchedule('${s.id}')" title="Duplicar">📑</button><button class="quick-del" style="color:var(--gold);" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')" title="Iniciar">▶</button><button class="quick-del" onclick="event.stopPropagation(); askConfirm('${t('msg_del_sch')}', () => deleteSchedule('${s.id}'))" title="${t('del')}">🗑</button></div></div>${open ? `<div class="goal-list">
     <div class="panel-title" style="margin-bottom:8px;">🏃 ${t('sch_callup')} (${s.callup.length})</div>
     <div class="grid-btns cols-4">${eligiblePlayers().map(p=>`<div class="chip chip-sm ${s.callup.includes(p.id)?'active-green':''}" onclick="event.stopPropagation(); window.toggleCallup('${s.id}', '${p.id}')">${playerLabel(p)}</div>`).join('')}</div>
-    
     <div class="panel-title" style="margin-top:12px; margin-bottom:8px; color:var(--gold);">👔 Equipa Técnica Presença</div>
     <div class="grid-btns cols-4">${(state.staff || []).map(st => `<div class="chip chip-sm ${(s.staffCallup || []).includes(st.id)?'active-green':''}" onclick="event.stopPropagation(); window.toggleStaffCallup('${s.id}', '${st.id}')">${st.name}</div>`).join('')}</div>
-    
     <div class="btn-row" style="margin-top:12px;"><button class="btn btn-green" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.copyCallup('${s.id}')">Enviar WhatsApp 📋</button><button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.exportCallupPDF('${s.id}')">📄 Imprimir PDF</button><button class="btn btn-ghost" style="font-size:11px; padding:10px; color:var(--gold); border:1px solid var(--gold-dim);" onclick="event.stopPropagation(); window.openScouting('${s.id}')">👁️ Scouting</button>${s.scouting ? `<button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.exportScoutingPDF('${s.id}')">📄 PDF Scouting</button>` : ''}<button class="btn btn-ghost" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')">${t('sch_start')}</button></div></div>` : ''}</div>`; }).join('') : `<div class="empty">${t('sch_none')}</div>`}`;
 }
-
 window.uiSaveTraining = function() {
   if (!trainingForm) return;
 
@@ -2561,7 +2595,6 @@ function buildMatchReportHTML(m){
 
   if(squadIds.length === 0) { squadIds = eligiblePlayers().map(p => p.id); }
   
-  // Hierarquia: Titulares > Suplentes Utilizados > Não Utilizados
   const squadPlayers = squadIds.map(id => (state.roster || []).find(p => p.id === id)).filter(Boolean);
   const starters = []; const usedSubs = []; const unused = [];
 
@@ -2583,14 +2616,11 @@ function buildMatchReportHTML(m){
   sortedSquad.forEach(p => {
     const isStarter = (m.lineup||[]).includes(p.id);
     const wasSubbedIn = (m.subs||[]).some(s => s.inId === p.id);
-    
     let secs = calcPlayerMinutes(m, p.id);
-    let mins = Math.round(secs / 60);
-
+    let minsStr = formatSecsToMinSec(secs);
     const r = (m.ratings && m.ratings[p.id]) ? `${m.ratings[p.id]}★` : '-';
     let statusLabel = isStarter ? '<b>(XI)</b>' : (wasSubbedIn ? '(Sup)' : '(NC)');
-    
-    lineupHtml += `<tr><td style="text-align:left;">${playerLabel(p)} ${statusLabel}</td><td>${mins}'</td><td>${r}</td></tr>`;
+    lineupHtml += `<tr><td style="text-align:left;">${playerLabel(p)} ${statusLabel}</td><td style="white-space:nowrap; padding:0 6px;">${minsStr}</td><td>${r}</td></tr>`;
   });
 
   let subsHtml = '';
@@ -2628,7 +2658,7 @@ function buildMatchReportHTML(m){
       <div>
         <h1 style="margin:0;">Relatório de Jogo</h1>
         <p style="font-size:18px; font-weight:bold; margin:5px 0 0;">${getMyClub()} ${sc} - ${co} ${m.opponent} (${locLabel})</p>
-        <p style="margin:5px 0 0;">${dateStr} | Época: ${m.season||state.currentSeason} ${m.capitao ? ' | © Capitão: ' + playerName(m.capitao) : ''} | Duração Real: ${totalMatchMins}'</p>
+        <p style="margin:5px 0 0;"><b>${getClubAndEscalao()}</b> | ${dateStr} | Época: ${m.season||state.currentSeason} ${m.capitao ? ' | © Capitão: ' + playerName(m.capitao) : ''} | Duração Real: ${totalMatchMins}'</p>
       </div>
       ${getClubLogoHtml()}
     </div>
@@ -2641,7 +2671,7 @@ function buildMatchReportHTML(m){
         <h3>Substituições</h3>
         <table><tr><th>Min</th><th style="text-align:left;">Saiu</th><th style="text-align:left;">Entrou</th></tr>${subsHtml||'<tr><td colspan="3">Sem registo</td></tr>'}</table>
         <h3 style="margin-top:15px;">Equipa Técnica Presente</h3>
-        <table><tr><th style="text-align:left;">Nome</th><th>Função</th></tr>${staffRowsHtml}</table>
+        <table><tr><th style="text-align:left;">Jogador</th><th style="width:70px;">Min</th><th style="width:40px;">Aval</th></tr>
         <h3 style="margin-top:15px;">Cartões</h3>
         <table><tr><th>Min</th><th style="text-align:left;">Jogador</th></tr>${cardsHtml||'<tr><td colspan="2">Sem registo</td></tr>'}</table>
       </div>
@@ -2654,7 +2684,6 @@ function buildMatchReportHTML(m){
 
   return html;
 }
-
 window.exportMatchPDF = function(mId) {
   const m = state.matches.find(x => x.id === mId);
   if (!m) return;
@@ -2684,7 +2713,6 @@ window.exportMatchPDF = function(mId) {
 
   if (squadIds.length === 0) { squadIds = eligiblePlayers().map(p => p.id); }
   
-  // Hierarquia: Titulares > Suplentes Utilizados > Não Utilizados
   const squadPlayers = squadIds.map(id => (state.roster || []).find(p => p.id === id)).filter(Boolean);
   const starters = []; const usedSubs = []; const unused = [];
 
@@ -2706,14 +2734,13 @@ window.exportMatchPDF = function(mId) {
   sortedSquad.forEach(p => {
     const isStarter = (m.lineup || []).includes(p.id);
     const wasSubbedIn = (m.subs || []).some(s => s.inId === p.id);
-    
     let secs = calcPlayerMinutes(m, p.id);
-    let mins = Math.round(secs / 60);
-
+    let minsStr = formatSecsToMinSec(secs); // Formata em minutos e segundos (ex: 3m 25s)
     const r = (m.ratings && m.ratings[p.id]) ? `${m.ratings[p.id]}★` : '-';
     let statusLabel = isStarter ? '<b>(XI)</b>' : (wasSubbedIn ? '(Sup)' : '(NC)');
     
-    lineupHtml += `<tr><td style="text-align:left; padding-left:8px;">${playerLabel(p)} ${statusLabel}</td><td>${mins}'</td><td>${r}</td></tr>`;
+    // Tabela com white-space:nowrap e padding correto para manter o tempo numa linha só
+    lineupHtml += `<tr><td style="text-align:left; padding-left:8px;">${playerLabel(p)} ${statusLabel}</td><td style="white-space:nowrap; text-align:center; padding:0 4px;">${minsStr}</td><td style="text-align:center;">${r}</td></tr>`;
   });
 
   let subsHtml = '';
@@ -2755,22 +2782,21 @@ window.exportMatchPDF = function(mId) {
       <div>
         <h1 style="font-size:22px; margin:0; text-transform:uppercase; color:#000;">RELATÓRIO DE JOGO</h1>
         <p style="font-size:18px; font-weight:bold; margin:4px 0 0 0; color:#333;">${getMyClub()} ${sc} - ${co} ${m.opponent || 'Adversário'} (${locLabel})</p>
-        <p style="font-size:11px; color:#555; margin:3px 0 0 0;">${dateStr} | Época: <b>${m.season || state.currentSeason}</b> ${m.capitao ? ' | © Capitão: ' + playerName(m.capitao) : ''} | Duração Real: <b>${totalMatchMins}'</b></p>
+        <p style="font-size:11px; color:#555; margin:3px 0 0 0;"><b>${getClubAndEscalao()}</b> | ${dateStr} | Época: <b>${m.season || state.currentSeason}</b> ${m.capitao ? ' | © Capitão: ' + playerName(m.capitao) : ''} | Duração Real: <b>${totalMatchMins}'</b></p>
       </div>
       ${getClubLogoHtml()}
     </div>
 
     <div style="display:flex; gap:20px; margin-bottom:20px; align-items:flex-start;">
-      <!-- COLUNA DA ESQUERDA -->
       <div style="flex:1.2;">
         <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">Convocatória e Minutos (${sortedSquad.length} Jogadores)</h3>
         <table style="width:100%; border-collapse:collapse; font-size:11px;">
-          <thead><tr><th style="text-align:left; padding-left:8px;">Jogador</th><th style="width:45px;">Min</th><th style="width:45px;">Aval</th></tr></thead>
+          <!-- Aumentámos a largura da coluna "Min" para 75px para caber sempre numa linha só -->
+          <thead><tr><th style="text-align:left; padding-left:8px;">Jogador</th><th style="width:75px; text-align:center;">Min</th><th style="width:40px; text-align:center;">Aval</th></tr></thead>
           <tbody>${lineupHtml || '<tr><td colspan="3" style="text-align:center; padding:6px;">Sem registo</td></tr>'}</tbody>
         </table>
       </div>
 
-      <!-- COLUNA DA DIREITA -->
       <div style="flex:1;">
         <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">Substituições</h3>
         <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:12px;">
@@ -2793,21 +2819,19 @@ window.exportMatchPDF = function(mId) {
       </div>
     </div>
 
-    <!-- TABELA DE GOLOS E OCORRÊNCIAS -->
     <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">Golos e Ocorrências</h3>
     <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:15px;">
       <thead><tr><th style="width:50px;">Min</th><th style="text-align:left; padding-left:10px;">Evento</th></tr></thead>
       <tbody>${goalsHtml || '<tr><td colspan="2" style="text-align:center; padding:6px; color:#666;">Sem golos registados</td></tr>'}</tbody>
     </table>
 
-    <!-- NOTAS DO TREINADOR -->
     ${m.notes ? `
     <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">Notas do Treinador</h3>
     <p style="white-space:pre-wrap; border:1px solid #CCC; padding:10px; border-radius:6px; background:#FFF; min-height:50px; font-size:11px; line-height:1.4; color:#333; margin-bottom:15px;">${m.notes}</p>
     ` : ''}
 
     <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:flex-end;">
-      <div style="font-size:10px; color:#666;">• Ficha de jogo gerada via Coachfolio v3.3</div>
+      <div style="font-size:10px; color:#666;">• Ficha de jogo gerada via Coachfolio v3.4</div>
       <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">A Equipa Técnica</div>
     </div>
   </div>`;
@@ -2815,7 +2839,6 @@ window.exportMatchPDF = function(mId) {
   printArea.innerHTML = html;
   window.print();
 };
-
 window.exportSeasonPDF = function(season){
   const seasonId = season || state.currentSeason;
   const seasonMatches = (state.matches || [])
@@ -3017,7 +3040,6 @@ function computeTrainingMetricsForMatches(matches){
   const pct = minutosOferecidos > 0 ? Math.round((minutosCumpridos / minutosOferecidos) * 100) : null;
   return { count: trainingsInRange.length, pct, startDate, endDate };
 }
-
 window.exportGlobalStatsPDF = function(){
   const activeSeason = window.statsSeasonFilter === 'todas' ? 'TUDO' : (window.statsSeasonFilter || state.currentSeason);
   const s = computeStats(statsFilter, activeSeason, statsPhaseFilter, statsTournamentFilter);
@@ -3053,7 +3075,7 @@ window.exportGlobalStatsPDF = function(){
       <div>
         <h1 style="font-size:20px; margin:0; text-transform:uppercase; color:#000;">RELATÓRIO CONSOLIDADO</h1>
         <p style="font-size:14px; font-weight:bold; margin:4px 0 0 0; color:#333;">${filterLabel}</p>
-        <p style="font-size:11px; color:#555; margin:3px 0 0 0;">Clube: <b>${getMyClub()}</b> | Época: <b>${activeSeason === 'TUDO' ? 'Todas' : activeSeason}</b></p>
+        <p style="font-size:11px; color:#555; margin:3px 0 0 0;">Clube: <b>${getClubAndEscalao()}</b> | Época: <b>${activeSeason === 'TUDO' ? 'Todas' : activeSeason}</b></p>
       </div>
       ${getClubLogoHtml()}
     </div>
@@ -3107,23 +3129,24 @@ window.exportGlobalStatsPDF = function(){
     </div>
 
     <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
-      <div style="font-size:10px; color:#666;">• Relatório Consolidado — Coachfolio v3.3</div>
-      <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">O Treinador</div>
+      <div style="font-size:10px; color:#666;">• Relatório Consolidado — Coachfolio v3.4</div>
+      <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">
+        O Treinador
+      </div>
     </div>
   </div>`;
 
   printArea.innerHTML = html;
   window.print();
 };
-
 window.statsSeasonFilter = undefined;
 
 function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason) {
-  let golos = 0, assistencias = 0, amarelos = 0, vermelhos = 0, somaAvaliacoes = 0, numAvaliacoes = 0, faltasTreino = 0, jogosTitular = 0, totalSegundosJogo = 0, presencasTreino = 0, jogosConvocado = 0;
+  let golos = 0, assistencias = 0, amarelos = 0, vermelhos = 0, somaAvaliacoes = 0, numAvaliacoes = 0, faltasTreino = 0, jogosTitular = 0, totalSegundosJogo = 0, presencasTreino = 0, jogosConvocado = 0, jogosUtilizado = 0;
   let minutosTreinoCumpridos = 0, minutosTreinoTotais = 0, golosSofridos = 0;
   
   if (!IS_LICENSED || !state || !playerId) {
-    return { golos:0, assistencias:0, amarelos:0, vermelhos:0, media:'-', faltasTreino:0, presencasTreino:0, totalTreinos:0, minutosTreinoCumpridos:0, minutosTreinoTotais:0, jogosTitular:0, jogosConvocado:0, minutos:"0m 0s", totalSegundosJogo:0, golosSofridos:0 };
+    return { golos:0, assistencias:0, amarelos:0, vermelhos:0, media:'-', faltasTreino:0, presencasTreino:0, totalTreinos:0, minutosTreinoCumpridos:0, minutosTreinoTotais:0, jogosTitular:0, jogosConvocado:0, jogosUtilizado:0, minutos:"0m 0s", totalSegundosJogo:0, golosSofridos:0 };
   }
 
   // 1. CALCULAR A FASQUIA GLOBAL INAMOVÍVEL DA EQUIPA
@@ -3140,7 +3163,10 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
   const isGK = pInfo && typeof pInfo.positions === 'string' && getPosRank(pInfo.positions) === 1;
 
   (state.matches || []).filter(m => m && (targetSeason === 'TUDO' || getEntitySeason(m) === targetSeason)).forEach(m => {
-    if ((m.lineup || []).includes(playerId) || (m.subs || []).some(s => s && s.inId === playerId)) jogosConvocado++;
+    const usedInMatch = (m.lineup || []).includes(playerId) || (m.subs || []).some(s => s && s.inId === playerId);
+    if (usedInMatch) jogosUtilizado++;
+    const calledUpList = (m.originalSchedule && m.originalSchedule.callup && m.originalSchedule.callup.length > 0) ? m.originalSchedule.callup : null;
+    if (calledUpList ? calledUpList.includes(playerId) : usedInMatch) jogosConvocado++;
     if (state.trackSubs && m.finished) { 
       if ((m.lineup || []).includes(playerId)) jogosTitular++; 
       if (typeof calcPlayerMinutes === 'function') totalSegundosJogo += calcPlayerMinutes(m, playerId); 
@@ -3197,7 +3223,7 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
     media: numAvaliacoes > 0 ? (somaAvaliacoes / numAvaliacoes).toFixed(1) : '-', 
     faltasTreino, presencasTreino, totalTreinos, 
     minutosTreinoCumpridos, minutosTreinoTotais,
-    jogosTitular, jogosConvocado, 
+    jogosTitular, jogosConvocado, jogosUtilizado, 
     minutos: formatSecsToMinSec(totalSegundosJogo),
     totalSegundosJogo, golosSofridos 
   };
@@ -3256,7 +3282,6 @@ function generateDonutChartSVG(minutosCumpridos, minutosTotais) {
     
     return `<svg viewBox="0 0 100 100" style="width:100%; height:auto; max-width:120px; margin:0 auto; display:block; transform:rotate(-90deg);"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--red)" stroke-width="14"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--green)" stroke-width="14" stroke-dasharray="${dashP} ${dashEmpty}" /><text x="${cx}" y="${cy}" fill="currentColor" font-size="14" font-weight="bold" text-anchor="middle" dominant-baseline="central" transform="rotate(90, ${cx}, ${cy})">${Math.round(pctP*100)}%</text></svg>`;
 }
-
 window.exportStatsPlayersPDF = function() {
     let activeSeason = window.statsSeasonFilter === 'todas' ? 'TUDO' : (window.statsSeasonFilter || state.currentSeason);
     const roster = eligiblePlayers().sort((a,b) => (a.name||'').localeCompare(b.name||''));
@@ -3265,7 +3290,7 @@ window.exportStatsPlayersPDF = function() {
        <div class="print-header" style="display:flex; justify-content:space-between; align-items:center;">
            <div>
              <h1>Estatísticas Individuais de Plantel</h1>
-             <p>${t('rep_gen')} ${new Date().toLocaleDateString('pt-PT')} | Época: ${activeSeason === 'TUDO' ? 'Histórico Total' : activeSeason} | ${getMyClub()}</p>
+             <p>${t('rep_gen')} ${new Date().toLocaleDateString('pt-PT')} | Época: ${activeSeason === 'TUDO' ? 'Histórico Total' : activeSeason} | ${getClubAndEscalao()}</p>
            </div>
            ${getClubLogoHtml()}
        </div>
@@ -3274,7 +3299,8 @@ window.exportStatsPlayersPDF = function() {
            <th style="text-align:left;">Nome do Jogador</th>
            <th>Pres</th>
            <th>MinT</th>
-           <th>J</th>
+           <th>Conv</th>
+           <th>Util</th>
            <th>Mins</th>
            <th>GM</th>
            <th>A</th>
@@ -3290,6 +3316,7 @@ window.exportStatsPlayersPDF = function() {
                <td>${st.presencasTreino}</td>
                <td>${st.minutosTreinoCumpridos}'</td>
                <td>${st.jogosConvocado}</td>
+               <td>${st.jogosUtilizado}</td>
                <td>${st.minutos}</td>
                <td>${st.golos}</td>
                <td>${st.assistencias}</td>
@@ -3304,7 +3331,6 @@ window.exportStatsPlayersPDF = function() {
     printArea.innerHTML = html; 
     window.print();
 };
-
 window.exportTrainingPDF = function(trId) {
   const tr = state.trainings.find(t => t.id === trId);
   if (!tr) return;
@@ -3384,7 +3410,7 @@ window.exportTrainingPDF = function(trId) {
         <div>
           <h1>RELATÓRIO DE SESSÃO DE TREINO</h1>
           <p style="font-size:18px; font-weight:bold; margin-top:5px; color:#000;">Data: ${dateStr} | Duração: ${duration} Min</p>
-          <p style="font-size:13px; color:#444;">Clube: <b>${getMyClub()}</b> | Época: <b>${tr.season || state.currentSeason}</b> | Estado: <b>${isCompleted ? 'Concluído' : 'Agendado'}</b></p>
+          <p style="font-size:13px; color:#444;">Clube: <b>${getClubAndEscalao()}</b> | Época: <b>${tr.season || state.currentSeason}</b> | Estado: <b>${isCompleted ? 'Concluído' : 'Agendado'}</b></p>
         </div>
         ${getClubLogoHtml()}
       </div>
@@ -3409,7 +3435,7 @@ window.exportTrainingPDF = function(trId) {
 
       <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
         <div style="font-size:10px; color:#666;">
-          <p style="margin:2px 0;">• Documento de registo de assiduidade e plano de treino — Coachfolio v3.3</p>
+          <p style="margin:2px 0;">• Documento de registo de assiduidade e plano de treino — Coachfolio v3.4</p>
         </div>
         <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">
           A Equipa Técnica
@@ -3420,7 +3446,6 @@ window.exportTrainingPDF = function(trId) {
   document.getElementById('print-area').innerHTML = html;
   window.print();
 };
-
 function renderStats(){
   const seasons = getSeasonsList();
   let activeSeason = window.statsSeasonFilter === 'todas' ? 'TUDO' : (window.statsSeasonFilter || state.currentSeason);
@@ -3447,6 +3472,7 @@ function renderStats(){
               case 'presencas': valA = a.st.presencasTreino; valB = b.st.presencasTreino; break;
               case 'mint': valA = a.st.minutosTreinoCumpridos; valB = b.st.minutosTreinoCumpridos; break;
               case 'j': valA = a.st.jogosConvocado; valB = b.st.jogosConvocado; break;
+              case 'u': valA = a.st.jogosUtilizado; valB = b.st.jogosUtilizado; break;
               case 'minutos': valA = a.st.totalSegundosJogo; valB = b.st.totalSegundosJogo; break;
               case 'g': valA = a.st.golos; valB = b.st.golos; break;
               case 'a': valA = a.st.assistencias; valB = b.st.assistencias; break;
@@ -3467,7 +3493,8 @@ function renderStats(){
           <th class="p-name" onclick="setStatsSort('nome')">${t('pl_sort_name')}${getSortIcon('nome')}</th>
           <th onclick="setStatsSort('presencas')">Pres${getSortIcon('presencas')}</th>
           <th onclick="setStatsSort('mint')">MinT${getSortIcon('mint')}</th>
-          <th onclick="setStatsSort('j')">J${getSortIcon('j')}</th>
+          <th onclick="setStatsSort('j')">Conv${getSortIcon('j')}</th>
+          <th onclick="setStatsSort('u')">Util${getSortIcon('u')}</th>
           <th onclick="setStatsSort('minutos')">Mins${getSortIcon('minutos')}</th>
           <th onclick="setStatsSort('g')">GM${getSortIcon('g')}</th>
           <th onclick="setStatsSort('a')">A${getSortIcon('a')}</th>
@@ -3484,6 +3511,7 @@ function renderStats(){
             <td>${st.presencasTreino}</td>
             <td style="color:${pPct>=80?'var(--green)':(pPct>=50?'var(--yellow)':'var(--red)')}; font-weight:bold;">${st.minutosTreinoCumpridos}'</td>
             <td>${st.jogosConvocado}</td>
+            <td>${st.jogosUtilizado}</td>
             <td style="color:var(--gold); font-weight:bold;">${st.minutos}</td>
             <td>${st.golos}</td>
             <td>${st.assistencias}</td>
@@ -3564,13 +3592,11 @@ function renderCaixinha() {
     }
     return html;
 }
-
 window.exportExtratoCaixinha = function() {
     if(!state.fines) return;
-    let html = `<div class="print-card"><div class="print-header"><h1>Extrato Caixinha do Balneário</h1><p>${t('rep_gen')} ${new Date().toLocaleDateString('pt-PT')} | ${getMyClub()}</p></div><h2>Saldo Global: ${state.fines.filter(f => f.paid).reduce((sum, f) => sum + f.value, 0).toFixed(2)}€</h2><table><tr><th>Data</th><th>Jogador</th><th>Motivo</th><th>Valor</th><th>Estado</th></tr>${state.fines.map(f => `<tr><td>${f.date.split('-').reverse().join('/')}</td><td>${playerName(f.playerId)}</td><td>${f.reason}</td><td>${f.value.toFixed(2)}€</td><td style="color:${f.paid?'green':'red'}; font-weight:bold;">${f.paid?'Pago':'Pendente'}</td></tr>`).join('')}</table></div>`;
+    let html = `<div class="print-card"><div class="print-header"><h1>Extrato Caixinha do Balneário</h1><p>${t('rep_gen')} ${new Date().toLocaleDateString('pt-PT')} | ${getClubAndEscalao()}</p></div><h2>Saldo Global: ${state.fines.filter(f => f.paid).reduce((sum, f) => sum + f.value, 0).toFixed(2)}€</h2><table><tr><th>Data</th><th>Jogador</th><th>Motivo</th><th>Valor</th><th>Estado</th></tr>${state.fines.map(f => `<tr><td>${f.date.split('-').reverse().join('/')}</td><td>${playerName(f.playerId)}</td><td>${f.reason}</td><td>${f.value.toFixed(2)}€</td><td style="color:${f.paid?'green':'red'}; font-weight:bold;">${f.paid?'Pago':'Pendente'}</td></tr>`).join('')}</table></div>`;
     const printArea = document.getElementById('print-area'); printArea.innerHTML = html; window.print();
 }
-
 window.uiSaveLeague = function() { if(!leagueForm.name || !leagueForm.name.trim()) return; state.leagues.push({ id: uid(), name: escapeHTML(leagueForm.name.trim()), teams: [], matches: [] }); leagueForm = null; saveState(); render(); };
 window.deleteLeague = function(id) { state.leagues = state.leagues.filter(l => l.id !== id); saveState(); render(); };
 window.uiAddLeagueTeam = function(lgId) { const input = document.getElementById('lg-team-input'); if(!input || !input.value.trim()) return; const lg = state.leagues.find(l => l.id === lgId); if(lg && !lg.teams.includes(input.value.trim())) { lg.teams.push(escapeHTML(input.value.trim())); saveState(); render(); } };
@@ -3685,7 +3711,6 @@ window.deleteStaffMember = function(id) {
   render();
   showToast('Elemento removido.');
 };
-
 window.exportPlayerPDF = function(pId) {
   const p = (state.roster || []).filter(x => x.active !== false).find(x => x.id === pId);
   if (!p) { showToast('Atleta não encontrado.'); return; }
@@ -3736,7 +3761,7 @@ window.exportPlayerPDF = function(pId) {
       <div style="flex:1;">
         <h1 style="font-size:22px; margin:0; text-transform:uppercase; color:#000;">FICHA DE RENDIMENTO INDIVIDUAL</h1>
         <div style="font-size:18px; font-weight:bold; margin-top:4px; color:#333;">${p.number ? `${p.number} ` : ''}${p.name}</div>
-        <p style="font-size:11px; color:#555; margin:3px 0 0 0;">Clube: <b>${getMyClub()}</b> | Época: <b>${activeSeason === 'TUDO' ? 'Histórico Total' : activeSeason}</b></p>
+        <p style="font-size:11px; color:#555; margin:3px 0 0 0;">Clube: <b>${getClubAndEscalao()}</b> | Época: <b>${activeSeason === 'TUDO' ? 'Histórico Total' : activeSeason}</b></p>
       </div>
       ${getClubLogoHtml()}
     </div>
@@ -3786,7 +3811,7 @@ window.exportPlayerPDF = function(pId) {
       </div>
     </div>
 
-    <!-- TREINO & ASSIDUIDADE (SUBSTITUÍDO TAXA DE ASSIDUIDADE POR MINUTOS DE TREINO) -->
+    <!-- TREINO & ASSIDUIDADE -->
     <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">🏋️ Treino & Assiduidade</h3>
     <div style="background:#F3F4F6; border:1px solid #E5E7EB; border-radius:6px; padding:10px 14px; margin-bottom:15px; display:flex; justify-content:space-between; font-size:11px;">
       <div>Sessões Realizadas: <b>${st.totalTreinos}</b></div>
@@ -3803,7 +3828,7 @@ window.exportPlayerPDF = function(pId) {
     <!-- RODAPÉ DE ASSINATURA -->
     <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:flex-end;">
       <div style="font-size:10px; color:#666;">
-        Relatório Individual Emitido por Coachfolio v3.3
+        Relatório Individual Emitido por Coachfolio v3.4
       </div>
       <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">
         O Treinador / Coordenação
@@ -3814,7 +3839,6 @@ window.exportPlayerPDF = function(pId) {
   document.getElementById('print-area').innerHTML = html;
   window.print();
 };
-
 window.renderPlantel = function() {
   const activeRoster = eligiblePlayers();
   let totalMins = 0; 
@@ -4263,10 +4287,9 @@ function render(){
       }
   }
 }
-
 setInterval(()=>{
   if(currentTab !== 'jogo') return; const m = getActiveMatch(); if(!m || !m.timer || !m.timer.isRunning) return;
-  const el = document.getElementById('live-timer'); if(el) el.textContent = formatMatchTime(getMatchElapsedMs(m));
+  const el = document.getElementById('live-timer'); if(el) el.textContent = formatMatchTime(window.getMatchDisplayTimeMs(m));
 }, 1000);
 
 document.addEventListener('visibilitychange', () => {
@@ -4274,13 +4297,11 @@ document.addEventListener('visibilitychange', () => {
     const m = getActiveMatch();
     if (m && m.timer && m.timer.isRunning) {
       const el = document.getElementById('live-timer');
-      if (el) el.textContent = formatMatchTime(getMatchElapsedMs(m));
+      if (el) el.textContent = formatMatchTime(window.getMatchDisplayTimeMs(m));
     }
   }
 });
-
 window.history.pushState({ page: 1 }, "", "");
-
 window.addEventListener('popstate', function(event) {
     if(currentHub !== 'home' || currentTab !== 'home') {
         goHome();
@@ -4289,7 +4310,6 @@ window.addEventListener('popstate', function(event) {
         window.history.back();
     }
 });
-
 window.addEventListener('beforeunload', function (e) {
     const activeMatch = getActiveMatch();
     if (activeMatch) {
@@ -4297,23 +4317,19 @@ window.addEventListener('beforeunload', function (e) {
         e.returnValue = '';
     }
 });
-
 window.abrirCreditos = function() {
   const el = document.getElementById('modalCreditos');
   if (el) el.style.display = 'flex';
 };
-
 window.fecharCreditos = function() {
   const el = document.getElementById('modalCreditos');
   if (el) el.style.display = 'none';
 };
-
 // HELPER PARA OBTER A TAG DA IMAGEM NOS PDFS
 function getClubLogoHtml() {
   if (!state.clubLogo) return '';
   return `<img src="${state.clubLogo}" style="max-height:55px; max-width:80px; object-fit:contain; margin-left:15px;">`;
 }
-
 // FUNÇÃO PARA CARREGAR O EMBLEMA DO CLUBE (com atualização imediata do modal)
 window.uploadClubLogo = function(event) {
   const file = event.target.files[0];

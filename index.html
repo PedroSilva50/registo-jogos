@@ -973,21 +973,19 @@ window.resolveEventHalf = function(m){
   if (m.singleHalf) return 1;
   return window.currentHalfFromTimeline(m);
 };
-
 window.doFinishMatch = function() {
     const m = getActiveMatch(); if(!m) return; const notes = (document.getElementById('notes-input') || {}).value;
     if(notes !== undefined) m.notes = escapeHTML(notes); m.finished = true;
+    m.actionsUnlocked = false; // Tranca o aloquete ao fechar
     if(!m.timeline) m.timeline = {}; if(!m.timeline.fullTime) window.setMatchTimeMark(m.id, 'fullTime'); 
     if(m.timer && m.timer.isRunning) window.pauseMatchTimer(m.id);
     pendingRatings = false; saveState(); navigateToTab('jogos');
 };
-
 window.uiFinishMatch = function(){
   const m = getActiveMatch(); const notes = (document.getElementById('notes-input') || {}).value; if(!m) return;
   if(notes !== undefined) m.notes = escapeHTML(notes);
   if(pendingRatings) { doFinishMatch(); } else if(!m.timeline || !m.timeline.kickoff) { modalConfig = { type: 'finishMatch' }; document.getElementById('modal-root').innerHTML = renderModalHTML(); } else { modalConfig = { type: 'askRatings' }; document.getElementById('modal-root').innerHTML = renderModalHTML(); }
 };
-
 window.enableManualMode = function(mId){
   const m = state.matches.find(x => x.id === mId);
   if(m){ 
@@ -996,7 +994,6 @@ window.enableManualMode = function(mId){
       render(); 
   }
 };
-
 window.confirmFinishMatch = function(action) {
     const m = getActiveMatch(); if(!m) return;
     if(action === 'cancel') { closeModal(); } 
@@ -1026,7 +1023,14 @@ window.confirmFinishMatch = function(action) {
 };
 
 window.updateMatchNotes = function(id, val){ const m = state.matches.find(m=>m.id===id); if(m){ m.notes = escapeHTML(val); saveState(); } };
-window.reopenMatch = function(id){ const m = state.matches.find(m=>m.id===id); if(m){ m.finished=false; saveState(); navigateToTab('jogo'); } };
+window.reopenMatch = function(id){ 
+    const m = state.matches.find(m=>m.id===id); 
+    if(m){ 
+        m.finished=false; 
+        m.actionsUnlocked=false; // Começa trancado por segurança
+        saveState(); navigateToTab('jogo'); 
+    } 
+};
 window.toggleIgnoreMinutes = function(mId) {
     const m = state.matches.find(x => x.id === mId);
     if (m) {
@@ -1066,6 +1070,7 @@ window.addGoal = function(matchId, type, half, scorerId, assistId, customMin, go
 };
 window.getGoalInputPanelHTML = function(m, isManualMode) {
   if (!pending) return '';
+  const showMinInput = isManualMode || m.actionsUnlocked;
 
   if (!pending.half) {
     return `<div class="panel">
@@ -1078,6 +1083,7 @@ window.getGoalInputPanelHTML = function(m, isManualMode) {
     </div>`;
   }
 
+  // --- GOLOS MARCADOS ---
   if (pending.kind === 'scored') {
     if (!pending.goalSubtype) {
       return `<div class="panel">
@@ -1093,8 +1099,9 @@ window.getGoalInputPanelHTML = function(m, isManualMode) {
 
     if (!pending.scorerId) {
       let currH = pending.half === 'halftime' ? 1 : pending.half; 
-      let onPitchIds = (state.trackSubs && m.lineup && m.lineup.length > 0) ? getPlayersOnPitchAtEndOfHalf(m, currH) : eligiblePlayers().map(p => p.id);
-      let availableScorers = eligiblePlayers().filter(p => onPitchIds.includes(p.id));
+      let availableScorers = (m.ignoreMinutes || !state.trackSubs || !m.lineup || m.lineup.length === 0 || m.actionsUnlocked || isManualMode) 
+        ? eligiblePlayers() 
+        : eligiblePlayers().filter(p => getPlayersOnPitchAtEndOfHalf(m, currH).includes(p.id));
 
       let scorerChips = availableScorers.map(p => `
         <div class="chip chip-sm" onclick="
@@ -1109,74 +1116,118 @@ window.getGoalInputPanelHTML = function(m, isManualMode) {
 
       return `<div class="panel">
         <div class="panel-title">${pending.goalSubtype === 'penalti' ? '🎯 Marcador do Penálti' : t('match_scorer')}</div>
-        ${isManualMode ? `<div class="field" style="margin-bottom:10px;"><label>Minuto</label><input type="number" id="manual-event-min" placeholder="Ex: 14" value="${document.getElementById('manual-event-min')?.value || ''}" style="text-align:center; font-weight:bold;"></div>` : ''}
-        <div class="grid-btns cols-4">${scorerChips}</div>
+        ${showMinInput ? `<div class="field" style="margin-bottom:10px;"><label>Minuto</label><input type="number" id="manual-event-min" placeholder="Ex: 14" value="${document.getElementById('manual-event-min')?.value || ''}" style="text-align:center; font-weight:bold;"></div>` : ''}
+        <div style="max-height: 250px; overflow-y: auto; padding-right: 4px; margin-bottom: 8px;">
+            <div class="grid-btns cols-4">${scorerChips}</div>
+        </div>
         <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button>
       </div>`;
     }
 
     if (pending.scorerId && pending.goalSubtype !== 'penalti') {
       let currH = pending.half === 'halftime' ? 1 : pending.half; 
-      let onPitchIds = (state.trackSubs && m.lineup && m.lineup.length > 0) ? getPlayersOnPitchAtEndOfHalf(m, currH) : eligiblePlayers().map(p => p.id);
-      let availableAssisters = eligiblePlayers().filter(p => onPitchIds.includes(p.id) && p.id !== pending.scorerId);
+      let availableAssisters = (m.ignoreMinutes || !state.trackSubs || !m.lineup || m.lineup.length === 0 || m.actionsUnlocked || isManualMode)
+        ? eligiblePlayers().filter(p => p.id !== pending.scorerId)
+        : eligiblePlayers().filter(p => getPlayersOnPitchAtEndOfHalf(m, currH).includes(p.id) && p.id !== pending.scorerId);
+
       let eventMin = document.getElementById('manual-event-min')?.value;
       let assistChips = availableAssisters.map(p => `<div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, '${p.id}', '${eventMin||''}', 'normal')">${playerLabel(p)}</div>`).join('');
       
       return `<div class="panel">
         <div class="panel-title">${t('match_assist')}</div>
-        <div class="grid-btns cols-4">${assistChips}<div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, 'none', '${eventMin||''}', 'normal')">${t('match_nobody')}</div></div>
+        <div style="max-height: 250px; overflow-y: auto; padding-right: 4px; margin-bottom: 8px;">
+            <div class="grid-btns cols-4">${assistChips}</div>
+        </div>
+        <div class="grid-btns cols-1" style="margin-bottom:8px;">
+            <div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, 'none', '${eventMin||''}', 'normal')">${t('match_nobody')}</div>
+        </div>
         <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button>
       </div>`;
     }
   }
 
+  // --- GOLOS SOFRIDOS ---
   if (pending.kind === 'conceded') {
+    
+    // A LÓGICA DE OURO: Verifica se é um jogo ao vivo normal
+    const isLiveGame = m.timeline && m.timeline.kickoff && !m.ignoreMinutes && !isManualMode && !m.actionsUnlocked;
+    const needsGK = !isLiveGame;
+
+    // PASSO 1: Tipo de Golo Sofrido
     if (!pending.goalSubtype) {
-      
-      // Ordena a equipa colocando os Guarda-Redes no topo da lista
-      let allP = eligiblePlayers();
-      allP.sort((a,b) => {
-         let aGK = (a.positions||'').toUpperCase().includes('GR') ? -1 : 1;
-         let bGK = (b.positions||'').toUpperCase().includes('GR') ? -1 : 1;
-         return aGK - bGK;
-      });
-      let gkOptions = `<option value="auto">🤖 Cálculo Automático (Pelas Substituições)</option>`;
-      allP.forEach(p => { gkOptions += `<option value="${p.id}">${playerLabel(p)} ${(p.positions||'').toUpperCase().includes('GR') ? '(GR)' : ''}</option>`; });
+      // Se for jogo ao vivo, clica e regista logo o golo. Se for edição, avança de passo.
+      let onclickGolo = needsGK ? "pending.goalSubtype='normal'; render();" : `addGoal('${m.id}', 'conceded', pending.half, null, null, null, 'normal', 'auto')`;
+      let onclickPenalti = needsGK ? "pending.goalSubtype='penalti'; render();" : `addGoal('${m.id}', 'conceded', pending.half, null, null, null, 'penalti', 'auto')`;
 
       return `<div class="panel">
-        <div class="panel-title">Golo Sofrido</div>
-        
-        <div class="field" style="margin-bottom:12px;">
-           <label style="color:var(--gold);">Quem estava na baliza? (Opcional)</label>
-           <select id="conceded-gk-select" style="background:var(--surface); border:1px solid var(--gold); color:var(--chalk); font-weight:bold; font-size:13px;">
-             ${gkOptions}
-           </select>
-           <div style="font-size:9px; color:var(--muted); margin-top:4px;">Define o GR para não perderes a estatística caso ignores os minutos/substituições neste jogo.</div>
-        </div>
-
-        <div class="panel-title" style="margin-top:16px;">Tipo de Golo Sofrido</div>
+        <div class="panel-title">Tipo de Golo Sofrido</div>
         <div class="grid-btns">
-          <div class="chip active-green" onclick="addGoal('${m.id}', 'conceded', pending.half, null, null, document.getElementById('manual-event-min')?.value, 'normal', document.getElementById('conceded-gk-select')?.value)">🥅 Golo</div>
-          <div class="chip" style="border:1px solid var(--red); color:var(--red);" onclick="addGoal('${m.id}', 'conceded', pending.half, null, null, document.getElementById('manual-event-min')?.value, 'penalti', document.getElementById('conceded-gk-select')?.value)">🎯 Penálti Sofrido</div>
-          <div class="chip" style="border:1px solid var(--yellow); color:var(--yellow);" onclick="pending.gkId = document.getElementById('conceded-gk-select')?.value; pending.goalSubtype='autogolo'; render();">⚠️ Autogolo Nosso</div>
+          <div class="chip active-green" onclick="${onclickGolo}">🥅 Golo</div>
+          <div class="chip" style="border:1px solid var(--red); color:var(--red);" onclick="${onclickPenalti}">🎯 Penálti Sofrido</div>
+          <div class="chip" style="border:1px solid var(--yellow); color:var(--yellow);" onclick="pending.goalSubtype='autogolo'; render();">⚠️ Autogolo Nosso</div>
         </div>
         <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button>
       </div>`;
     }
 
-    if (pending.goalSubtype === 'autogolo') {
+    // PASSO 2: Autogolo (Quem foi?)
+    if (pending.goalSubtype === 'autogolo' && !pending.scorerId) {
       let currH = pending.half === 'halftime' ? 1 : pending.half; 
-      let onPitchIds = (state.trackSubs && m.lineup && m.lineup.length > 0) ? getPlayersOnPitchAtEndOfHalf(m, currH) : eligiblePlayers().map(p => p.id);
-      let availablePlayers = eligiblePlayers().filter(p => onPitchIds.includes(p.id));
+      let availablePlayers = [];
+      
+      // Se for edição, ignorar minutos ou sem titulares, mostra a EQUIPA TODA
+      if (!isLiveGame || m.ignoreMinutes || !state.trackSubs || !m.lineup || m.lineup.length === 0) {
+          availablePlayers = eligiblePlayers();
+      } else {
+          let onPitchIds = getPlayersOnPitchAtEndOfHalf(m, currH);
+          availablePlayers = eligiblePlayers().filter(p => onPitchIds.includes(p.id));
+      }
 
-      let playerChips = availablePlayers.map(p => `
-        <div class="chip chip-sm" style="border-color:var(--yellow); color:var(--yellow);" onclick="addGoal('${m.id}', 'conceded', pending.half, '${p.id}', 'none', document.getElementById('manual-event-min')?.value, 'autogolo', pending.gkId)">${playerLabel(p)}</div>
-      `).join('');
+      let playerChips = availablePlayers.map(p => {
+          let onclickAction = needsGK ? `pending.scorerId='${p.id}'; render();` : `addGoal('${m.id}', 'conceded', pending.half, '${p.id}', 'none', null, 'autogolo', 'auto')`;
+          return `<div class="chip chip-sm" style="border-color:var(--yellow); color:var(--yellow);" onclick="${onclickAction}">${playerLabel(p)}</div>`;
+      }).join('');
+
+      let onclickUnknown = needsGK ? `pending.scorerId='unknown'; render();` : `addGoal('${m.id}', 'conceded', pending.half, 'unknown', 'none', null, 'autogolo', 'auto')`;
 
       return `<div class="panel">
         <div class="panel-title">Quem cometeu o Autogolo?</div>
-        ${isManualMode ? `<div class="field" style="margin-bottom:10px;"><label>Minuto</label><input type="number" id="manual-event-min" placeholder="Ex: 14" value="${document.getElementById('manual-event-min')?.value || ''}" style="text-align:center; font-weight:bold;"></div>` : ''}
-        <div class="grid-btns cols-4">${playerChips}<div class="chip chip-sm" onclick="addGoal('${m.id}', 'conceded', pending.half, null, 'none', document.getElementById('manual-event-min')?.value, 'autogolo', pending.gkId)">Desconhecido</div></div>
+        <div style="max-height: 250px; overflow-y: auto; padding-right: 4px; margin-bottom: 8px;">
+            <div class="grid-btns cols-4">${playerChips}</div>
+        </div>
+        <div class="grid-btns cols-1" style="margin-bottom:8px;">
+            <div class="chip chip-sm" onclick="${onclickUnknown}">Desconhecido / Equipa</div>
+        </div>
+        <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button>
+      </div>`;
+    }
+
+    // PASSO 3: Quem estava na baliza? (Só aparece em Edição, Histórico ou Minutos Ignorados)
+    if (needsGK && pending.gkId === undefined) {
+      // Traz a equipa TODA para o ecrã, mas mete os GR no topo a dourado
+      let allP = eligiblePlayers();
+      allP.sort((a,b) => {
+         let aGK = (a.positions||'').toUpperCase().includes('GR') || (a.positions||'').toUpperCase().includes('GK') ? -1 : 1;
+         let bGK = (b.positions||'').toUpperCase().includes('GR') || (b.positions||'').toUpperCase().includes('GK') ? -1 : 1;
+         return aGK - bGK;
+      });
+      
+      let gkChips = allP.map(p => {
+          let isGK = (p.positions||'').toUpperCase().includes('GR') || (p.positions||'').toUpperCase().includes('GK');
+          let borderCol = isGK ? 'var(--gold)' : 'var(--line)';
+          let textCol = isGK ? 'var(--gold)' : 'var(--chalk)';
+          return `<div class="chip chip-sm" style="border-color:${borderCol}; color:${textCol};" onclick="addGoal('${m.id}', 'conceded', pending.half, pending.scorerId||null, 'none', document.getElementById('manual-event-min')?.value, pending.goalSubtype, '${p.id}');">${playerLabel(p)} ${isGK ? '<br><b>(GR)</b>' : ''}</div>`;
+      }).join('');
+
+      return `<div class="panel">
+        <div class="panel-title">Quem estava na baliza?</div>
+        ${showMinInput ? `<div class="field" style="margin-bottom:10px;"><label>Minuto</label><input type="number" id="manual-event-min" placeholder="Ex: 14" value="" style="text-align:center; font-weight:bold;"></div>` : ''}
+        <div style="max-height: 250px; overflow-y: auto; padding-right: 4px; margin-bottom: 8px;">
+            <div class="grid-btns cols-4">${gkChips}</div>
+        </div>
+        <div class="grid-btns cols-1" style="margin-bottom:8px;">
+            <div class="chip chip-sm" style="border-color:var(--muted); color:var(--muted);" onclick="addGoal('${m.id}', 'conceded', pending.half, pending.scorerId||null, 'none', document.getElementById('manual-event-min')?.value, pending.goalSubtype, 'none');">Desconhecido / Ninguém</div>
+        </div>
         <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button>
       </div>`;
     }
@@ -1769,43 +1820,25 @@ function renderJogo(){
   const isSingleHalf = m.singleHalf || m.numberOfHalves === 1;
   const needsLineup = state.trackSubs && (!m.lineup || m.lineup.length === 0);
 
+  // A MAGIA DO ALOQUETE
+  const isUnlocked = !!m.actionsUnlocked;
+  const showMinInput = isManualMode || isUnlocked;
+
   let dynamicPanel = '';
   
   if(pendingCaptain){
     let captainChips = eligiblePlayers().length ? eligiblePlayers().map(p=>`<div class="chip chip-sm ${m.capitao===p.id?'active-green':''}" onclick="setCaptain('${m.id}','${p.id}')">${playerLabel(p)}</div>`).join('') : `<div class="empty" style="grid-column:1/-1;">${t('pl_none')}</div>`;
     dynamicPanel = `<div class="panel" style="border-color:var(--gold);"><div class="panel-title" style="color:var(--gold);">${t('match_cap')}</div><div class="grid-btns cols-4">${captainChips}</div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pendingCaptain=false; render()">${t('cancel')}</button></div>`;
   } 
-  else if(pending && !pending.half){
-    dynamicPanel = `<div class="panel"><div class="panel-title">${pending.kind==='scored' ? t('match_goal_half') : t('match_conc_half')}</div><div class="grid-btns"><div class="chip" onclick="pending.half=1; render();">${t('match_half1')}</div><div class="chip" onclick="pending.half=2; render();">${t('match_half2')}</div></div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button></div>`;
-  } 
-  else if(pending && pending.kind==='scored'){
-    if(!pending.goalSubtype){
-      dynamicPanel = `<div class="panel"><div class="panel-title">Tipo de Golo Marcado</div><div class="grid-btns"><div class="chip active-green" onclick="pending.goalSubtype='normal'; render();">⚽ Golo de Jogo</div><div class="chip" style="border:1px solid var(--gold); color:var(--gold);" onclick="pending.goalSubtype='penalti'; render();">🎯 Pênalti</div><div class="chip" style="border:1px solid var(--muted); color:var(--muted);" onclick="addGoal('${m.id}', 'scored', pending.half, 'autogolo', 'none', document.getElementById('manual-event-min')?.value, 'autogolo')">🤖 Autogolo Adversário</div></div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button></div>`;
-    } else if(!pending.scorerId){
-      let currH = pending.half === 'halftime' ? 1 : pending.half; 
-      let onPitchIds = (state.trackSubs && m.lineup && m.lineup.length > 0) ? getPlayersOnPitchAtEndOfHalf(m, currH) : eligiblePlayers().map(p=>p.id);
-      let availableScorers = eligiblePlayers().filter(p => onPitchIds.includes(p.id));
-      let scorerChips = availableScorers.map(p=>`<div class="chip chip-sm" onclick="pending.scorerId='${p.id}'; if(pending.goalSubtype==='penalti'){ addGoal('${m.id}', 'scored', pending.half, '${p.id}', 'none', document.getElementById('manual-event-min')?.value, 'penalti'); } else { render(); }">${playerLabel(p)}</div>`).join('');
-      dynamicPanel = `<div class="panel"><div class="panel-title">${pending.goalSubtype==='penalti'?'🎯 Marcador do Pênalti':t('match_scorer')}</div>${isManualMode ? `<div class="field" style="margin-bottom:10px;"><label>Minuto</label><input type="number" id="manual-event-min" placeholder="Ex: 14" value="${document.getElementById('manual-event-min')?.value || ''}" style="text-align:center; font-weight:bold;"></div>` : ''}<div class="grid-btns cols-4">${scorerChips}</div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button></div>`;
+  // 👇 A MAGIA ACONTECE AQUI! O MEIO-CAMPO PASSA A BOLA AO ESPECIALISTA 👇
+  else if(pending && (pending.kind === 'scored' || pending.kind === 'conceded')){
+    if (typeof window.getGoalInputPanelHTML === 'function') {
+        dynamicPanel = window.getGoalInputPanelHTML(m, isManualMode);
     } else {
-      let currH = pending.half === 'halftime' ? 1 : pending.half; 
-      let onPitchIds = (state.trackSubs && m.lineup && m.lineup.length > 0) ? getPlayersOnPitchAtEndOfHalf(m, currH) : eligiblePlayers().map(p=>p.id);
-      let availableAssisters = eligiblePlayers().filter(p => onPitchIds.includes(p.id) && p.id !== pending.scorerId);
-      let eventMin = document.getElementById('manual-event-min')?.value;
-      let assistChips = availableAssisters.map(p=>`<div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, '${p.id}', '${eventMin||''}', 'normal')">${playerLabel(p)}</div>`).join('');
-      dynamicPanel = `<div class="panel"><div class="panel-title">${t('match_assist')}</div><div class="grid-btns cols-4">${assistChips}<div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, 'none', '${eventMin||''}', 'normal')">${t('match_nobody')}</div></div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button></div>`;
-    }
-  } 
-  else if(pending && pending.kind==='conceded'){
-    if(!pending.goalSubtype){
-      dynamicPanel = `<div class="panel"><div class="panel-title">Tipo de Golo Sofrido</div><div class="grid-btns"><div class="chip active-green" onclick="addGoal('${m.id}', 'conceded', pending.half, null, null, document.getElementById('manual-event-min')?.value, 'normal')">🥅 Golo de Jogo</div><div class="chip" style="border:1px solid var(--red); color:var(--red);" onclick="addGoal('${m.id}', 'conceded', pending.half, null, null, document.getElementById('manual-event-min')?.value, 'penalti')">🎯 Pênalti Sofrido</div><div class="chip" style="border:1px solid var(--yellow); color:var(--yellow);" onclick="pending.goalSubtype='autogolo'; render();">⚠️ Autogolo Nosso</div></div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button></div>`;
-    } else {
-      let currH = pending.half === 'halftime' ? 1 : pending.half; 
-      let onPitchIds = (state.trackSubs && m.lineup && m.lineup.length > 0) ? getPlayersOnPitchAtEndOfHalf(m, currH) : eligiblePlayers().map(p=>p.id);
-      let playerChips = eligiblePlayers().filter(p=>onPitchIds.includes(p.id)).map(p => `<div class="chip chip-sm" style="border-color:var(--yellow); color:var(--yellow);" onclick="addGoal('${m.id}', 'conceded', pending.half, '${p.id}', 'none', document.getElementById('manual-event-min')?.value, 'autogolo')">${playerLabel(p)}</div>`).join('');
-      dynamicPanel = `<div class="panel"><div class="panel-title">Quem cometeu o Autogolo?</div>${isManualMode ? `<div class="field" style="margin-bottom:10px;"><label>Minuto</label><input type="number" id="manual-event-min" placeholder="Ex: 14" value="${document.getElementById('manual-event-min')?.value || ''}" style="text-align:center; font-weight:bold;"></div>` : ''}<div class="grid-btns cols-4">${playerChips}<div class="chip chip-sm" onclick="addGoal('${m.id}', 'conceded', pending.half, null, 'none', document.getElementById('manual-event-min')?.value, 'autogolo')">Desconhecido</div></div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button></div>`;
+        dynamicPanel = '<div class="panel"><div class="empty">Erro: Função de golos não encontrada.</div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">Cancelar</button></div>';
     }
   }
+  // 👆 FIM DA CHAMADA AO ESPECIALISTA 👆
   else if(pendingCard && !pendingCard.half){
     dynamicPanel = `<div class="panel"><div class="panel-title">${t('match_conc_half')}</div><div class="grid-btns"><div class="chip" onclick="pendingCard.half=1; render()">${t('match_half1')}</div><div class="chip" onclick="pendingCard.half=2; render()">${t('match_half2')}</div></div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pendingCard=null; render()">${t('cancel')}</button></div>`;
   } else if(pendingCard){
@@ -1824,7 +1857,7 @@ function renderJogo(){
      dynamicPanel = `
         <div class="panel" style="border-color:var(--gold);">
            <div class="panel-title" style="color:var(--gold);">${t('match_sub_title')} ${isHT ? `(${t('match_ht')})` : ''}</div>
-           ${(!isHT && isManualMode) ? `<div class="field" style="margin-bottom:10px;"><label>Minuto</label><input type="number" id="manual-sub-min" placeholder="Ex: 22" value="${document.getElementById('manual-sub-min')?.value || ''}" style="text-align:center; font-weight:bold;"></div>` : ''}
+           ${(!isHT && showMinInput) ? `<div class="field" style="margin-bottom:10px;"><label>Minuto</label><input type="number" id="manual-sub-min" placeholder="Ex: 22" value="${document.getElementById('manual-sub-min')?.value || ''}" style="text-align:center; font-weight:bold;"></div>` : ''}
            <div style="display:flex; gap:10px;">
              <div style="flex:1;">
                <div style="font-size:10px; color:var(--red); text-transform:uppercase; font-weight:600;">${t('match_sub_out')}</div>
@@ -1852,7 +1885,7 @@ function renderJogo(){
      lineupPanel = `<div class="panel" style="border-color:var(--gold);"><div class="panel-title" style="color:var(--gold);">${t('match_start_xi')} (${pendingLineupSet.length}/${state.tacticFormat})</div><div class="grid-btns cols-4">${eligiblePlayers().map(p => `<div class="chip chip-sm ${(pendingLineupSet).includes(p.id) ? 'active-green' : ''}" onclick="togglePendingLineup('${p.id}')">${playerLabel(p)}</div>`).join('')}</div><button class="btn btn-gold" style="width:100%; margin-top:10px;" ${pendingLineupSet.length !== state.tacticFormat ? 'disabled':''} onclick="confirmLineup('${m.id}')">${t('match_conf_xi')}</button></div>`;
   } else if (state.trackSubs && m.lineup && m.lineup.length > 0) {
      lineupPanel = `<div style="display:flex; gap:8px; justify-content:center; margin-top:12px; margin-bottom:8px;">
-       ${!isGameActive && !isMatchEnded ? `<button class="card-mini-btn" style="border:1px solid var(--muted); color:var(--muted); background:transparent;" onclick="window.editLineup('${m.id}')">✏️ Alterar Equipa Inicial</button>` : ''}
+       ${!isGameActive && (!isMatchEnded || isUnlocked) ? `<button class="card-mini-btn" style="border:1px solid var(--muted); color:var(--muted); background:transparent;" onclick="window.editLineup('${m.id}')">✏️ Alterar Equipa Inicial</button>` : ''}
        <button class="card-mini-btn" style="border:1px solid var(--gold); color:var(--gold); background:transparent;" onclick="window.openMatchTacticalBoard('${m.id}')">📋 Esquema Tático do Jogo</button>
      </div>`;
   }
@@ -1878,13 +1911,31 @@ function renderJogo(){
     
     <div class="scoreboard">
       <div class="opponent" style="margin-bottom:4px;"><div style="font-size:15px;">${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home' ? `${getMyClub()} <span style="font-weight:700; color:var(--chalk); margin:0 4px;">${t('match_vs')}</span> ${m.opponent}` : `${m.opponent} <span style="font-weight:700; color:var(--chalk); margin:0 4px;">${t('match_vs')}</span> ${getMyClub()}`} <span class="badge-loc ${locLabel.toLowerCase()==='casa'||locLabel.toLowerCase()==='home'?'casa':'fora'}">${locLabel}</span></div><span>${m.date}</span></div>
-      ${m.capitao ? `<div style="font-size:11px; color:var(--muted); margin-bottom:12px; text-transform:uppercase; font-weight:600; display:flex; align-items:center; gap:8px;"><span>© Capitão: <span style="color:var(--green);">${playerName(m.capitao)}</span></span>${!isMatchEnded ? `<button style="background:none; border:1px solid var(--line); color:var(--chalk); border-radius:4px; padding:2px 6px; font-size:9px; cursor:pointer;" onclick="pendingCaptain=true; render()">${t('match_cap_change')}</button>`:''}</div>` : (!isMatchEnded ? `<div style="margin-bottom:12px;"><button class="card-mini-btn yellow" style="border-color:var(--gold); color:var(--gold);" onclick="pendingCaptain=true; render()">${t('match_cap_btn')}</button></div>` : '')}
+      ${m.capitao ? `<div style="font-size:11px; color:var(--muted); margin-bottom:12px; text-transform:uppercase; font-weight:600; display:flex; align-items:center; gap:8px;"><span>© Capitão: <span style="color:var(--green);">${playerName(m.capitao)}</span></span>${(!isMatchEnded || isUnlocked) ? `<button style="background:none; border:1px solid var(--line); color:var(--chalk); border-radius:4px; padding:2px 6px; font-size:9px; cursor:pointer;" onclick="pendingCaptain=true; render()">${t('match_cap_change')}</button>`:''}</div>` : ((!isMatchEnded || isUnlocked) ? `<div style="margin-bottom:12px;"><button class="card-mini-btn yellow" style="border-color:var(--gold); color:var(--gold);" onclick="pendingCaptain=true; render()">${t('match_cap_btn')}</button></div>` : '')}
       <div class="score-row"><div class="score-block scored"><div class="score-num mono">${scored}</div><div class="score-label">${t('match_scored')}</div></div><div class="score-sep">–</div><div class="score-block conceded"><div class="score-num mono">${conceded}</div><div class="score-label">${t('match_conc')}</div></div></div>
-      ${!isMatchEnded ? `<div class="btn-row"><button class="btn btn-gold" onclick="pending={kind:'scored', half: window.resolveEventHalf(getActiveMatch())}; render();" ${(!isGameActive||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_goal')}</button><button class="btn btn-red" onclick="const h=window.resolveEventHalf(getActiveMatch()); if(h){ pending={kind:'conceded', half:h}; render(); } else { pending={kind:'conceded', half:null}; render(); }" ${(!isGameActive||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_conc')}</button></div>${isGameActive ? `<div style="display:flex; gap:8px; justify-content:center; margin-top:10px;"><button class="card-mini-btn yellow" onclick="pendingCard={color:'Amarelo', half: window.resolveEventHalf(getActiveMatch())}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_yellow')}</button><button class="card-mini-btn red" onclick="pendingCard={color:'Vermelho', half: window.resolveEventHalf(getActiveMatch())}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_red')}</button>${state.trackSubs ? `<button class="card-mini-btn" style="border:1px solid var(--chalk); color:var(--chalk);" onclick="pendingSub={outId:null, inId:null, half: window.resolveEventHalf(getActiveMatch())}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_sub_title')}</button>` : ''}</div>` : ''}` : `<div style="margin-top:16px; padding:10px; border-radius:8px; background:var(--surface-2); font-size:11px; text-align:center; color:var(--muted); text-transform:uppercase; font-weight:700; letter-spacing:0.05em;">${t('match_locked')}</div>`}
+      
+      ${(!isMatchEnded || isUnlocked) ? `
+         <div class="btn-row">
+           <button class="btn btn-gold" onclick="pending={kind:'scored', half: window.resolveEventHalf(getActiveMatch())}; render();" ${(!isGameActive||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_goal')}</button>
+           <button class="btn btn-red" onclick="const h=window.resolveEventHalf(getActiveMatch()); if(h){ pending={kind:'conceded', half:h}; render(); } else { pending={kind:'conceded', half:null}; render(); }" ${(!isGameActive||pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_add_conc')}</button>
+         </div>
+         ${isGameActive ? `
+           <div style="display:flex; gap:8px; justify-content:center; margin-top:10px;">
+             <button class="card-mini-btn yellow" onclick="pendingCard={color:'Amarelo', half: window.resolveEventHalf(getActiveMatch())}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_yellow')}</button>
+             <button class="card-mini-btn red" onclick="pendingCard={color:'Vermelho', half: window.resolveEventHalf(getActiveMatch())}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_red')}</button>
+             ${state.trackSubs ? `<button class="card-mini-btn" style="border:1px solid var(--chalk); color:var(--chalk);" onclick="pendingSub={outId:null, inId:null, half: window.resolveEventHalf(getActiveMatch())}; render()" ${(pending||pendingCard||pendingCaptain||pendingRatings||pendingSub)?'disabled':''}>${t('match_sub_title')}</button>` : ''}
+           </div>
+         ` : ''}
+      ` : `
+         <div style="margin-top:16px; padding:10px; border-radius:8px; background:var(--surface-2); font-size:11px; text-align:center; color:var(--gold); text-transform:uppercase; font-weight:700; letter-spacing:0.05em; cursor:pointer; border:1px solid var(--gold); box-shadow: 0 4px 6px rgba(0,0,0,0.3);" onclick="const am = getActiveMatch(); if(am){am.actionsUnlocked=true; render();}">
+            🔓 Desbloquear Ações de Jogo
+         </div>
+      `}
+      
       ${dynamicPanel}
       ${lineupPanel}
     </div>
-    <div class="goal-list" style="border-top:none;">${matchNarrativeHtml(m, m.finished)}</div>
+    <div class="goal-list" style="border-top:none;">${matchNarrativeHtml(m, !isUnlocked && m.finished)}</div>
     <div class="card" style="margin-top:16px;">${ratingsPanel}<div class="field" style="margin-bottom:0;"><label>${t('match_notes')}</label><textarea id="notes-input" placeholder="${t('match_notes_ph')}" onchange="updateMatchNotes('${m.id}', this.value)">${m.notes || ''}</textarea></div></div>
     <button class="btn ${finalBtnStyle}" style="width:100%; margin-top:6px;" onclick="uiFinishMatch()">${finalBtnLabel}</button>
   `;
@@ -3574,35 +3625,36 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
         if ((m.lineup || []).includes(playerId)) jogosTitular++; 
         if (typeof calcPlayerMinutes === 'function') totalSegundosJogo += calcPlayerMinutes(m, playerId); 
       }
-    }
-    
+    }    
     (m.goals || []).forEach(g => { 
       if (g && g.type === 'scored' && g.scorerId === playerId) golos++; 
       if (g && g.type === 'scored' && g.assistId === playerId) assistencias++; 
       
-      if (g && g.type === 'conceded' && isGK) {
-          // A MAGIA ACONTECE AQUI: A app dá sempre prioridade à seleção manual do GR!
-          if (g.gkId) {
+      if (g && g.type === 'conceded') {
+          if (g.gkId && g.gkId !== 'auto' && g.gkId !== 'none') {
+              // Se selecionaste explicitamente o jogador (GR ou jogador de campo adaptado)
               if (g.gkId === playerId) golosSofridos++;
           } else {
-              // Se deixaste no "Automático", a app faz a matemática clássica
-              if (!state.trackSubs || m.ignoreMinutes || !m.lineup || m.lineup.length === 0) {
-                  if ((m.lineup || []).includes(playerId) || (m.subs || []).some(s => s && s.inId === playerId) || (calledUpList && calledUpList.includes(playerId))) golosSofridos++;
-              } else {
-                  let goalHalf = g.half || 1; let goalMin = g.minute || 0;
-                  let currentXI = [...(m.lineup || [])];
-                  let subsBeforeGoal = (m.subs || []).filter(s => {
-                      if (s.half < goalHalf) return true;
-                      if (s.half === goalHalf) { if (s.isHalftime) return true; return (s.minute || 0) <= goalMin; }
-                      return false;
-                  }).sort((a,b) => (a.half - b.half) || (a.isHalftime ? -1 : 1) || ((a.minute||0) - (b.minute||0)));
-                  subsBeforeGoal.forEach(s => { currentXI = currentXI.filter(id => id !== s.outId); currentXI.push(s.inId); });
-                  if (currentXI.includes(playerId)) golosSofridos++;
+              // Apenas aplica o cálculo legado se fores um GR de ofício (para jogos antigos)
+              if (isGK) {
+                  if (!state.trackSubs || m.ignoreMinutes || !m.lineup || m.lineup.length === 0) {
+                      // Se ignoraste os minutos e não marcaste manual, assume o Titular
+                      if (m.lineup && m.lineup.includes(playerId)) golosSofridos++;
+                  } else {
+                      let goalHalf = g.half || 1; let goalMin = g.minute || 0;
+                      let currentXI = [...(m.lineup || [])];
+                      let subsBeforeGoal = (m.subs || []).filter(s => {
+                          if (s.half < goalHalf) return true;
+                          if (s.half === goalHalf) { if (s.isHalftime) return true; return (s.minute || 0) <= goalMin; }
+                          return false;
+                      }).sort((a,b) => (a.half - b.half) || (a.isHalftime ? -1 : 1) || ((a.minute||0) - (b.minute||0)));
+                      subsBeforeGoal.forEach(s => { currentXI = currentXI.filter(id => id !== s.outId); currentXI.push(s.inId); });
+                      if (currentXI.includes(playerId)) golosSofridos++;
+                  }
               }
           }
       }
-    });
-    
+    });  
     (m.cards || []).forEach(c => { 
       if (c && c.playerId === playerId) { if (c.color === 'Amarelo') amarelos++; else vermelhos++; } 
     });

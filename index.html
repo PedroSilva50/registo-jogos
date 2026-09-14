@@ -2732,6 +2732,7 @@ function renderTreinos(){
           const customMins = tr.customMinutes && tr.customMinutes[id] != null ? tr.customMinutes[id] : null;
           let label = '🔴 Injustificada';
           if(reason === 'justificada') label = '🟡 Justificada';
+          if(reason === 'atrasado') label = '🕐 Atrasado';
           if(reason === 'lesao') label = '🩹 Lesão';
           if(reason === 'castigo') label = '🟥 Castigo';
           if(reason === 'dispensado') label = '⚪ Dispensado';
@@ -3670,13 +3671,16 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
     if (Array.isArray(tr.absences)) { absReason = tr.absences.includes(playerId) ? 'injustificada' : null; }
     else if (tr.absences && tr.absences[playerId]) { absReason = tr.absences[playerId]; }
 
-    if (absReason && absReason !== 'atrasado') {
+    // Só razões de ausência total (nunca esteve no treino) contam como falta.
+    // Atrasado/Dispensado/Lesão/Castigo significam que esteve presente parte do tempo — conta como presença.
+    const trueAbsenceReasons = ['injustificada', 'justificada'];
+
+    if (absReason && trueAbsenceReasons.includes(absReason)) {
       faltasTreino++;
       if (tr.customMinutes && tr.customMinutes[playerId] != null) { minutosTreinoCumpridos += parseInt(tr.customMinutes[playerId], 10); }
-    } else if (absReason === 'atrasado') {
-      // Chegou atrasado: esteve presente, só cumpriu menos tempo — conta como presença, não como falta.
+    } else if (absReason) {
       presencasTreino++;
-      minutosTreinoCumpridos += (tr.customMinutes && tr.customMinutes[playerId] != null) ? parseInt(tr.customMinutes[playerId], 10) : dur;
+      minutosTreinoCumpridos += (tr.customMinutes && tr.customMinutes[playerId] != null) ? parseInt(tr.customMinutes[playerId], 10) : 0;
     } else { 
       presencasTreino++; minutosTreinoCumpridos += dur; 
     }
@@ -3821,6 +3825,7 @@ window.exportTrainingPDF = function(trId) {
     if (reason) {
       if (reason === 'injustificada') statusText = '<span style="color:#DC2626; font-weight:bold;">🔴 Faltou (Injustificada)</span>';
       else if (reason === 'justificada') statusText = '<span style="color:#D97706; font-weight:bold;">🟡 Ausente (Justificada)</span>';
+      else if (reason === 'atrasado') statusText = '<span style="color:#CA8A04; font-weight:bold;">🕐 Atrasado</span>';
       else if (reason === 'lesao') statusText = '<span style="color:#2563EB; font-weight:bold;">🩹 Lesionado / Médico</span>';
       else if (reason === 'castigo') statusText = '<span style="color:#DC2626; font-weight:bold;">🟥 Castigado</span>';
       else if (reason === 'dispensado') statusText = '<span style="color:#4B5563; font-weight:bold;">⚪ Dispensado</span>';

@@ -2544,13 +2544,14 @@ window.uiSaveTraining = function() {
         duration: duration,
         plan: plan,
         obs: obs,
-        notes: plan, // Mantém compatibilidade com versões antigas
+        notes: plan,
         absences: absencesObj,
-        customMinutes: customMinsObj
+        customMinutes: customMinsObj,
+        status: state.trainings[idx].status || 'pending'
       };
     }
   } else {
-    // Criar novo treino
+    // Criar novo treino — fica SEMPRE como 'pending' até o Mister o concluir
     const newTr = {
       id: uid(),
       season: state.currentSeason,
@@ -2558,8 +2559,8 @@ window.uiSaveTraining = function() {
       duration: duration,
       plan: plan,
       obs: obs,
-      notes: plan, // Mantém compatibilidade
-      status: 'completed',
+      notes: plan,
+      status: 'pending',
       absences: absencesObj,
       customMinutes: customMinsObj
     };
@@ -2570,7 +2571,6 @@ window.uiSaveTraining = function() {
   saveState();
   render();
 };
-
 window.setAbsenceReason = function(pId, reason){
   if(!trainingForm.absences) trainingForm.absences = {};
   if(!trainingForm.customMinutes) trainingForm.customMinutes = {};

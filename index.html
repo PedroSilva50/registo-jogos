@@ -1307,6 +1307,7 @@ window.confirmSub = function(mId, customMin) {
   pendingSub = null; saveState(); render(); 
 };
 window.deleteSub = function(mId, subId) { const m = state.matches.find(x=>x.id===mId); if(!m) return; m.subs = m.subs.filter(s => s.id !== subId); saveState(); render(); };
+window.deleteMatch = function(matchId){ state.matches = state.matches.filter(m => m.id !== matchId); saveState(); render(); };
 window.setCaptain = function(matchId, playerId){ const m = state.matches.find(m=>m.id===matchId); if(m){ m.capitao = playerId; saveState(); } pendingCaptain = false; render(); };
 window.setRating = function(matchId, playerId, rating){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; if(!m.ratings) m.ratings = {}; if(m.ratings[playerId] === rating) delete m.ratings[playerId]; else m.ratings[playerId] = rating; saveState(); render(); };
 window.askConfirm = function(message, onConfirm, btnClass = 'btn-red'){ modalConfig = { type: 'confirm', message, onConfirm, btnClass }; document.getElementById('modal-root').innerHTML = renderModalHTML(); };
@@ -2631,6 +2632,7 @@ function renderTreinos(){
     const reasons = [
       { id: 'injustificada', label: '🔴 Injustificada' },
       { id: 'justificada', label: '🟡 Justificada' },
+      { id: 'atrasado', label: '🕐 Atrasado' },
       { id: 'lesao', label: '🩹 Lesão / Médico' },
       { id: 'castigo', label: '🟥 Castigo' },
       { id: 'dispensado', label: '⚪ Dispensado' }
@@ -2661,8 +2663,9 @@ function renderTreinos(){
         <div style="font-size:11px; color:var(--muted); margin-bottom:12px;">Podes ajustar os minutos cumpridos se o jogador foi dispensado/lesionado a meio.</div>
         ${eligiblePlayers().length ? `<div style="display:flex; flex-direction:column; gap:8px;">${eligiblePlayers().map(p => {
           const currentReason = (trainingForm.absences && trainingForm.absences[p.id]) || 'presente';
-          const hasCustomMins = currentReason === 'dispensado' || currentReason === 'lesao' || currentReason === 'castigo';
+          const hasCustomMins = currentReason === 'dispensado' || currentReason === 'lesao' || currentReason === 'castigo' || currentReason === 'atrasado';
           const playerMins = (trainingForm.customMinutes && trainingForm.customMinutes[p.id] != null) ? trainingForm.customMinutes[p.id] : (currentReason === 'presente' ? baseDuration : 0);
+          const minsLabel = currentReason === 'atrasado' ? 'Minutos cumpridos (chegou atrasado):' : 'Minutos cumpridos antes da saída:';
 
           return `<div style="display:flex; flex-direction:column; background:var(--surface-2); padding:10px 12px; border-radius:8px; gap:6px;">
             <div style="display:flex; align-items:center; justify-content:space-between;">
@@ -2673,7 +2676,7 @@ function renderTreinos(){
               </select>
             </div>
             ${hasCustomMins ? `<div style="display:flex; align-items:center; justify-content:flex-end; gap:8px; font-size:11px; color:var(--muted); border-top:1px solid var(--line); padding-top:4px;">
-              <span>Minutos cumpridos antes da saída:</span>
+              <span>${minsLabel}</span>
               <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="${baseDuration}" value="${playerMins}" style="width:65px; padding:2px 6px; font-size:11px; text-align:center; background:var(--surface); border:1px solid var(--gold); color:var(--gold); font-weight:bold; border-radius:4px;" onclick="this.select()" oninput="setPlayerCustomMinutes('${p.id}', this.value)">
               <span>/ ${baseDuration}'</span>
             </div>` : ''}
@@ -3663,12 +3666,17 @@ function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason
   
   validTrainings.forEach(tr => {
     const dur = parseInt(tr.duration, 10) || 90;
-    let isAbsent = false;
-    if (Array.isArray(tr.absences)) { isAbsent = tr.absences.includes(playerId); } else if (tr.absences && tr.absences[playerId]) { isAbsent = true; }
-    
-    if (isAbsent) {
+    let absReason = null;
+    if (Array.isArray(tr.absences)) { absReason = tr.absences.includes(playerId) ? 'injustificada' : null; }
+    else if (tr.absences && tr.absences[playerId]) { absReason = tr.absences[playerId]; }
+
+    if (absReason && absReason !== 'atrasado') {
       faltasTreino++;
       if (tr.customMinutes && tr.customMinutes[playerId] != null) { minutosTreinoCumpridos += parseInt(tr.customMinutes[playerId], 10); }
+    } else if (absReason === 'atrasado') {
+      // Chegou atrasado: esteve presente, só cumpriu menos tempo — conta como presença, não como falta.
+      presencasTreino++;
+      minutosTreinoCumpridos += (tr.customMinutes && tr.customMinutes[playerId] != null) ? parseInt(tr.customMinutes[playerId], 10) : dur;
     } else { 
       presencasTreino++; minutosTreinoCumpridos += dur; 
     }

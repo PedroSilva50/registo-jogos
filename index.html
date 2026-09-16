@@ -1354,16 +1354,32 @@ window.triggerSafePrint = async function() {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
     if (isIOS && isStandalone) {
-        showToast('A compilar PDF autêntico... ⏳');
+        showToast('A compilar PDF multipágina... ⏳');
         const printEl = document.getElementById('print-area');
         
+        // 1. INJETAR ESTILOS DE IMPRESSÃO (Força as linhas e cores a aparecer no PDF)
+        const style = document.createElement('style');
+        style.id = 'pdf-fix-styles';
+        style.innerHTML = `
+            #print-area { font-family: -apple-system, sans-serif; font-size: 12px !important; background: #FFF; color: #000; }
+            #print-area .print-card { border: 1px solid #CCC; padding: 15px; margin-bottom: 15px; border-radius: 8px; background: #F9F9F9 !important; }
+            #print-area .print-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+            #print-area .print-header h1 { margin: 0; font-size: 24px; color: #000 !important; }
+            #print-area .print-header p { margin: 5px 0 0; color: #666 !important; }
+            #print-area h2, #print-area h3 { color: #000 !important; margin-bottom: 10px; }
+            #print-area table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+            #print-area th, #print-area td { border: 1px solid #CCC; padding: 8px; text-align: center; color: #000; }
+            #print-area th:first-child, #print-area td:first-child { text-align: left; }
+            #print-area th { background: #EEE !important; font-weight: bold; }
+        `;
+        document.head.appendChild(style);
+
         printEl.style.display = 'block';
         printEl.style.position = 'absolute';
         printEl.style.top = '0';
         printEl.style.left = '0';
         printEl.style.width = '800px'; 
         printEl.style.backgroundColor = '#FFFFFF';
-        printEl.style.color = '#000000';
         printEl.style.zIndex = '-100'; 
         
         try {
@@ -1374,28 +1390,43 @@ window.triggerSafePrint = async function() {
                 windowWidth: 800
             });
             
+            // Limpeza
             printEl.style.display = 'none';
             printEl.innerHTML = '';
+            document.getElementById('pdf-fix-styles').remove();
             
-            // Converter para PDF Autêntico (A4)
             const imgData = canvas.toDataURL('image/jpeg', 1.0);
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4');
             
             const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            // Calcula a altura total necessária
+            const imgHeight = (canvas.height * pdfWidth) / canvas.width;
             
-            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            let heightLeft = imgHeight;
+            let position = 0;
+            
+            // 2. SISTEMA DE PAGINAÇÃO (Divide em várias folhas A4)
+            pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+            heightLeft -= pdfHeight;
+            
+            // Enquanto houver conteúdo a transbordar, adiciona nova folha
+            while (heightLeft > 0) {
+                position = heightLeft - imgHeight; // Move a imagem para cima
+                pdf.addPage();
+                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+                heightLeft -= pdfHeight;
+            }
+            
             const pdfBlob = pdf.output('blob');
-            
             const file = new File([pdfBlob], `relatorio-coachfolio-${new Date().toISOString().slice(0,10)}.pdf`, { type: 'application/pdf' });
             
-            // Abrir Partilha do iOS com ficheiro .pdf
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 await navigator.share({
                     files: [file],
                     title: 'Relatório Coachfolio',
-                    text: 'Relatório Coachfolio em anexo.'
+                    text: 'Documento Coachfolio em anexo.'
                 });
             } else {
                 const link = document.createElement('a');
@@ -1407,11 +1438,12 @@ window.triggerSafePrint = async function() {
             window.closeModal();
         } catch(e) {
             printEl.style.display = 'none';
+            if(document.getElementById('pdf-fix-styles')) document.getElementById('pdf-fix-styles').remove();
             showToast('Erro ao compilar PDF.');
             console.error(e);
         }
     } else {
-        // Android e PC: Imprime direto
+        // Android e PC
         window.print();
         setTimeout(() => { 
             document.getElementById('print-area').innerHTML = ''; 

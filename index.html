@@ -63,7 +63,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Coachfolio">
 <meta name="theme-color" content="#0E211A">
-<title>COACHFOLIO v3.5</title>
+<title>COACHFOLIO v3.5.1</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{--bg:#0E211A;--surface:#153328;--surface-2:#1C4133;--chalk:#F3EFE6;--muted:#8FA79B;--gold:#D9A441;--gold-dim:#4A3E22;--red:#C8493F;--red-dim:#3F2320;--yellow:#E1C324;--green:#4ade80;--green-dim:#133320;--line:rgba(243,239,230,0.10);--btn-gold-txt:#241B08;--btn-red-txt:#2B0F0C;--btn-green-txt:#0E211A;}
@@ -1313,7 +1313,41 @@ window.setRating = function(matchId, playerId, rating){ const m = state.matches.
 window.askConfirm = function(message, onConfirm, btnClass = 'btn-red'){ modalConfig = { type: 'confirm', message, onConfirm, btnClass }; document.getElementById('modal-root').innerHTML = renderModalHTML(); };
 window.closeModal = function(){ modalConfig = null; document.getElementById('modal-root').innerHTML = ''; };
 window.confirmModal = function(){ const cb = modalConfig ? modalConfig.onConfirm : null; window.closeModal(); if(cb) cb(); };
+window.openSafePrintModal = function() { 
+  modalConfig = { type: 'safePrint' }; 
+  document.getElementById('modal-root').innerHTML = renderModalHTML(); 
+};
 
+window.pendingShareFile = null;
+window.openSafeShareModal = function(fileToShare) {
+  window.pendingShareFile = fileToShare;
+  modalConfig = { type: 'safeShare' };
+  document.getElementById('modal-root').innerHTML = renderModalHTML();
+};
+
+window.triggerSafeShare = async function() {
+    try {
+        if (navigator.canShare && navigator.canShare({ files: [window.pendingShareFile] })) {
+            await navigator.share({
+                files: [window.pendingShareFile],
+                title: 'Esquema Tático',
+                text: `Esquema Tático`
+            });
+            showToast('Partilha concluída! ⚽');
+        } else {
+            const link = document.createElement('a');
+            link.download = window.pendingShareFile.name;
+            link.href = URL.createObjectURL(window.pendingShareFile);
+            link.click();
+            URL.revokeObjectURL(link.href);
+            showToast('Imagem guardada! 📸');
+        }
+    } catch (e) {
+        if (e.name !== 'AbortError') showToast('Erro na partilha.');
+    }
+    window.pendingShareFile = null;
+    window.closeModal();
+};
 window.archiveSeason = function() { closeModal(); modalConfig = { type: 'archiveSeason' }; document.getElementById('modal-root').innerHTML = renderModalHTML(); };
 window.doArchiveSeason = function() {
     const parts = state.currentSeason.split('/'); let nextSeason = 'Nova Época';
@@ -1529,7 +1563,7 @@ function renderModalHTML(){
          
          <button class="btn" style="width:100%; margin-top:10px; background:#0E211A; color:#fff; border:1px solid var(--line);" onclick="abrirCreditos()">🤝 Créditos & Parceiros</button>
          <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="closeModal()">${t('close')}</button>
-         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v3.5 | COACHFOLIO</div>
+         <div style="font-size:9px; color:var(--muted); margin-top:10px;">v3.5.1 | COACHFOLIO</div>
        </div>
      </div>`;
   }
@@ -1572,11 +1606,30 @@ function renderModalHTML(){
      </div></div>`; 
   }
   
-
-  if(modalConfig.type === 'askRatings') { 
-     return `<div class="modal-overlay"><div class="modal-card"><p style="font-weight:600; font-size:16px;">${t('msg_match_ended')}</p><p style="font-size:13px;">${t('msg_ask_rate')}</p><div style="display:flex; flex-direction:column; gap:10px;"><button class="btn btn-gold" onclick="closeModal(); pendingRatings=true; render();">${t('msg_yes_rate')}</button><button class="btn btn-outline" onclick="closeModal(); doFinishMatch();">${t('msg_no_rate')}</button></div></div></div>`; 
+  if(modalConfig.type === 'safePrint') {
+      return `<div class="modal-overlay">
+        <div class="modal-card" style="padding: 30px 20px;">
+          <div style="font-size:40px; margin-bottom:10px;">✅</div>
+          <h3 style="margin-top:0; color:var(--gold);">Documento Preparado</h3>
+          <p style="font-size:13px; color:var(--chalk); margin-bottom:20px;">O relatório foi gerado com sucesso em plano de fundo. Clica no botão abaixo para abrir o menu do telemóvel.</p>
+          <button class="btn btn-gold" style="width:100%; font-size:15px; padding:12px;" onclick="window.print(); window.closeModal();">🖨️ Abrir Menu / Imprimir</button>
+          <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="document.getElementById('print-area').innerHTML=''; closeModal();">Cancelar</button>
+        </div>
+      </div>`;
   }
 
+  if(modalConfig.type === 'safeShare') {
+      return `<div class="modal-overlay">
+        <div class="modal-card" style="padding: 30px 20px;">
+          <div style="font-size:40px; margin-bottom:10px;">✅</div>
+          <h3 style="margin-top:0; color:var(--gold);">Tática Preparada</h3>
+          <p style="font-size:13px; color:var(--chalk); margin-bottom:20px;">O esquema tático foi desenhado. Clica abaixo para partilhar ou guardar na galeria.</p>
+          <button class="btn btn-green" style="width:100%; font-size:15px; padding:12px;" onclick="triggerSafeShare()">📲 Partilhar / Guardar</button>
+          <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="window.pendingShareFile=null; closeModal();">Cancelar</button>
+        </div>
+      </div>`;
+  } 
+  
   return `<div class="modal-overlay"><div class="modal-card"><p>${modalConfig.message}</p><div style="display:flex; gap:10px;"><button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button><button class="btn ${modalConfig.btnClass || 'btn-red'}" onclick="confirmModal()">${t('confirm')}</button></div></div></div>`;
 }
 
@@ -2014,7 +2067,6 @@ window.deleteTacticalPlay = function(id) {
   render();
   showToast('Jogada eliminada.');
 };
-
 window.exportTacticPNG = async function() {
   const pitchEl = document.getElementById('tactic-pitch');
   if (!pitchEl) return;
@@ -2025,26 +2077,7 @@ window.exportTacticPNG = async function() {
     canvas.toBlob(async (blob) => {
       if (!blob) { showToast('Erro ao gerar imagem.'); return; }
       const file = new File([blob], `esquema-tatico-${new Date().toISOString().slice(0,10)}.png`, { type: 'image/png' });
-      
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: 'Esquema Tático',
-            text: `Esquema Tático — ${getMyClub()}`
-          });
-          showToast('Partilha concluída! ⚽');
-        } catch (e) {
-          if (e.name !== 'AbortError') showToast('Erro ao partilhar.');
-        }
-      } else {
-        const link = document.createElement('a');
-        link.download = file.name;
-        link.href = URL.createObjectURL(blob);
-        link.click();
-        URL.revokeObjectURL(link.href);
-        showToast('Imagem guardada! 📸');
-      }
+      window.openSafeShareModal(file);
     }, 'image/png');
   } catch (err) {
     console.error(err);
@@ -2072,21 +2105,17 @@ window.exportTacticPDF = function() {
           <img src="${imgData}" style="max-width:100%; max-height:650px; border:2px solid #000; border-radius:8px;">
         </div>
         <div style="margin-top:20px; font-size:11px; color:#666; text-align:center;">
-          Coachfolio v3.5 — Documento de Análise Tática
+          Coachfolio v3.5.1 — Documento de Análise Tática
         </div>
       </div>`;
       
     document.getElementById('print-area').innerHTML = html;
-    
-    setTimeout(() => {
-      window.print();
-    }, 300);
+    window.openSafePrintModal();
   }).catch(err => {
     console.error(err);
     showToast('Erro ao gerar PDF tático.');
   });
 };
-
 function initTacticCanvas() {
     const cvs = document.getElementById('tactic-canvas'); if(!cvs) return;
     canvasRect = cvs.getBoundingClientRect(); cvs.width = canvasRect.width; cvs.height = canvasRect.height;
@@ -2333,7 +2362,7 @@ window.exportCallupPDF = function(schId) {
     </div>`;
 
   document.getElementById('print-area').innerHTML = html;
-  window.print();
+  window.openSafePrintModal();
 };
 
 window.openScouting = function(schId) {
@@ -2478,7 +2507,7 @@ window.exportScoutingPDF = function(schId) {
     <!-- RODAPÉ -->
     <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
       <div style="font-size:10px; color:#666;">
-        • Documento de Análise de Scouting — Coachfolio v3.5
+        • Documento de Análise de Scouting — Coachfolio v3.5.1
       </div>
       <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">
         O Observador / Treinador
@@ -2487,7 +2516,7 @@ window.exportScoutingPDF = function(schId) {
   </div>`;
 
   printArea.innerHTML = html;
-  window.print();
+  window.openSafePrintModal();
 };
 function renderCalendario(){
   if(schedulingNew){
@@ -3182,13 +3211,13 @@ window.exportMatchPDF = function(mId) {
     ` : ''}
 
     <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:flex-end;">
-      <div style="font-size:10px; color:#666;">• Ficha de jogo gerada via Coachfolio v3.5</div>
+      <div style="font-size:10px; color:#666;">• Ficha de jogo gerada via Coachfolio v3.5.1</div>
       <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">A Equipa Técnica</div>
     </div>
   </div>`;
 
   printArea.innerHTML = html;
-  window.print();
+  window.openSafePrintModal();
 };
 window.exportSeasonPDF = function(season){
   const seasonId = season || state.currentSeason;
@@ -3213,7 +3242,7 @@ window.exportSeasonPDF = function(season){
   const printArea = document.getElementById('print-area');
   if (printArea) {
     printArea.innerHTML = combinedHtml;
-    window.print();
+    window.openSafePrintModal();
   } else {
     showToast('Erro ao aceder à área de impressão.');
   }
@@ -3581,7 +3610,7 @@ window.exportGlobalStatsPDF = function(){
     </div>
 
     <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
-      <div style="font-size:10px; color:#666;">• Relatório Consolidado — Coachfolio v3.5</div>
+      <div style="font-size:10px; color:#666;">• Relatório Consolidado — Coachfolio v3.5.1</div>
       <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">
         O Treinador
       </div>
@@ -3589,7 +3618,7 @@ window.exportGlobalStatsPDF = function(){
   </div>`;
 
   printArea.innerHTML = html;
-  window.print();
+  window.openSafePrintModal();
 };
 window.statsSeasonFilter = undefined;
 function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason, typeFilter = 'todos', phaseFilter = 'todas', tourFilter = 'todas') {
@@ -3797,7 +3826,7 @@ window.exportStatsPlayersPDF = function() {
     </div>`;
     const printArea = document.getElementById('print-area'); 
     printArea.innerHTML = html; 
-    window.print();
+    window.openSafePrintModal();
 };
 window.exportTrainingPDF = function(trId) {
   const tr = state.trainings.find(t => t.id === trId);
@@ -3904,7 +3933,7 @@ window.exportTrainingPDF = function(trId) {
 
       <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
         <div style="font-size:10px; color:#666;">
-          <p style="margin:2px 0;">• Documento de registo de assiduidade e plano de treino — Coachfolio v3.5</p>
+          <p style="margin:2px 0;">• Documento de registo de assiduidade e plano de treino — Coachfolio v3.5.1</p>
         </div>
         <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:5px; font-size:11px; font-weight:bold;">
           A Equipa Técnica
@@ -3913,7 +3942,7 @@ window.exportTrainingPDF = function(trId) {
     </div>`;
 
   document.getElementById('print-area').innerHTML = html;
-  window.print();
+  window.openSafePrintModal();
 };
 function renderStats(){
   const seasons = getSeasonsList();
@@ -4078,7 +4107,7 @@ function renderCaixinha() {
 window.exportExtratoCaixinha = function() {
     if(!state.fines) return;
     let html = `<div class="print-card"><div class="print-header"><h1>Extrato Caixinha do Balneário</h1><p>${t('rep_gen')} ${new Date().toLocaleDateString('pt-PT')} | ${getClubAndEscalao()}</p></div><h2>Saldo Global: ${state.fines.filter(f => f.paid).reduce((sum, f) => sum + f.value, 0).toFixed(2)}€</h2><table><tr><th>Data</th><th>Jogador</th><th>Motivo</th><th>Valor</th><th>Estado</th></tr>${state.fines.map(f => `<tr><td>${f.date.split('-').reverse().join('/')}</td><td>${playerName(f.playerId)}</td><td>${f.reason}</td><td>${f.value.toFixed(2)}€</td><td style="color:${f.paid?'green':'red'}; font-weight:bold;">${f.paid?'Pago':'Pendente'}</td></tr>`).join('')}</table></div>`;
-    const printArea = document.getElementById('print-area'); printArea.innerHTML = html; window.print();
+    const printArea = document.getElementById('print-area'); printArea.innerHTML = html; window.openSafePrintModal();
 }
 window.uiSaveLeague = function() { if(!leagueForm.name || !leagueForm.name.trim()) return; state.leagues.push({ id: uid(), name: escapeHTML(leagueForm.name.trim()), teams: [], matches: [] }); leagueForm = null; saveState(); render(); };
 window.deleteLeague = function(id) { state.leagues = state.leagues.filter(l => l.id !== id); saveState(); render(); };
@@ -4310,7 +4339,7 @@ window.exportPlayerPDF = function(pId) {
     <!-- RODAPÉ DE ASSINATURA -->
     <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:flex-end;">
       <div style="font-size:10px; color:#666;">
-        Relatório Individual Emitido por Coachfolio v3.5
+        Relatório Individual Emitido por Coachfolio v3.5.1
       </div>
       <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">
         O Treinador / Coordenação
@@ -4319,7 +4348,7 @@ window.exportPlayerPDF = function(pId) {
   </div>`;
 
   document.getElementById('print-area').innerHTML = html;
-  window.print();
+  window.openSafePrintModal();
 };
 window.renderPlantel = function() {
   const activeRoster = eligiblePlayers();

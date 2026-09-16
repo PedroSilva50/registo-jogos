@@ -65,6 +65,7 @@
 <meta name="theme-color" content="#0E211A">
 <title>COACHFOLIO v3.5.1</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root{--bg:#0E211A;--surface:#153328;--surface-2:#1C4133;--chalk:#F3EFE6;--muted:#8FA79B;--gold:#D9A441;--gold-dim:#4A3E22;--red:#C8493F;--red-dim:#3F2320;--yellow:#E1C324;--green:#4ade80;--green-dim:#133320;--line:rgba(243,239,230,0.10);--btn-gold-txt:#241B08;--btn-red-txt:#2B0F0C;--btn-green-txt:#0E211A;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -1349,16 +1350,13 @@ window.triggerSafeShare = async function() {
     window.closeModal();
 };
 window.triggerSafePrint = async function() {
-    // Deteta se é iPhone no Ecrã Principal
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
     if (isIOS && isStandalone) {
-        // TÁTICA PARA IPHONE: Converter para Imagem de Alta Qualidade e Partilhar
-        showToast('A processar documento para o iOS... ⏳');
+        showToast('A compilar PDF autêntico... ⏳');
         const printEl = document.getElementById('print-area');
         
-        // Coloca a folha pronta a ser lida pelo canvas (escondida atrás da app)
         printEl.style.display = 'block';
         printEl.style.position = 'absolute';
         printEl.style.top = '0';
@@ -1376,36 +1374,44 @@ window.triggerSafePrint = async function() {
                 windowWidth: 800
             });
             
-            // Esconde tudo e limpa
             printEl.style.display = 'none';
             printEl.innerHTML = '';
             
-            canvas.toBlob(async (blob) => {
-                if (!blob) throw new Error("Falha no ficheiro");
-                const file = new File([blob], `relatorio-coachfolio-${new Date().toISOString().slice(0,10)}.png`, { type: 'image/png' });
-                
-                if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                    await navigator.share({
-                        files: [file],
-                        title: 'Relatório Coachfolio',
-                        text: 'Relatório Coachfolio em anexo.'
-                    });
-                } else {
-                    const link = document.createElement('a');
-                    link.download = file.name;
-                    link.href = URL.createObjectURL(blob);
-                    link.click();
-                    URL.revokeObjectURL(link.href);
-                }
-                window.closeModal();
-            }, 'image/png');
+            // Converter para PDF Autêntico (A4)
+            const imgData = canvas.toDataURL('image/jpeg', 1.0);
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+            const pdfBlob = pdf.output('blob');
+            
+            const file = new File([pdfBlob], `relatorio-coachfolio-${new Date().toISOString().slice(0,10)}.pdf`, { type: 'application/pdf' });
+            
+            // Abrir Partilha do iOS com ficheiro .pdf
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    files: [file],
+                    title: 'Relatório Coachfolio',
+                    text: 'Relatório Coachfolio em anexo.'
+                });
+            } else {
+                const link = document.createElement('a');
+                link.download = file.name;
+                link.href = URL.createObjectURL(pdfBlob);
+                link.click();
+                URL.revokeObjectURL(link.href);
+            }
+            window.closeModal();
         } catch(e) {
             printEl.style.display = 'none';
-            showToast('Erro ao exportar documento.');
+            showToast('Erro ao compilar PDF.');
             console.error(e);
         }
     } else {
-        // TÁTICA PARA ANDROID E PC: Imprimir Nativo (Funciona bem!)
+        // Android e PC: Imprime direto
         window.print();
         setTimeout(() => { 
             document.getElementById('print-area').innerHTML = ''; 

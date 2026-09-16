@@ -1348,6 +1348,71 @@ window.triggerSafeShare = async function() {
     window.pendingShareFile = null;
     window.closeModal();
 };
+window.triggerSafePrint = async function() {
+    // Deteta se é iPhone no Ecrã Principal
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+    if (isIOS && isStandalone) {
+        // TÁTICA PARA IPHONE: Converter para Imagem de Alta Qualidade e Partilhar
+        showToast('A processar documento para o iOS... ⏳');
+        const printEl = document.getElementById('print-area');
+        
+        // Coloca a folha pronta a ser lida pelo canvas (escondida atrás da app)
+        printEl.style.display = 'block';
+        printEl.style.position = 'absolute';
+        printEl.style.top = '0';
+        printEl.style.left = '0';
+        printEl.style.width = '800px'; 
+        printEl.style.backgroundColor = '#FFFFFF';
+        printEl.style.color = '#000000';
+        printEl.style.zIndex = '-100'; 
+        
+        try {
+            const canvas = await html2canvas(printEl, { 
+                scale: 2, 
+                useCORS: true,
+                backgroundColor: '#FFFFFF',
+                windowWidth: 800
+            });
+            
+            // Esconde tudo e limpa
+            printEl.style.display = 'none';
+            printEl.innerHTML = '';
+            
+            canvas.toBlob(async (blob) => {
+                if (!blob) throw new Error("Falha no ficheiro");
+                const file = new File([blob], `relatorio-coachfolio-${new Date().toISOString().slice(0,10)}.png`, { type: 'image/png' });
+                
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        files: [file],
+                        title: 'Relatório Coachfolio',
+                        text: 'Relatório Coachfolio em anexo.'
+                    });
+                } else {
+                    const link = document.createElement('a');
+                    link.download = file.name;
+                    link.href = URL.createObjectURL(blob);
+                    link.click();
+                    URL.revokeObjectURL(link.href);
+                }
+                window.closeModal();
+            }, 'image/png');
+        } catch(e) {
+            printEl.style.display = 'none';
+            showToast('Erro ao exportar documento.');
+            console.error(e);
+        }
+    } else {
+        // TÁTICA PARA ANDROID E PC: Imprimir Nativo (Funciona bem!)
+        window.print();
+        setTimeout(() => { 
+            document.getElementById('print-area').innerHTML = ''; 
+            window.closeModal(); 
+        }, 500);
+    }
+};
 window.archiveSeason = function() { closeModal(); modalConfig = { type: 'archiveSeason' }; document.getElementById('modal-root').innerHTML = renderModalHTML(); };
 window.doArchiveSeason = function() {
     const parts = state.currentSeason.split('/'); let nextSeason = 'Nova Época';
@@ -1612,7 +1677,7 @@ function renderModalHTML(){
           <div style="font-size:40px; margin-bottom:10px;">✅</div>
           <h3 style="margin-top:0; color:var(--gold);">Documento Preparado</h3>
           <p style="font-size:13px; color:var(--chalk); margin-bottom:20px;">O relatório foi gerado com sucesso em plano de fundo. Clica no botão abaixo para abrir o menu do telemóvel.</p>
-          <button class="btn btn-gold" style="width:100%; font-size:15px; padding:12px;" onclick="window.print(); window.closeModal();">🖨️ Abrir Menu / Imprimir</button>
+          <button class="btn btn-gold" style="width:100%; font-size:15px; padding:12px;" onclick="triggerSafePrint()">🖨️ Abrir Menu / Imprimir</button>
           <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="document.getElementById('print-area').innerHTML=''; closeModal();">Cancelar</button>
         </div>
       </div>`;

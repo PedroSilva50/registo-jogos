@@ -3095,8 +3095,8 @@ window.buildMatchTacticalPitchSVG = function(m) {
   });
 
   return `
-    <div style="width:100%; max-width:320px; margin:0 auto; background:#113821; border:2px solid #000; border-radius:8px; overflow:hidden; position:relative; aspect-ratio: 2/3;">
-      <svg viewBox="0 0 100 120" style="width:100%; height:100%; display:block;">
+    <div style="width:320px; height:480px; margin:0 auto; background:#113821; border:2px solid #000; border-radius:8px; overflow:hidden; position:relative;">
+      <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" viewBox="0 0 100 120" style="width:100%; height:100%; display:block;">
         <rect x="0" y="0" width="100" height="120" fill="#113821" />
         <rect x="4" y="4" width="92" height="112" fill="none" stroke="#FFFFFF" stroke-width="0.8" stroke-opacity="0.5" />
         <line x1="4" y1="60" x2="96" y2="60" stroke="#FFFFFF" stroke-width="0.8" stroke-opacity="0.5" />
@@ -3185,20 +3185,19 @@ window.exportMatchPDF = function(mId) {
   if (m.subs && m.subs.length > 0) {
     m.subs.forEach(s => {
       let minDisplay = s.isHalftime ? 'INT' : (s.minute != null ? window.getGlobalMinuteDisplay(m, s.half, s.minute) + "'" : '-');
-      subsHtml += `<tr><td style="width:40px;">${minDisplay}</td><td style="color:#C8493F; text-align:left; padding-left:6px;">↓ ${playerName(s.outId)}</td><td style="color:#16A34A; text-align:left; padding-left:6px;">↑ ${playerName(s.inId)}</td></tr>`;
+      subsHtml += `<tr><td style="width:40px;">${minDisplay}</td><td style="color:#C8493F; text-align:left; padding-left:6px;">Saiu: ${playerName(s.outId)}</td><td style="color:#16A34A; text-align:left; padding-left:6px;">Entrou: ${playerName(s.inId)}</td></tr>`;
     });
   }
-
   let goalsHtml = '';
   if (m.goals && m.goals.length > 0) {
     m.goals.forEach(g => {
        let subTag = g.goalSubtype === 'penalti' ? ' (Penálti)' : (g.goalSubtype === 'autogolo' ? ' (Autogolo)' : '');
        let desc = '';
        if (g.type === 'scored') {
-         desc = g.scorerId === 'autogolo' ? `⚽ Autogolo (Adversário)` : `⚽ ${playerName(g.scorerId)}${subTag} ${g.assistId && g.assistId !== 'none' ? '(Ast: ' + playerName(g.assistId) + ')' : ''}`;
+         desc = g.scorerId === 'autogolo' ? `[Autogolo] Adversário` : `[Golo] ${playerName(g.scorerId)}${subTag} ${g.assistId && g.assistId !== 'none' ? '(Ast: ' + playerName(g.assistId) + ')' : ''}`;
        } else {
          let ownGoalPlayer = g.scorerId ? ` [${playerName(g.scorerId)}]` : '';
-         desc = `🥅 Golo Sofrido${subTag}${ownGoalPlayer}`;
+         desc = `[Sofrido]${subTag}${ownGoalPlayer}`;
        }
        let minDisplay = g.minute != null ? window.getGlobalMinuteDisplay(m, g.half, g.minute) + "'" : (g.half === 1 ? "1ªP" : "2ªP");
        goalsHtml += `<tr><td style="width:50px;">${minDisplay}</td><td style="text-align:left; font-weight:bold; padding-left:10px;">${desc}</td></tr>`;
@@ -3209,10 +3208,9 @@ window.exportMatchPDF = function(mId) {
   if (m.cards && m.cards.length > 0) {
     m.cards.forEach(c => {
       let minDisplay = c.minute != null ? window.getGlobalMinuteDisplay(m, c.half, c.minute) + "'" : '-';
-      cardsHtml += `<tr><td style="width:50px;">${minDisplay}</td><td style="text-align:left; padding-left:10px;">${c.color === 'Amarelo' ? '🟨' : '🟥'} ${playerName(c.playerId)}</td></tr>`;
+      cardsHtml += `<tr><td style="width:50px;">${minDisplay}</td><td style="text-align:left; padding-left:10px;">${c.color === 'Amarelo' ? '[Amarelo]' : '[Vermelho]'} ${playerName(c.playerId)}</td></tr>`;
     });
   }
-
   // 3. Equipa Técnica Presente em Linha
   const selectedStaffIds = m.originalSchedule?.staffCallup || [];
   const staffList = (state.staff || []).filter(st => selectedStaffIds.includes(st.id));

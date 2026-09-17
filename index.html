@@ -1632,6 +1632,15 @@ function renderModalHTML(){
         </div>
       </div>`;
   } 
+  if(modalConfig.type === 'askRatings') {
+     return `<div class="modal-overlay"><div class="modal-card">
+       <p style="font-size:15px; font-weight:bold; color:var(--chalk); margin-bottom:20px;">${t('msg_ask_rate')}</p>
+       <div style="display:flex; flex-direction:column; gap:10px;">
+         <button class="btn btn-gold" onclick="closeModal(); pendingRatings=true; render();">${t('msg_yes_rate')}</button>
+         <button class="btn btn-outline" onclick="closeModal(); doFinishMatch();">${t('msg_no_rate')}</button>
+       </div>
+     </div></div>`;
+  }
   
   return `<div class="modal-overlay"><div class="modal-card"><p>${modalConfig.message}</p><div style="display:flex; gap:10px;"><button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button><button class="btn ${modalConfig.btnClass || 'btn-red'}" onclick="confirmModal()">${t('confirm')}</button></div></div></div>`;
 }

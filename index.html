@@ -1350,10 +1350,6 @@ window.triggerSafeShare = async function() {
 };
 window.triggerSafePrint = function() {
     window.print();
-    setTimeout(() => { 
-        document.getElementById('print-area').innerHTML = ''; 
-        window.closeModal(); 
-    }, 500);
 };
 window.archiveSeason = function() { closeModal(); modalConfig = { type: 'archiveSeason' }; document.getElementById('modal-root').innerHTML = renderModalHTML(); };
 window.doArchiveSeason = function() {

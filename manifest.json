@@ -1,21 +1,22 @@
 {
-  "name": "COACHFOLIO",
+  "name": "Coachfolio",
   "short_name": "Coachfolio",
+  "description": "Caderno de Treinador Profissional",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0E211A",
   "theme_color": "#0E211A",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "./icon-192.png",
-      "sizes": "192x192",
+      "src": "./icon-512.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "./icon-512.png",
-      "sizes": "512x512",
+      "src": "./icon-192.png",
+      "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     }

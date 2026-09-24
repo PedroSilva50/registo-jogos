@@ -912,8 +912,8 @@ window.getGoalInputPanelHTML = function(m, isManualMode) {
     if (!pending.scorerId) {
       let currH = pending.half === 'halftime' ? 1 : pending.half; 
       let availableScorers = (m.ignoreMinutes || !state.trackSubs || !m.lineup || m.lineup.length === 0 || m.actionsUnlocked || isManualMode) 
-        ? eligiblePlayers() 
-        : eligiblePlayers().filter(p => getPlayersOnPitchAtEndOfHalf(m, currH).includes(p.id));
+        ? window.getMatchEligiblePlayers(m) 
+        : window.getMatchEligiblePlayers(m).filter(p => getPlayersOnPitchAtEndOfHalf(m, currH).includes(p.id));
 
       let scorerChips = availableScorers.map(p => `
         <div class="chip chip-sm" onclick="
@@ -939,8 +939,8 @@ window.getGoalInputPanelHTML = function(m, isManualMode) {
     if (pending.scorerId && pending.goalSubtype !== 'penalti') {
       let currH = pending.half === 'halftime' ? 1 : pending.half; 
       let availableAssisters = (m.ignoreMinutes || !state.trackSubs || !m.lineup || m.lineup.length === 0 || m.actionsUnlocked || isManualMode)
-        ? eligiblePlayers().filter(p => p.id !== pending.scorerId)
-        : eligiblePlayers().filter(p => getPlayersOnPitchAtEndOfHalf(m, currH).includes(p.id) && p.id !== pending.scorerId);
+        ? window.getMatchEligiblePlayers(m).filter(p => p.id !== pending.scorerId)
+        : window.getMatchEligiblePlayers(m).filter(p => getPlayersOnPitchAtEndOfHalf(m, currH).includes(p.id) && p.id !== pending.scorerId);
 
       let eventMin = document.getElementById('manual-event-min')?.value;
       let assistChips = availableAssisters.map(p => `<div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, '${p.id}', '${eventMin||''}', 'normal')">${playerLabel(p)}</div>`).join('');
@@ -960,7 +960,7 @@ window.getGoalInputPanelHTML = function(m, isManualMode) {
 
   if (pending.kind === 'conceded') {
     const isLiveGame = m.timeline && m.timeline.kickoff && !m.ignoreMinutes && !isManualMode && !m.actionsUnlocked;
-    const needsGK = !isLiveGame;
+    const needsGK = true; // OBRIGA A PERGUNTAR PELO GR
 
     if (!pending.goalSubtype) {
       let onclickGolo = needsGK ? "pending.goalSubtype='normal'; render();" : `addGoal('${m.id}', 'conceded', pending.half, null, null, null, 'normal', 'auto')`;
@@ -982,10 +982,10 @@ window.getGoalInputPanelHTML = function(m, isManualMode) {
       let availablePlayers = [];
       
       if (!isLiveGame || m.ignoreMinutes || !state.trackSubs || !m.lineup || m.lineup.length === 0) {
-          availablePlayers = eligiblePlayers();
+          availablePlayers = window.getMatchEligiblePlayers(m);
       } else {
           let onPitchIds = getPlayersOnPitchAtEndOfHalf(m, currH);
-          availablePlayers = eligiblePlayers().filter(p => onPitchIds.includes(p.id));
+          availablePlayers = window.getMatchEligiblePlayers(m).filter(p => onPitchIds.includes(p.id));
       }
 
       let playerChips = availablePlayers.map(p => {
@@ -1008,7 +1008,7 @@ window.getGoalInputPanelHTML = function(m, isManualMode) {
     }
 
     if (needsGK && pending.gkId === undefined) {
-      let allP = eligiblePlayers();
+      let allP = window.getMatchEligiblePlayers(m);
       allP.sort((a,b) => {
          let aGK = (a.positions||'').toUpperCase().includes('GR') || (a.positions||'').toUpperCase().includes('GK') ? -1 : 1;
          let bGK = (b.positions||'').toUpperCase().includes('GR') || (b.positions||'').toUpperCase().includes('GK') ? -1 : 1;
@@ -1038,6 +1038,7 @@ window.getGoalInputPanelHTML = function(m, isManualMode) {
 
   return '';
 };
+
 window.deleteGoal = function(matchId, goalId){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; m.goals = m.goals.filter(g=>g.id!==goalId); saveState(); render(); };
 window.editEventMinute = function(matchId, kind, eventId){
   const m = state.matches.find(x => x.id === matchId);

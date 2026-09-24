@@ -81,13 +81,13 @@ function interpretarComando(transcricao) {
 
     // 4. PENÁLTIS
     if (tem(["penálti", "penalty", "castigo máximo", "onze metros"])) {
-        if (tem(["sofrido", "contra", "adversário", "deles"])) return { acao: "GOLO_CONTRA_PENALTI", jogador: null };
+        if (tem(["sofrido", "contra", "adversário", "deles"])) return { acao: "GOLO_CONTRA_PENALTI", guardaRedes: numeros.length > 0 ? numeros[0] : null };
         return { acao: "GOLO_PENALTI", jogador: numeros[0] };
     }
 
     // 5. GOLOS SOFRIDOS (Normal)
     if (tem(["sofreu", "sofrido", "sofremos", "adversário marcou", "golo deles", "golo contra", "levámos"])) {
-        return { acao: "GOLO_CONTRA", jogador: null };
+        return { acao: "GOLO_CONTRA", guardaRedes: numeros.length > 0 ? numeros[0] : null };
     }
 
     // 6. GOLOS A FAVOR (Normal, Livre e com Assistência)
@@ -246,13 +246,25 @@ function processarAcaoVoz(transcricao) {
             break;
 
         case "GOLO_CONTRA":
+            let gkIdContra = 'auto'; let nomeGkContra = '';
+            if(intencao.guardaRedes) { 
+                gkIdContra = getPlayerIdByNumber(intencao.guardaRedes); 
+                if(gkIdContra) nomeGkContra = playerName(gkIdContra); 
+            }
             msgUI += `<div style="font-size:16px;">🥅 Confirmar Golo Sofrido?</div>`;
-            cb = () => addGoal(m.id, 'conceded', half, null, null, null, 'normal', 'auto');
+            if(nomeGkContra) msgUI += `<div style="font-size:12px; color:var(--muted); margin-top:4px;">Na baliza: ${nomeGkContra}</div>`;
+            cb = () => addGoal(m.id, 'conceded', half, null, null, null, 'normal', gkIdContra || 'none');
             break;
 
         case "GOLO_CONTRA_PENALTI":
+            let gkIdPenalti = 'auto'; let nomeGkPenalti = '';
+            if(intencao.guardaRedes) { 
+                gkIdPenalti = getPlayerIdByNumber(intencao.guardaRedes); 
+                if(gkIdPenalti) nomeGkPenalti = playerName(gkIdPenalti); 
+            }
             msgUI += `<div style="font-size:16px;">🎯 Confirmar Penálti Sofrido?</div>`;
-            cb = () => addGoal(m.id, 'conceded', half, null, null, null, 'penalti', 'auto');
+            if(nomeGkPenalti) msgUI += `<div style="font-size:12px; color:var(--muted); margin-top:4px;">Na baliza: ${nomeGkPenalti}</div>`;
+            cb = () => addGoal(m.id, 'conceded', half, null, null, null, 'penalti', gkIdPenalti || 'none');
             break;
 
         case "CARTAO_AMARELO":

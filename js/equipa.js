@@ -138,14 +138,20 @@ window.exportGlobalStatsPDF = function(){
   const trainingMetrics = computeTrainingMetricsForMatches(s.matches);
   const conclusao = getPhaseConclusion();
 
-  const topScorer = s.scorers[0] || null;
-  const topAssister = s.assisters[0] || null;
-  const mostUsed = playerRows[0] || null;
-
-  // NOVO: Lista de todos os marcadores
   const allScorersHtml = s.scorers.length > 0 
       ? s.scorers.map(sc => `${sc.name} (${sc.count})`).join(' &nbsp;•&nbsp; ') 
       : 'Sem golos marcados.';
+      
+  const allAssistersHtml = s.assisters.length > 0 
+      ? s.assisters.map(a => `${a.name} (${a.count})`).join(' &nbsp;•&nbsp; ') 
+      : 'Sem assistências registadas.';
+
+  const activeRoster = eligiblePlayers().sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  const playerRowsHtml = activeRoster.map(p => {
+      const st = calcularEstatisticaJogador(p.id, activeSeason, statsFilter, statsPhaseFilter, statsTournamentFilter);
+      const isGK = p.positions && typeof p.positions === 'string' && (p.positions.toUpperCase().includes('GR') || p.positions.toUpperCase().includes('GK'));
+      return `<tr style="border-bottom:1px solid #EEE;"><td style="padding:4px; text-align:left;">${p.name}</td><td style="text-align:center; padding:4px;">${st.minutos}</td><td style="text-align:center; padding:4px;">${st.jogosTitular}</td><td style="text-align:center; padding:4px;">${st.golos}</td><td style="text-align:center; padding:4px;">${st.assistencias}</td><td style="text-align:center; padding:4px; color:#DC2626; font-weight:bold;">${isGK ? st.golosSofridos : '-'}</td><td style="text-align:center; padding:4px;">${st.amarelos}</td><td style="text-align:center; padding:4px;">${st.vermelhos}</td></tr>`;
+  }).join('') || '<tr><td colspan="8" style="padding:8px; text-align:center; color:#666;">Sem dados de plantel.</td></tr>';
 
   const printArea = document.getElementById('print-area');
 
@@ -165,8 +171,6 @@ window.exportGlobalStatsPDF = function(){
       <div style="background:#F3F4F6; border-radius:6px; padding:8px;"><div style="font-size:18px; font-weight:bold;">${totalJogos}</div><div style="font-size:9px; color:#666; text-transform:uppercase;">Jogos</div></div>
       <div style="background:#F3F4F6; border-radius:6px; padding:8px;"><div style="font-size:18px; font-weight:bold; color:#166534;">${s.wins}V ${s.draws}E ${s.losses}D</div><div style="font-size:9px; color:#666; text-transform:uppercase;">Resultado</div></div>
       <div style="background:#F3F4F6; border-radius:6px; padding:8px;"><div style="font-size:18px; font-weight:bold;">${aproveitamento}%</div><div style="font-size:9px; color:#666; text-transform:uppercase;">Aproveitamento</div></div>
-      
-      <!-- ALTERADO: Mostrar os totais de GM e GS -->
       <div style="background:#F3F4F6; border-radius:6px; padding:8px;"><div style="font-size:16px; font-weight:bold;"><span style="color:#166534;">${s.scored} GM</span> / <span style="color:#DC2626;">${s.conceded} GS</span></div><div style="font-size:9px; color:#666; text-transform:uppercase;">Golos</div></div>
     </div>
 
@@ -181,33 +185,30 @@ window.exportGlobalStatsPDF = function(){
       </div>
     </div>
 
-    ${s.last5Form && s.last5Form.length > 0 ? `
-    <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">📈 Forma (Últimos ${s.last5Form.length})</h3>
-    <div style="margin-bottom:15px;">${s.last5Form.map(r => `<span style="display:inline-block; width:22px; height:22px; line-height:22px; border-radius:50%; text-align:center; font-weight:bold; font-size:11px; margin-right:6px; background:${r==='V'?'#166534':(r==='E'?'#CA8A04':'#B91C1C')}; color:#fff;">${r}</span>`).join('')}</div>` : ''}
-
-    <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">⭐ Destaques da Competição</h3>
-    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:8px; font-size:11px;">
-      <div style="border:1px solid #CCC; border-radius:6px; padding:8px; text-align:center;"><div style="font-size:9px; color:#666; text-transform:uppercase;">Melhor Marcador</div><div style="font-weight:bold; margin-top:3px;">${topScorer ? `${topScorer.name} (${topScorer.count})` : '-'}</div></div>
-      <div style="border:1px solid #CCC; border-radius:6px; padding:8px; text-align:center;"><div style="font-size:9px; color:#666; text-transform:uppercase;">Melhor Assistente</div><div style="font-weight:bold; margin-top:3px;">${topAssister ? `${topAssister.name} (${topAssister.count})` : '-'}</div></div>
-      <div style="border:1px solid #CCC; border-radius:6px; padding:8px; text-align:center;"><div style="font-size:9px; color:#666; text-transform:uppercase;">Mais Utilizado</div><div style="font-weight:bold; margin-top:3px;">${mostUsed ? `${mostUsed.name} (${mostUsed.minutes}')` : '-'}</div></div>
-    </div>
-    
-    <!-- NOVO: Lista de Todos os Marcadores -->
-    <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px; padding:10px; margin-bottom:15px; font-size:11px;">
-      <div style="font-size:9px; color:#666; text-transform:uppercase; font-weight:bold; margin-bottom:4px;">⚽ Todos os Marcadores desta Competição</div>
+    <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">⭐ Contribuições da Equipa</h3>
+    <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px; padding:10px; margin-bottom:8px; font-size:11px;">
+      <div style="font-size:9px; color:#666; text-transform:uppercase; font-weight:bold; margin-bottom:4px;">⚽ Todos os Marcadores</div>
       <div style="font-weight:bold; color:#111827; line-height:1.5;">${allScorersHtml}</div>
+    </div>
+    <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px; padding:10px; margin-bottom:15px; font-size:11px;">
+      <div style="font-size:9px; color:#666; text-transform:uppercase; font-weight:bold; margin-bottom:4px;">🎯 Todas as Assistências</div>
+      <div style="font-weight:bold; color:#111827; line-height:1.5;">${allAssistersHtml}</div>
     </div>
 
     <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">👥 Estatísticas do Plantel</h3>
     <table style="width:100%; border-collapse:collapse; font-size:10px; margin-bottom:15px;">
-      <tr style="border-bottom:1px solid #000;"><th style="text-align:left; padding:4px;">Jogador</th><th style="padding:4px;">Min</th><th style="padding:4px;">Tit.</th><th style="padding:4px;">G</th><th style="padding:4px;">A</th><th style="padding:4px;">🟨</th><th style="padding:4px;">🟥</th></tr>
-      ${playerRows.map(r => `<tr style="border-bottom:1px solid #EEE;"><td style="padding:4px;">${r.name}</td><td style="text-align:center; padding:4px;">${r.minutes}'</td><td style="text-align:center; padding:4px;">${r.starts}</td><td style="text-align:center; padding:4px;">${r.goals}</td><td style="text-align:center; padding:4px;">${r.assists}</td><td style="text-align:center; padding:4px;">${r.yellow}</td><td style="text-align:center; padding:4px;">${r.red}</td></tr>`).join('') || '<tr><td colspan="7" style="padding:8px; text-align:center; color:#666;">Sem dados de plantel.</td></tr>'}
+      <tr style="border-bottom:1px solid #000;">
+        <th style="text-align:left; padding:4px;">Jogador</th>
+        <th style="padding:4px;">Min</th><th style="padding:4px;">Tit.</th><th style="padding:4px;">G</th>
+        <th style="padding:4px;">A</th><th style="padding:4px;">GS</th><th style="padding:4px;">🟨</th><th style="padding:4px;">🟥</th>
+      </tr>
+      ${playerRowsHtml}
     </table>
 
     <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">🏋️ Treino no Período</h3>
     <div style="border:1px solid #CCC; border-radius:6px; padding:10px; margin-bottom:15px; font-size:11px;">
       ${trainingMetrics.count > 0
-        ? `Treinos realizados: <b>${trainingMetrics.count}</b> &nbsp;|&nbsp; Aproveitamento médio da equipa: <b>${trainingMetrics.pct}%</b><br><span style="font-size:9px; color:#888;">Calculado com base no plantel a partir da respetiva data de entrada de cada atleta, entre ${trainingMetrics.startDate.split('-').reverse().join('/')} e${trainingMetrics.endDate.split('-').reverse().join('/')}.</span>`
+        ? `Treinos realizados: <b>${trainingMetrics.count}</b> &nbsp;|&nbsp; Aproveitamento médio da equipa: <b>${trainingMetrics.pct}%</b><br><span style="font-size:9px; color:#888;">Calculado com base no plantel a partir da data de entrada de cada atleta.</span>`
         : 'Sem treinos registados neste período.'}
     </div>
 
@@ -217,10 +218,8 @@ window.exportGlobalStatsPDF = function(){
     </div>
 
     <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
-      <div style="font-size:10px; color:#666;">• Relatório Consolidado — Coachfolio v4.0</div>
-      <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">
-        O Treinador
-      </div>
+      <div style="font-size:10px; color:#666;">• Relatório Consolidado — Coachfolio v3.6</div>
+      <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">O Treinador</div>
     </div>
   </div>`;
 
@@ -1296,3 +1295,85 @@ window.updatePlayerBirthDate = function(id, val){
 };
 
 window.removePlayer = function(id){ const p=state.roster.find(x=>x.id===id); if(p){ p.active=false; saveState(); render(); } };
+
+window.exportLeaguePDF = function(lgId) {
+    const lg = state.leagues.find(l => l.id === lgId);
+    if (!lg) return;
+    
+    let table = {}; 
+    lg.teams.forEach(t => table[t] = { name: t, p:0, w:0, d:0, l:0, gf:0, ga:0, gd:0, pts:0 });
+    lg.matches.forEach(m => { 
+        if(!table[m.h] || !table[m.a]) return; 
+        table[m.h].p++; table[m.a].p++; 
+        table[m.h].gf += m.hg; table[m.h].ga += m.ag; table[m.h].gd += (m.hg - m.ag); 
+        table[m.a].gf += m.ag; table[m.a].ga += m.hg; table[m.a].gd += (m.ag - m.hg); 
+        if(m.hg > m.ag) { table[m.h].w++; table[m.h].pts += 3; table[m.a].l++; } 
+        else if(m.hg === m.ag) { table[m.h].d++; table[m.a].d++; table[m.h].pts += 1; table[m.a].pts += 1; } 
+        else { table[m.a].w++; table[m.a].pts += 3; table[m.h].l++; } 
+    });
+    
+    let sortedTable = Object.values(table).sort((a,b) => { 
+        if(b.pts !== a.pts) return b.pts - a.pts; 
+        if(b.gd !== a.gd) return b.gd - a.gd; 
+        return b.gf - a.gf; 
+    });
+
+    let tableRows = sortedTable.map((row, idx) => {
+        let isMyClub = row.name === getMyClub() || row.name === state.myClubName;
+        let bg = isMyClub ? '#F3F4F6' : '#FFFFFF';
+        let fw = isMyClub ? 'bold' : 'normal';
+        return `<tr style="background:${bg}; border-bottom:1px solid #EEE;">
+            <td style="padding:8px; text-align:center; color:#666;">${idx+1}</td>
+            <td style="padding:8px; text-align:left; font-weight:${fw};">${escapeHTML(row.name)}</td>
+            <td style="padding:8px; text-align:center;">${row.p}</td>
+            <td style="padding:8px; text-align:center;">${row.w}</td>
+            <td style="padding:8px; text-align:center;">${row.d}</td>
+            <td style="padding:8px; text-align:center;">${row.l}</td>
+            <td style="padding:8px; text-align:center;">${row.gf}</td>
+            <td style="padding:8px; text-align:center;">${row.ga}</td>
+            <td style="padding:8px; text-align:center;">${row.gd>0?'+':''}${row.gd}</td>
+            <td style="padding:8px; text-align:center; font-weight:bold;">${row.pts}</td>
+        </tr>`;
+    }).join('');
+
+    const logoHtml = typeof getClubLogoHtml === 'function' ? getClubLogoHtml() : '';
+
+    let html = `
+    <div class="print-card" style="padding:20px; font-family:-apple-system, sans-serif;">
+        <div class="print-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:15px;">
+            <div>
+                <h1 style="font-size:20px; margin:0; text-transform:uppercase; color:#000;">CLASSIFICAÇÃO</h1>
+                <p style="font-size:14px; font-weight:bold; margin:4px 0 0 0; color:#333;">🏆 ${escapeHTML(lg.name)}</p>
+                <p style="font-size:11px; color:#555; margin:3px 0 0 0;">Clube: <b>${getClubAndEscalao()}</b> | Época: <b>${state.currentSeason}</b></p>
+            </div>
+            ${logoHtml}
+        </div>
+        
+        <table style="width:100%; border-collapse:collapse; font-size:11px;">
+            <thead>
+                <tr style="background:#E5E7EB; border-bottom:2px solid #000;">
+                    <th style="padding:8px; text-align:center; width:30px;">#</th>
+                    <th style="padding:8px; text-align:left;">Equipa</th>
+                    <th style="padding:8px; text-align:center;" title="Jogos">J</th>
+                    <th style="padding:8px; text-align:center;" title="Vitórias">V</th>
+                    <th style="padding:8px; text-align:center;" title="Empates">E</th>
+                    <th style="padding:8px; text-align:center;" title="Derrotas">D</th>
+                    <th style="padding:8px; text-align:center;" title="Golos Marcados">GM</th>
+                    <th style="padding:8px; text-align:center;" title="Golos Sofridos">GS</th>
+                    <th style="padding:8px; text-align:center;" title="Diferença de Golos">DG</th>
+                    <th style="padding:8px; text-align:center; font-size:12px;">Pts</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tableRows}
+            </tbody>
+        </table>
+        
+        <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
+            <div style="font-size:10px; color:#666;">• Tabela Classificativa — Coachfolio v3.6</div>
+        </div>
+    </div>`;
+
+    document.getElementById('print-area').innerHTML = html;
+    if(typeof window.openSafePrintModal === 'function') window.openSafePrintModal();
+};

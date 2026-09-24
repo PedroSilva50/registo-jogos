@@ -378,7 +378,7 @@ function matchNarrativeHtml(m, isLocked = false){
   };
 
   const goalRow = (g) => {
-    let subTag = g.goalSubtype === 'penalti' ? ' (Penálti)' : (g.goalSubtype === 'autogolo' ? ' (Autogolo)' : '');
+    let subTag = g.goalSubtype === 'penalti' ? ' (Penálti)' : (g.goalSubtype === 'autogolo' ? ' (Autogolo)' : (g.goalSubtype === 'livre' ? ' (Livre)' : ''));
     let desc = '';
   
     if (g.type === 'scored') {
@@ -406,8 +406,9 @@ function matchNarrativeHtml(m, isLocked = false){
 
   let rows = ''; const h1 = eventsForHalf(1); const h2 = eventsForHalf(2); const h1_regular = h1.filter(e => !e.isHalftime); const h1_int = h1.filter(e => e.isHalftime);
   
-  let h1TimeLabel = (m.timer && m.timer.half1DurationMs != null) ? formatExactHalf(m.timer.half1DurationMs) : '';
-  let h2TimeLabel = (m.timer && m.timer.half2DurationMs != null) ? formatExactHalf(m.timer.half2DurationMs) : '';
+  // CORREÇÃO DOS TEMPOS EXATOS AQUI
+  let h1TimeLabel = (!m.ignoreMinutes && m.timer && m.timer.half1DurationMs != null && !m.manualMode && !m.isNewManualModel) ? formatExactHalf(m.timer.half1DurationMs) : '';
+  let h2TimeLabel = (!m.ignoreMinutes && m.timer && m.timer.half2DurationMs != null && !m.manualMode && !m.isNewManualModel) ? formatExactHalf(m.timer.half2DurationMs) : '';
 
   if(h1.length || tm.kickoff) { rows += `<div style="font-size:11px; color:var(--gold); font-family:-apple-system, sans-serif; text-transform:uppercase; margin:8px 0 4px; font-weight:600; display:flex; justify-content:space-between;"><span>⏱️ ${t('match_half1')}</span><span style="color:var(--muted);">${h1TimeLabel}</span></div>`; rows += h1_regular.map(e => e.type==='goal'?goalRow(e.data):(e.type==='card'?cardRow(e.data):subRow(e))).join(''); }
   if(tm.halftime || h1_int.length > 0) { rows += `<div style="font-size:11px; color:var(--muted); font-family:-apple-system, sans-serif; text-transform:uppercase; margin:12px 0 8px; font-weight:600; text-align:center; border-top:1px dashed var(--line); border-bottom:1px dashed var(--line); padding:6px 0;">⏸️ ${t('match_ht_lbl')}</div>`; rows += h1_int.map(e => e.type==='goal'?goalRow(e.data):(e.type==='card'?cardRow(e.data):subRow(e))).join(''); }
@@ -591,6 +592,15 @@ function renderStratSubHeader() {
 }
 function renderTeamSubHeader() { return `<div class="seg" style="margin-bottom:14px;"><div class="seg-btn ${currentTab==='plantel'?'active':''}" onclick="navigateToTab('plantel')" style="font-size:9px; padding:8px 4px;">${t('pl_title')}</div><div class="seg-btn ${currentTab==='stats'?'active':''}" onclick="navigateToTab('stats')" style="font-size:9px; padding:8px 4px;">${t('st_title')}</div>${state.enableFines ? `<div class="seg-btn ${currentTab==='caixinha'?'active':''}" onclick="navigateToTab('caixinha')" style="font-size:9px; padding:8px 4px;">${t('fine_title')}</div>` : ''}${state.enableLeagues ? `<div class="seg-btn ${currentTab==='classificacoes'?'active':''}" onclick="navigateToTab('classificacoes')" style="font-size:9px; padding:8px 4px;">${t('lg_title')}</div>` : ''}</div>`; }
 
+// Função auxiliar: Traz apenas os jogadores convocados para o jogo (ou todos se for amigável/antigo)
+window.getMatchEligiblePlayers = function(m) {
+    const all = eligiblePlayers();
+    if (m && m.originalSchedule && m.originalSchedule.callup && m.originalSchedule.callup.length > 0) {
+        return all.filter(p => m.originalSchedule.callup.includes(p.id));
+    }
+    return all;
+};
+
 function renderJogo(){
   const m = getActiveMatch();
   if(!m) return `${topbarHtml(t('hub_match_title'))}${renderJogoSubHeader()}<div style="text-align:center; margin-top:40px;"><div class="empty">${t('match_none')}</div><button class="btn btn-gold" style="width:100%; max-width:300px; margin:20px auto 0;" onclick="navigateToTab('calendario')">${t('match_goto_sch')}</button></div>`;
@@ -617,7 +627,7 @@ function renderJogo(){
 
   let dynamicPanel = '';
   if(pendingCaptain){
-    let captainChips = eligiblePlayers().length ? eligiblePlayers().map(p=>`<div class="chip chip-sm ${m.capitao===p.id?'active-green':''}" onclick="setCaptain('${m.id}','${p.id}')">${playerLabel(p)}</div>`).join('') : `<div class="empty" style="grid-column:1/-1;">${t('pl_none')}</div>`;
+    let captainChips = window.getMatchEligiblePlayers(m).length ? window.getMatchEligiblePlayers(m).map(p=>`<div class="chip chip-sm ${m.capitao===p.id?'active-green':''}" onclick="setCaptain('${m.id}','${p.id}')">${playerLabel(p)}</div>`).join('') : `<div class="empty" style="grid-column:1/-1;">${t('pl_none')}</div>`;
     dynamicPanel = `<div class="panel" style="border-color:var(--gold);"><div class="panel-title" style="color:var(--gold);">${t('match_cap')}</div><div class="grid-btns cols-4">${captainChips}</div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pendingCaptain=false; render()">${t('cancel')}</button></div>`;
   } 
   else if(pending && (pending.kind === 'scored' || pending.kind === 'conceded')){
@@ -631,7 +641,7 @@ function renderJogo(){
     dynamicPanel = `<div class="panel"><div class="panel-title">${t('match_conc_half')}</div><div class="grid-btns"><div class="chip" onclick="pendingCard.half=1; render()">${t('match_half1')}</div><div class="chip" onclick="pendingCard.half=2; render()">${t('match_half2')}</div></div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pendingCard=null; render()">${t('cancel')}</button></div>`;
   } else if(pendingCard){
     let cardChips = `<div class="chip chip-sm" style="border-color:var(--red); color:var(--red);" onclick="addCard('${m.id}', 'opp', pendingCard.color, pendingCard.half)">Adversário</div>`;
-    cardChips += eligiblePlayers().length ? eligiblePlayers().map(p=>`<div class="chip chip-sm" onclick="addCard('${m.id}', '${p.id}', pendingCard.color, pendingCard.half)">${playerLabel(p)}</div>`).join('') : '';
+    cardChips += window.getMatchEligiblePlayers(m).length ? window.getMatchEligiblePlayers(m).map(p=>`<div class="chip chip-sm" onclick="addCard('${m.id}', '${p.id}', pendingCard.color, pendingCard.half)">${playerLabel(p)}</div>`).join('') : '';
     dynamicPanel = `<div class="panel"><div class="panel-title">${t('match_card_who', {color: t(pendingCard.color==='Amarelo'?'match_yellow':'match_red')})}</div><div class="grid-btns cols-4">${cardChips}</div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pendingCard=null; render()">${t('cancel')}</button></div>`;
   } else if(pendingSub && !pendingSub.half) {
      dynamicPanel = `<div class="panel"><div class="panel-title">${t('match_conc_half')}</div><div class="grid-btns"><div class="chip" onclick="pendingSub.half=1; render()">${t('match_half1')}</div><div class="chip" onclick="pendingSub.half=2; render()">${t('match_half2')}</div></div><button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pendingSub=null; render()">${t('cancel')}</button></div>`;
@@ -640,7 +650,7 @@ function renderJogo(){
      const isHT = currHalfVal === 'halftime';
      const onPitchIds = getPlayersOnPitchAtEndOfHalf(m, isHT ? 1 : (currHalfVal||1)); 
      const onPitchPlayers = sortPlayerObjs(onPitchIds.map(id => state.roster.find(p=>p.id===id)).filter(Boolean));
-     const onBench = eligiblePlayers().filter(p => !onPitchIds.includes(p.id));
+     const onBench = window.getMatchEligiblePlayers(m).filter(p => !onPitchIds.includes(p.id));
 
      let subMinInputVal = '';
      const subMinEl = document.getElementById('manual-sub-min');
@@ -679,7 +689,7 @@ function renderJogo(){
 
   let lineupPanel = '';
   if(needsLineup && !isGameActive) {
-     lineupPanel = `<div class="panel" style="border-color:var(--gold);"><div class="panel-title" style="color:var(--gold);">${t('match_start_xi')} (${pendingLineupSet.length}/${state.tacticFormat})</div><div class="grid-btns cols-4">${eligiblePlayers().map(p => `<div class="chip chip-sm ${(pendingLineupSet).includes(p.id) ? 'active-green' : ''}" onclick="togglePendingLineup('${p.id}')">${playerLabel(p)}</div>`).join('')}</div><button class="btn btn-gold" style="width:100%; margin-top:10px;" ${pendingLineupSet.length !== state.tacticFormat ? 'disabled':''} onclick="confirmLineup('${m.id}')">${t('match_conf_xi')}</button></div>`;
+     lineupPanel = `<div class="panel" style="border-color:var(--gold);"><div class="panel-title" style="color:var(--gold);">${t('match_start_xi')} (${pendingLineupSet.length}/${state.tacticFormat})</div><div class="grid-btns cols-4">${window.getMatchEligiblePlayers(m).map(p => `<div class="chip chip-sm ${(pendingLineupSet).includes(p.id) ? 'active-green' : ''}" onclick="togglePendingLineup('${p.id}')">${playerLabel(p)}</div>`).join('')}</div><button class="btn btn-gold" style="width:100%; margin-top:10px;" ${pendingLineupSet.length !== state.tacticFormat ? 'disabled':''} onclick="confirmLineup('${m.id}')">${t('match_conf_xi')}</button></div>`;
   } else if (state.trackSubs && m.lineup && m.lineup.length > 0) {
      let editXiBtn = (!isGameActive && (!isMatchEnded || isUnlocked)) ? `<button class="card-mini-btn" style="border:1px solid var(--muted); color:var(--muted); background:transparent;" onclick="window.editLineup('${m.id}')">✏️ Alterar Equipa Inicial</button>` : '';
      lineupPanel = `<div style="display:flex; gap:8px; justify-content:center; margin-top:12px; margin-bottom:8px;">${editXiBtn}<button class="card-mini-btn" style="border:1px solid var(--gold); color:var(--gold); background:transparent;" onclick="window.openMatchTacticalBoard('${m.id}')">📋 Esquema Tático do Jogo</button></div>`;
@@ -687,7 +697,7 @@ function renderJogo(){
 
   let ratingsPanel = '';
   if(pendingRatings){
-      ratingsPanel = `<div style="margin-bottom:12px; padding:10px; background:var(--surface-2); border-radius:8px; border:1px solid var(--gold);"><div class="panel-title" style="color:var(--gold); margin-bottom:8px;">${t('match_rate_pls')}</div><div style="display:flex; flex-direction:column; gap:8px; max-height:260px; overflow-y:auto; padding-right:4px;">${eligiblePlayers().map(p => { const r = (m.ratings && m.ratings[p.id]) || 0; let starsHtml = ''; for(let i=1; i<=5; i++){ starsHtml += `<span style="font-size:24px; line-height:1; cursor:pointer; margin:0 2px; color:${i<=r ? 'var(--gold)' : 'var(--line)'};" onclick="setRating('${m.id}', '${p.id}',${i})">★</span>`; } return `<div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:6px; border-bottom:1px solid var(--line);"><span style="font-size:13px;">${playerLabel(p)}</span><div style="display:flex; align-items:center;">${starsHtml}</div></div>`; }).join('')}</div></div>`;
+      ratingsPanel = `<div style="margin-bottom:12px; padding:10px; background:var(--surface-2); border-radius:8px; border:1px solid var(--gold);"><div class="panel-title" style="color:var(--gold); margin-bottom:8px;">${t('match_rate_pls')}</div><div style="display:flex; flex-direction:column; gap:8px; max-height:260px; overflow-y:auto; padding-right:4px;">${window.getMatchEligiblePlayers(m).map(p => { const r = (m.ratings && m.ratings[p.id]) || 0; let starsHtml = ''; for(let i=1; i<=5; i++){ starsHtml += `<span style="font-size:24px; line-height:1; cursor:pointer; margin:0 2px; color:${i<=r ? 'var(--gold)' : 'var(--line)'};" onclick="setRating('${m.id}', '${p.id}',${i})">★</span>`; } return `<div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:6px; border-bottom:1px solid var(--line);"><span style="font-size:13px;">${playerLabel(p)}</span><div style="display:flex; align-items:center;">${starsHtml}</div></div>`; }).join('')}</div></div>`;
   } else if (isMatchEnded) { 
       ratingsPanel = `<button class="btn btn-outline" style="width:100%; padding: 10px; font-size:12px; margin-bottom:12px;" onclick="pendingRatings=true; render()">${t('match_rate_edit')}</button>`; 
   }
@@ -771,7 +781,6 @@ function renderJogo(){
   let finalBtnLabel = pendingRatings ? t('match_save_rate') : (isMatchEnded ? t('match_save_rep') : t('match_save_btn'));
   let finalBtnStyle = pendingRatings ? 'btn-gold' : 'btn-ghost';
 
-  // NOVO: Botão Flutuante de Voz (só aparece se o jogo estiver a decorrer)
   let micBtnHtml = '';
   if (isGameActive && !isMatchEnded && state.enableVoice) {
       micBtnHtml = `
@@ -794,7 +803,6 @@ function renderJogo(){
     </div>
     
     <div class="scoreboard">
-       <!-- ... (código existente do scoreboard) ... -->
       <div class="opponent" style="margin-bottom:4px;">
         <div style="font-size:15px;">
           ${oppHtml}

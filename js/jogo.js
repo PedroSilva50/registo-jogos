@@ -44,6 +44,10 @@ function buildMatchReportHTML(m){
     ...sortPlayerObjs(unused)
   ];
 
+  // NÃO CONVOCADOS
+  const allEligible = eligiblePlayers();
+  const uncalled = sortPlayerObjs(allEligible.filter(p => !squadIds.includes(p.id)));
+
   let lineupHtml = '';
   sortedSquad.forEach(p => {
     const isStarter = (m.lineup||[]).includes(p.id);
@@ -53,6 +57,10 @@ function buildMatchReportHTML(m){
     const r = (m.ratings && m.ratings[p.id]) ? `${m.ratings[p.id]}★` : '-';
     let statusLabel = isStarter ? '<b>(XI)</b>' : (wasSubbedIn ? '(Sup)' : '(SNU)');
     lineupHtml += `<tr><td style="text-align:left;">${playerLabel(p)} ${statusLabel}</td><td style="white-space:nowrap; padding:0 6px;">${minsStr}</td><td>${r}</td></tr>`;
+  });
+
+  uncalled.forEach(p => {
+    lineupHtml += `<tr><td style="text-align:left; color:#9CA3AF;">${playerLabel(p)} <span style="font-size:10px;">(Não Convocado)</span></td><td style="white-space:nowrap; padding:0 6px; color:#9CA3AF;">-</td><td style="color:#9CA3AF;">-</td></tr>`;
   });
 
   let subsHtml = '';
@@ -98,7 +106,7 @@ function buildMatchReportHTML(m){
     </div>
     <div style="display:flex; gap:20px; margin-bottom:20px; align-items:flex-start;">
       <div style="flex:1.2;">
-        <h3>Convocatória e Minutos (${sortedSquad.length} Jogadores)</h3>
+        <h3>Convocatória e Minutos (${squadIds.length} Jogadores)</h3>
         <table><tr><th style="text-align:left;">Jogador</th><th>Min</th><th>Aval</th></tr>${lineupHtml||'<tr><td colspan="3">Sem registo</td></tr>'}</table>
       </div>
       <div style="flex:1;">
@@ -223,6 +231,10 @@ window.exportMatchPDF = function(mId) {
     ...sortPlayerObjs(unused)
   ];
 
+  // NÃO CONVOCADOS
+  const allEligible = eligiblePlayers();
+  const uncalled = sortPlayerObjs(allEligible.filter(p => !squadIds.includes(p.id)));
+
   let lineupHtml = '';
   sortedSquad.forEach((p, idx) => {
     const isStarter = (m.lineup || []).includes(p.id);
@@ -234,6 +246,11 @@ window.exportMatchPDF = function(mId) {
     let bg = idx % 2 === 0 ? '#F9FAFB' : '#FFFFFF';
     
     lineupHtml += `<tr style="background:${bg}; border-bottom:1px solid #F3F4F6;"><td style="text-align:left; padding:6px 8px; color:#111827;">${playerLabel(p)} ${statusLabel}</td><td style="white-space:nowrap; text-align:center; padding:6px 4px; font-family:monospace; font-weight:bold; color:#374151;">${minsStr}</td><td style="text-align:center; color:#D9A441; font-weight:bold;">${r}</td></tr>`;
+  });
+
+  uncalled.forEach((p, idx) => {
+    let bg = (sortedSquad.length + idx) % 2 === 0 ? '#F9FAFB' : '#FFFFFF';
+    lineupHtml += `<tr style="background:${bg}; border-bottom:1px solid #F3F4F6;"><td style="text-align:left; padding:6px 8px; color:#9CA3AF;">${playerLabel(p)} <span style="font-weight:bold;">(Não Convocado)</span></td><td style="white-space:nowrap; text-align:center; padding:6px 4px; font-family:monospace; font-weight:bold; color:#9CA3AF;">-</td><td style="text-align:center; color:#9CA3AF; font-weight:bold;">-</td></tr>`;
   });
 
   let subsHtml = '';
@@ -324,7 +341,7 @@ window.exportMatchPDF = function(mId) {
     </div>
 
     <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:8px; padding:10px; margin-bottom:18px; page-break-inside:avoid;">
-      <h3 style="font-size:11px; font-weight:800; margin:0 0 8px 0; border-bottom:2px solid #0E211A; padding-bottom:4px; text-transform:uppercase; color:#0E211A;">Convocatória e Minutos de Jogo (${sortedSquad.length} Atletas)</h3>
+      <h3 style="font-size:11px; font-weight:800; margin:0 0 8px 0; border-bottom:2px solid #0E211A; padding-bottom:4px; text-transform:uppercase; color:#0E211A;">Convocatória e Minutos de Jogo (${squadIds.length} Atletas)</h3>
       <table style="width:100%; border-collapse:collapse; font-size:11px;">
         <thead><tr style="background:#E5E7EB; color:#374151;"><th style="text-align:left; padding:6px 8px;">Atleta</th><th style="width:75px; text-align:center; padding:6px 0;">Minutos</th><th style="width:45px; text-align:center; padding:6px 0;">Aval</th></tr></thead>
         <tbody>${lineupHtml || '<tr><td colspan="3" style="text-align:center; padding:8px; color:#9CA3AF;">Sem registo de convocatória</td></tr>'}</tbody>
@@ -344,7 +361,7 @@ window.exportMatchPDF = function(mId) {
     ` : ''}
 
     <div style="margin-top:24px; display:flex; justify-content:space-between; align-items:flex-end;">
-      <div style="font-size:10px; color:#9CA3AF;">• Documento de registo oficial — Coachfolio v4.0</div>
+      <div style="font-size:10px; color:#9CA3AF;">• Documento de registo oficial — Coachfolio v3.6</div>
       <div style="text-align:center; width:200px; border-top:1.5px solid #111827; padding-top:4px; font-size:11px; font-weight:bold; color:#111827;">A Equipa Técnica</div>
     </div>
   </div>`;

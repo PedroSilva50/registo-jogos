@@ -46,7 +46,7 @@ function interpretarComando(transcricao) {
     const numeros = extrairNumeros(texto);
     const tem = (palavras) => palavras.some(palavra => texto.includes(palavra));
 
-    // 1. SUBSTITUIÇÕES (Avaliado primeiro para não colidir com outros números)
+    // 1. SUBSTITUIÇÕES
     if (tem(["substituição", "sai", "entra", "troca", "tira", "mete"])) {
         if (numeros.length < 2) return { acao: "SUBSTITUICAO_ERRO" };
         
@@ -63,7 +63,7 @@ function interpretarComando(transcricao) {
         else return { acao: "SUBSTITUICAO", sai: numeros[0], entra: numeros[1] }; 
     }
 
-    // 2. CARTÕES (Nossos e do Adversário)
+    // 2. CARTÕES
     if (tem(["amarelo", "amarelado"])) {
         if (tem(["adversário", "deles", "banco"])) return { acao: "CARTAO_AMARELO_OPP", jogador: "opp" };
         return { acao: "CARTAO_AMARELO", jogador: numeros[0] };
@@ -111,15 +111,13 @@ function interpretarComando(transcricao) {
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const recognition = SpeechRecognition ? new SpeechRecognition() : null;
-
-// Nova variável para controlar o estado do microfone e forçar o corte no iOS
 let isRecognizing = false;
 
 if (recognition) {
     recognition.lang = 'pt-PT';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    recognition.continuous = false; // Garante que não é gravação contínua
+    recognition.continuous = false; 
 
     recognition.onstart = function() {
         isRecognizing = true;
@@ -134,7 +132,15 @@ if (recognition) {
     };
 
     recognition.onresult = function(event) {
-        processarAcaoVoz(event.results[0][0].transcript);
+        const transcript = event.results[0][0].transcript;
+        
+        // 🛡️ NOVO: Força a paragem no iOS imediatamente após receber a frase!
+        try { recognition.stop(); } catch(e) {}
+        
+        // Dá 100ms de folga para a UI atualizar e não bloquear o telemóvel antes de abrir o menu
+        setTimeout(() => {
+            processarAcaoVoz(transcript);
+        }, 100);
     };
 
     recognition.onerror = function(event) {
@@ -151,21 +157,16 @@ window.iniciarEscutaVoz = function() {
     if (!recognition) return showToast("O browser não suporta comandos de voz.");
     
     if (isRecognizing) {
-        // Se já está vermelho, o segundo toque força o iOS a desligar e processar a frase instantaneamente!
         try { recognition.stop(); } catch(e) {}
         return;
     }
 
-    try { 
-        recognition.start(); 
-    } 
+    try { recognition.start(); } 
     catch (e) {
         if (e.name === 'InvalidStateError') {
             try { recognition.stop(); } catch(err) {}
         } else if (e.name === 'NotAllowedError') {
-            showToast("⚠️ Permissão negada ou falta de ligação HTTPS.");
-        } else {
-            showToast("⚠️ Erro no mic: " + e.message);
+            showToast("⚠️ Permissão negada. Vai a Definições > Safari > Microfone.");
         }
     }
 };
@@ -180,9 +181,13 @@ function processarAcaoVoz(transcricao) {
 
     const half = window.resolveEventHalf(m);
     
-    // VALIDAÇÃO: Saber quem está ativamente em campo (se a app estiver a registar minutos/subs)
+    // 🛡️ CORREÇÃO CIRÚRGICA DA MATEMÁTICA DO JAVASCRIPT
+    // Se estivermos no intervalo ('halftime'), o valor muda para 1. Assim o filtro consegue calcular corretamente.
+    const currH = half === 'halftime' ? 1 : half;
+    
+    // VALIDAÇÃO: Saber quem está ativamente em campo
     const isLiveTracking = state.trackSubs && m.lineup && m.lineup.length > 0 && !m.ignoreMinutes;
-    const onPitchIds = isLiveTracking ? getPlayersOnPitchAtEndOfHalf(m, half) : [];
+    const onPitchIds = isLiveTracking ? getPlayersOnPitchAtEndOfHalf(m, currH) : [];
 
     let pId = null;
     let pInId = null;
@@ -224,7 +229,6 @@ function processarAcaoVoz(transcricao) {
         pId = getPlayerIdByNumber(intencao.jogador);
         if (!pId) return showToast(`Nº ${intencao.jogador} não encontrado.`);
         
-        // FILTRO ANTI-BANCO (Impede que o banco marque golos/sofra cartões se a app estiver a ser gerida ativamente)
         if (isLiveTracking && !onPitchIds.includes(pId)) {
             return showToast(`❌ O Nº ${intencao.jogador} está no banco!`);
         }
@@ -235,7 +239,6 @@ function processarAcaoVoz(transcricao) {
         pAssistId = getPlayerIdByNumber(intencao.assistencia);
         if (!pAssistId) return showToast(`Assistente Nº ${intencao.assistencia} não encontrado.`);
         
-        // FILTRO ANTI-BANCO PARA ASSISTÊNCIA
         if (isLiveTracking && !onPitchIds.includes(pAssistId)) {
             return showToast(`❌ O assistente Nº ${intencao.assistencia} está no banco!`);
         }

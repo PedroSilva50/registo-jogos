@@ -125,10 +125,21 @@ if (recognition) {
     recognition.onend = function() {
         const btn = document.getElementById('btn-mic-floating');
         if(btn) { btn.style.background = 'var(--gold)'; btn.innerHTML = '🎤'; btn.style.animation = 'none'; }
+        // 🛡️ FORÇA O IOS A LARGAR O MICROFONE
+        try { recognition.stop(); } catch(e) {} 
     };
 
     recognition.onresult = function(event) {
         processarAcaoVoz(event.results[0][0].transcript);
+        // 🛡️ CORTA O MIC ASSIM QUE OUVE A FRASE
+        try { recognition.stop(); } catch(e) {} 
+    };
+    
+    recognition.onerror = function(event) {
+        const btn = document.getElementById('btn-mic-floating');
+        if(btn) { btn.style.background = 'var(--gold)'; btn.innerHTML = '🎤'; btn.style.animation = 'none'; }
+        // 🛡️ CORTA O MIC EM CASO DE FALHA DE INTERNET OU ERRO
+        try { recognition.stop(); } catch(e) {} 
     };
 }
 

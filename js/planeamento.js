@@ -397,13 +397,20 @@ function renderCalendario(){
             <div class="grid-btns cols-4">${eligiblePlayers().map(p=>`<div class="chip chip-sm ${s.callup.includes(p.id)?'active-green':''}" onclick="event.stopPropagation(); window.toggleCallup('${s.id}', '${p.id}')">${playerLabel(p)}</div>`).join('')}</div>
             <div class="panel-title" style="margin-top:12px; margin-bottom:8px; color:var(--gold);">👔 Equipa Técnica Presença</div>
             <div class="grid-btns cols-4">${(state.staff || []).map(st => `<div class="chip chip-sm ${(s.staffCallup || []).includes(st.id)?'active-green':''}" onclick="event.stopPropagation(); window.toggleStaffCallup('${s.id}', '${st.id}')">${st.name}</div>`).join('')}</div>
-            <div class="btn-row" style="margin-top:12px;">
-                <button class="btn btn-green" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.copyCallup('${s.id}')">Enviar WhatsApp 📋</button>
-                <button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.exportCallupPDF('${s.id}')">📄 Imprimir PDF</button>
-                <button class="btn btn-ghost" style="font-size:11px; padding:10px; color:var(--gold); border:1px solid var(--gold-dim);" onclick="event.stopPropagation(); window.openScouting('${s.id}')">👁️ Scouting</button>
-                ${s.scouting ? `<button class="btn btn-outline" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); window.exportScoutingPDF('${s.id}')">📄 PDF Scouting</button>` : ''}
-                <button class="btn btn-ghost" style="font-size:11px; padding:10px;" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')">${t('sch_start')}</button>
+            
+            <!-- BLOCO DOS BOTÕES REDESENHADO (Mais Limpo e Organizado) -->
+            <div style="display:flex; flex-direction:column; gap:8px; margin-top:16px;">
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-green" style="flex:1; font-size:10px; padding:8px;" onclick="event.stopPropagation(); window.copyCallup('${s.id}')">WhatsApp 📋</button>
+                    <button class="btn btn-outline" style="flex:1; font-size:10px; padding:8px;" onclick="event.stopPropagation(); window.exportCallupPDF('${s.id}')">📄 PDF Convocatória</button>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-ghost" style="flex:1; font-size:10px; padding:8px; color:var(--gold); border:1px solid var(--gold-dim);" onclick="event.stopPropagation(); window.openScouting('${s.id}')">👁️ Editar Scouting</button>
+                    ${s.scouting ? `<button class="btn btn-outline" style="flex:1; font-size:10px; padding:8px;" onclick="event.stopPropagation(); window.exportScoutingPDF('${s.id}')">📄 PDF Scouting</button>` : ''}
+                </div>
+                <button class="btn btn-gold" style="width:100%; font-size:12px; padding:10px; margin-top:4px;" onclick="event.stopPropagation(); startScheduledMatch('${s.id}')">▶ INICIAR JOGO</button>
             </div>
+
         </div>` : ''}
       </div>`; 
   }).join('');

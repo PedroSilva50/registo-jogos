@@ -793,9 +793,30 @@ window.doFinishMatch = function() {
     pendingRatings = false; saveState(); navigateToTab('jogos');
 };
 window.uiFinishMatch = function(){
-  const m = getActiveMatch(); const notes = (document.getElementById('notes-input') || {}).value; if(!m) return;
+  const m = getActiveMatch(); 
+  const notes = (document.getElementById('notes-input') || {}).value; 
+  if(!m) return;
+  
   if(notes !== undefined) m.notes = escapeHTML(notes);
-  if(pendingRatings) { doFinishMatch(); } else if(!m.timeline || !m.timeline.kickoff) { modalConfig = { type: 'finishMatch' }; document.getElementById('modal-root').innerHTML = renderModalHTML(); } else { modalConfig = { type: 'askRatings' }; document.getElementById('modal-root').innerHTML = renderModalHTML(); }
+  
+  if(pendingRatings) { 
+      doFinishMatch(); 
+  } else if(!m.timeline || !m.timeline.kickoff) { 
+      // Jogo em modo Histórico (não usou cronómetro)
+      modalConfig = { type: 'finishMatch' }; 
+      document.getElementById('modal-root').innerHTML = renderModalHTML(); 
+  } else if(m.timeline.kickoff && !m.timeline.fullTime) {
+      // 🛡️ NOVO AVISO DE SEGURANÇA: Se o Apito Final não foi dado
+      askConfirm('Ainda não deste o Apito Final. O cronómetro vai parar agora. Queres mesmo terminar o jogo?', () => {
+          window.setMatchTimeMark(m.id, 'fullTime'); // Para o relógio instantaneamente
+          modalConfig = { type: 'askRatings' }; // Passa para as Avaliações
+          document.getElementById('modal-root').innerHTML = renderModalHTML();
+      }, 'btn-red');
+  } else { 
+      // O Apito Final já foi dado normalmente
+      modalConfig = { type: 'askRatings' }; 
+      document.getElementById('modal-root').innerHTML = renderModalHTML(); 
+  }
 };
 window.enableManualMode = function(mId){
   const m = state.matches.find(x => x.id === mId);
@@ -1098,13 +1119,23 @@ window.confirmSub = function(mId, customMin) {
     }
   }
 
-  m.subs.push({ 
-    id: uid(), outId: pendingSub.outId, inId: pendingSub.inId, 
-    half: isHT ? 1 : (currentH || 1), isHalftime: isHT, 
-    minute: minVal,
-    subMs: isHT ? null : (minVal != null ? minVal * 60 * 1000 : getMatchElapsedMs(m)),
-    timestamp: Date.now()
-  }); 
+  // Prepara os arrays quer venha do toque múltiplo ou da voz
+  const outArr = pendingSub.outIds || (pendingSub.outId ? [pendingSub.outId] : []);
+  const inArr = pendingSub.inIds || (pendingSub.inId ? [pendingSub.inId] : []);
+
+  // Faz o loop e regista as substituições todas de uma vez no mesmo minuto!
+  for (let i = 0; i < outArr.length; i++) {
+      m.subs.push({ 
+        id: uid(), 
+        outId: outArr[i], 
+        inId: inArr[i], 
+        half: isHT ? 1 : (currentH || 1), 
+        isHalftime: isHT, 
+        minute: minVal,
+        subMs: isHT ? null : (minVal != null ? minVal * 60 * 1000 : getMatchElapsedMs(m)),
+        timestamp: Date.now() + i // Dá um desfasamento de 1 milissegundo para ficarem ordenadas
+      }); 
+  }
 
   pendingSub = null; saveState(); render(); 
 };

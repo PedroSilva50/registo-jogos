@@ -5,29 +5,30 @@ const storageAdapter = {
   async set(key, value){ if(usingClaudeStorage) return await window.storage.set(key, value); else { localStorage.setItem(key, value); return { key, value }; } }
 };
 
-// 🛡️ 1. FILA DE GRAVAÇÃO (SAVE QUEUE) - Fim dos atropelamentos de dados
-let saveQueue = Promise.resolve();
+let saveTimeout = null;
 
-function saveState() { 
-  // Proteção: Verifica se a variável global já carregou para não dar ReferenceError
+function saveState() {
   if (typeof IS_LICENSED !== 'undefined' && !IS_LICENSED) return Promise.resolve();
-  
-  state.schemaVersion = 1; // Assinatura da versão para o futuro
-  state.lastBackupDate = Date.now(); // LÓGICA CORRIGIDA: Atualiza a data ANTES de converter para texto!
-  
-  saveQueue = saveQueue.then(async () => {
-    try { 
-      await storageAdapter.set(STORAGE_KEY, JSON.stringify(state)); 
-    } catch(e) { 
-      if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || (e.message && e.message.includes('quota'))) { 
-        // Proteção caso a tradução t() ainda não esteja pronta na memória
-        alert(typeof t === 'function' ? t('msg_quota') : 'Espaço Esgotado! O telemóvel não tem memória.'); 
-      } else { 
-        console.error("Erro ao guardar estado:", e); 
-      } 
-    } 
-  });
-  return saveQueue;
+
+  state.schemaVersion = 1;
+  state.lastBackupDate = Date.now();
+
+  if (saveTimeout) clearTimeout(saveTimeout);
+
+  return new Promise(resolve => {
+    saveTimeout = setTimeout(async () => {
+      try {
+        await storageAdapter.set(STORAGE_KEY, JSON.stringify(state));
+      } catch(e) {
+        if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || (e.message && e.message.includes('quota'))) {
+          alert(typeof t === 'function' ? t('msg_quota') : 'Espaço Esgotado! O telemóvel não tem memória.');
+        } else {
+          console.error("Erro ao guardar estado:", e);
+        }
+      }
+      resolve();
+    }, 300);
+});
 }
 
 // 🛡️ 2. PROTEÇÃO DE CARREGAMENTO & DIREITOS ADQUIRIDOS (GRANDFATHERING)
@@ -38,7 +39,20 @@ async function loadState(){
     const res = await storageAdapter.get(STORAGE_KEY);
     if(res && res.value) {
        state = JSON.parse(res.value);
-       
+           // 🛡️ NORMALIZAÇÃO CIRÚRGICA DE DADOS (Garante compatibilidade futura)
+           if (state.trainings && Array.isArray(state.trainings)) {
+             state.trainings.forEach(tr => {
+               if (Array.isArray(tr.absences)) {
+                 const normalized = {};
+                 tr.absences.forEach(id => { normalized[id] = 'injustificada'; });
+                 tr.absences = normalized;
+               } else if (!tr.absences) {
+                 tr.absences = {};
+               }
+       });
+       // Força a gravação da estrutura limpa em segundo plano
+       saveState();
+    }
        // DIREITOS ADQUIRIDOS: Se o treinador já tem dados na memória, é cliente antigo, ativa automaticamente!
        if (!state.isActivated && ((state.matches && state.matches.length > 0) || (state.roster && state.roster.length > 0) || (state.schedule && state.schedule.length > 0))) {
            state.isActivated = true;
@@ -46,7 +60,6 @@ async function loadState(){
 
        if(!state.schemaVersion) state.schemaVersion = 1;
        if(state.isActivated === undefined) state.isActivated = false;
-
        if(!state.roster) state.roster = []; if(!state.matches) state.matches = []; if(!state.trainings) state.trainings = []; if(!state.schedule) state.schedule = []; if(!state.phaseReports) state.phaseReports = {}; if(!state.scoutingBook) state.scoutingBook = {};
        if(!state.tactics) state.tactics = []; if(!state.tacticPaths) state.tacticPaths = []; if(!state.tacticalNotebook) state.tacticalNotebook = []; if(!state.videos) state.videos = []; if(!state.diary) state.diary = []; if(!state.leagues) state.leagues = []; if(!state.fines) state.fines = []; if(!state.staff) state.staff = [];
        if(!state.tacticFormat) state.tacticFormat = 11;
@@ -96,6 +109,17 @@ async function loadState(){
     throw new Error("Falha Crítica ao carregar dados. Execução interrompida.");
   }
   if(typeof applyTheme === 'function') applyTheme(state.theme || 'original'); 
+  // AVISO DE BACKUP ANTIGO (iOS pode limpar dados)
+if (state.lastBackupDate && state.matches.length > 0) {
+    const daysSince = (Date.now() - state.lastBackupDate) / (1000 * 60 * 60 * 24);
+    if (daysSince > 5) {
+        setTimeout(() => {
+            if (typeof showToast === 'function') {
+                showToast("⚠️ Faz backup! O iOS pode apagar os dados em breve.");
+            }
+        }, 2000);
+    }
+}
   checkActivationAndRender(); // Entra no verificador de licença em vez do render direto
 }
 

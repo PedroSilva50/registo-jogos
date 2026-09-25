@@ -195,10 +195,21 @@ window.deleteScoutingData = function(schId) {
     if (m && m.originalSchedule) s = m.originalSchedule;
   }
 
-  if (!s || !s.scouting) return;
-  
+  // Se o utilizador confirmar a ação
   if (confirm('Tem a certeza que deseja eliminar a análise de scouting deste jogo?')) {
-    delete s.scouting;
+    
+    if (s) {
+      // 1. Apaga do jogo atual
+      delete s.scouting;
+      
+      // 2. Apaga da base de dados global inteligente (O que faltava!)
+      const oppKey = (s.opponent || '').trim().toLowerCase();
+      if (state.scoutingBook && state.scoutingBook[oppKey]) {
+          delete state.scoutingBook[oppKey];
+      }
+    }
+
+    // 3. Grava e atualiza o ecrã
     saveState();
     if(typeof closeModal === 'function') closeModal();
     showToast('Análise de scouting eliminada! 🗑️');

@@ -354,9 +354,19 @@ window.deleteTacticalPlay = function(id) {
 window.exportTacticPDF = function() {
     const pitchEl = document.getElementById('tactic-pitch');
     if (!pitchEl) return;
+    
     showToast('A preparar PDF... ⏳');
     
-    html2canvas(pitchEl, { useCORS: true, scale: 2, backgroundColor: '#113821' }).then(canvas => {
+    // OTIMIZAÇÃO iOS: Reduzir scale para evitar crash
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const scale = isIOS ? 1.5 : 2;
+    
+    html2canvas(pitchEl, { 
+        useCORS: true, 
+        scale: scale, 
+        backgroundColor: '#113821' 
+    }).then(canvas => {
         const imgData = canvas.toDataURL('image/png');
         const html = `
             <div class="print-card">
@@ -374,9 +384,8 @@ window.exportTacticPDF = function() {
                     Coachfolio v4.0 — Documento de Análise Tática
                 </div>
             </div>`;
-            
         document.getElementById('print-area').innerHTML = html;
-        if(typeof window.openSafePrintModal === 'function') window.openSafePrintModal();
+        if (typeof window.openSafePrintModal === 'function') window.openSafePrintModal();
     }).catch(err => {
         console.error(err);
         showToast('Erro ao gerar PDF tático.');
@@ -544,43 +553,60 @@ function startDrag(e) {
     piece.style.zIndex = 1000; 
 }
 
-function moveDrag(e) { 
-    if (!dragObj.dragging || typeof currentTab === 'undefined' || currentTab !== 'tatica' || currentTacticMode !== 'move') return; 
-    e.preventDefault(); 
-    const pos = getTouchPos(e); 
-    let relX = pos.x - dragObj.pitchRect.left; 
-    let relY = pos.y - dragObj.pitchRect.top; 
+let rafId = null;
+
+function moveDrag(e) {
+    if (!dragObj.dragging || typeof currentTab === 'undefined' || currentTab !== 'tatica' || currentTacticMode !== 'move') return;
+    e.preventDefault();
     
-    let pctX = Math.round(((relX / dragObj.pitchRect.width) * 100) * 10) / 10; 
-    let pctY = Math.round(((relY / dragObj.pitchRect.height) * 100) * 10) / 10; 
+    // OTIMIZAÇÃO: Usar requestAnimationFrame para evitar reflows excessivos
+    if (rafId) cancelAnimationFrame(rafId);
     
-    pctX = Math.max(0, Math.min(100, pctX)); 
-    pctY = Math.max(0, Math.min(100, pctY)); 
-    
-    dragObj.el.style.left = pctX + '%'; 
-    dragObj.el.style.top = pctY + '%'; 
+    rafId = requestAnimationFrame(() => {
+        const pos = getTouchPos(e);
+        let relX = pos.x - dragObj.pitchRect.left;
+        let relY = pos.y - dragObj.pitchRect.top;
+        
+        let pctX = Math.round(((relX / dragObj.pitchRect.width) * 100) * 10) / 10;
+        let pctY = Math.round(((relY / dragObj.pitchRect.height) * 100) * 10) / 10;
+        
+        pctX = Math.max(0, Math.min(100, pctX));
+        pctY = Math.max(0, Math.min(100, pctY));
+        
+        dragObj.el.style.left = pctX + '%';
+        dragObj.el.style.top = pctY + '%';
+    });
 }
 
-function endDrag(e) { 
-    if (!dragObj.dragging || typeof currentTab === 'undefined' || currentTab !== 'tatica') return; 
-    dragObj.dragging = false; 
-    const pos = getTouchPos(e); 
-    let relX = pos.x - dragObj.pitchRect.left; 
-    let relY = pos.y - dragObj.pitchRect.top; 
+function endDrag(e) {
+    if (!dragObj.dragging || typeof currentTab === 'undefined' || currentTab !== 'tatica') return;
     
-    let pctX = Math.round(((relX / dragObj.pitchRect.width) * 100) * 10) / 10; 
-    let pctY = Math.round(((relY / dragObj.pitchRect.height) * 100) * 10) / 10; 
-
-    if (pctX < -10 || pctX > 110 || pctY < -10 || pctY > 110) { 
-        state.tactics = state.tactics.filter(i => i.id !== dragObj.id); 
-    } else { 
-        const item = state.tactics.find(i => i.id === dragObj.id); 
-        if (item) { 
-            item.x = Math.max(0, Math.min(100, pctX)); 
-            item.y = Math.max(0, Math.min(100, pctY)); 
-        } 
-    } 
-    dragObj.el.style.zIndex = ''; 
-    saveState(); 
-    render(); 
+    // Limpar RAF se ainda estiver pendente
+    if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+    }
+    
+    dragObj.dragging = false;
+    
+    const pos = getTouchPos(e);
+    let relX = pos.x - dragObj.pitchRect.left;
+    let relY = pos.y - dragObj.pitchRect.top;
+    
+    let pctX = Math.round(((relX / dragObj.pitchRect.width) * 100) * 10) / 10;
+    let pctY = Math.round(((relY / dragObj.pitchRect.height) * 100) * 10) / 10;
+    
+    if (pctX < -10 || pctX > 110 || pctY < -10 || pctY > 110) {
+        state.tactics = state.tactics.filter(i => i.id !== dragObj.id);
+    } else {
+        const item = state.tactics.find(i => i.id === dragObj.id);
+        if (item) {
+            item.x = Math.max(0, Math.min(100, pctX));
+            item.y = Math.max(0, Math.min(100, pctY));
+        }
+    }
+    
+    dragObj.el.style.zIndex = '';
+    saveState();
+    render();
 }

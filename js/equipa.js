@@ -57,25 +57,63 @@ window.uiSavePhaseConclusion = function(val){
 };
 
 function computeCompetitionPlayerStats(matches){
-  let activeRoster = (state.roster || []).filter(p => p.active !== false);
-  activeRoster = sortPlayerObjs(activeRoster);
+  let activeRoster = (state.roster || []).filter(p => p.active !== false); //
+  activeRoster = sortPlayerObjs(activeRoster); //
 
   const rows = activeRoster.map(p => {
-    let minutes = 0, starts = 0, goals = 0, assists = 0, yellow = 0, red = 0;
-    matches.forEach(m => {
-      minutes += Math.round(calcPlayerMinutes(m, p.id) / 60);
-      if ((m.lineup || []).includes(p.id)) starts++;
+    let minutes = 0, starts = 0, goals = 0, assists = 0, yellow = 0, red = 0; //
+
+    (matches || []).forEach(m => {
+      // 1. Minutos e Titularidades
+      if (typeof calcPlayerMinutes === 'function') {
+        minutes += Math.round(calcPlayerMinutes(m, p.id) / 60); //[cite: 21]
+      }
+      if ((m.lineup || []).includes(p.id)) starts++; //[cite: 21]
+
+      // 2. Golos e Assistências
       (m.goals || []).forEach(g => {
-        if (g.type === 'scored' && g.scorerId === p.id) goals++;
-        if (g.type === 'scored' && g.assistId === p.id) assists++;
+        if (g.type === 'scored') {
+          if (g.scorerId === p.id) goals++; //[cite: 21]
+          if (g.assistId === p.id) assists++; //[cite: 21]
+        }
       });
+
+      // 3. Cartões do Jogo Atual (2 Amarelos no mesmo jogo = 1 Vermelho)
+      let matchYellows = 0;
+      let matchReds = 0;
+
       (m.cards || []).forEach(c => {
-        if (c.playerId === p.id) { if (c.color === 'Amarelo') yellow++; else red++; }
+        if (c && c.playerId === p.id) {
+          if (c.color === 'Amarelo') {
+            matchYellows++;
+            if (matchYellows === 2) {
+              matchReds++;
+              matchYellows = 0; // Converte o 2º amarelo em vermelho e limpa a contagem de amarelos
+            }
+          } else if (c.color === 'Vermelho') {
+            matchReds++;
+          }
+        }
       });
+
+      // Acumula os totais no registo global do jogador
+      yellow += matchYellows;
+      red += matchReds;
     });
-    return { id: p.id, name: playerLabel(p), minutes, starts, goals, assists, yellow, red };
+
+    return { 
+      id: p.id, 
+      name: typeof playerLabel === 'function' ? playerLabel(p) : (p.name || ''), //[cite: 21]
+      minutes, 
+      starts, 
+      goals, 
+      assists, 
+      yellow, 
+      red 
+    }; //[cite: 21]
   });
-  return rows;
+
+  return rows; //[cite: 21]
 }
 
 function computeTrainingMetricsForMatches(matches){
@@ -228,108 +266,163 @@ window.exportGlobalStatsPDF = function(){
 };
 
 function calcularEstatisticaJogador(playerId, targetSeason = state.currentSeason, typeFilter = 'todos', phaseFilter = 'todas', tourFilter = 'todas') {
-  let golos = 0, assistencias = 0, amarelos = 0, vermelhos = 0, somaAvaliacoes = 0, numAvaliacoes = 0, faltasTreino = 0, jogosTitular = 0, totalSegundosJogo = 0, presencasTreino = 0, jogosConvocado = 0, jogosUtilizado = 0;
-  let minutosTreinoCumpridos = 0, minutosTreinoTotais = 0, golosSofridos = 0;
-  
-  if (typeof IS_LICENSED !== 'undefined' && !IS_LICENSED || !state || !playerId) {
-    return { golos:0, assistencias:0, amarelos:0, vermelhos:0, media:'-', faltasTreino:0, presencasTreino:0, totalTreinos:0, minutosTreinoCumpridos:0, minutosTreinoTotais:0, jogosTitular:0, jogosConvocado:0, jogosUtilizado:0, minutos:"0m 0s", totalSegundosJogo:0, golosSofridos:0 };
-  }
-
-  const pInfo = state.roster.find(x=>x.id===playerId);
-  const isGK = pInfo && typeof pInfo.positions === 'string' && getPosRank(pInfo.positions) === 1;
-  // 🛡️ DETETAR A DATA EM QUE O JOGADOR ENTROU NA EQUIPA
-  const playerJoinDate = (pInfo && pInfo.joinDate) ? pInfo.joinDate : null; 
-
-  const validTrainings = (state.trainings || []).filter(tr => tr && (tr.status === undefined || tr.status === 'completed') && (targetSeason === 'TUDO' || getEntitySeason(tr) === targetSeason));
-  
-  let totalTreinos = 0;
-
-  (state.matches || []).filter(m => {
-    if (!m) return false;
-    if (targetSeason !== 'TUDO' && getEntitySeason(m) !== targetSeason) return false;
-    if (typeFilter !== 'todos' && m.type !== typeFilter) return false;
-    if (typeFilter === 'campeonato' && phaseFilter !== 'todas' && (m.phase||'').trim() !== phaseFilter) return false;
-    if (typeFilter === 'torneio' && tourFilter !== 'todas' && (m.tournamentName||'').trim() !== tourFilter) return false;
-    return true;
-  }).forEach(m => {
-    const usedInMatch = (m.lineup || []).includes(playerId) || (m.subs || []).some(s => s && s.inId === playerId);
-    const calledUpList = (m.originalSchedule && m.originalSchedule.callup && m.originalSchedule.callup.length > 0) ? m.originalSchedule.callup : null;
+    let golos = 0, assistencias = 0, amarelos = 0, vermelhos = 0, somaAvaliacoes = 0, numAvaliacoes = 0, faltasTreino = 0, jogosTitular = 0, totalSegundosJogo = 0, presencasTreino = 0, jogosConvocado = 0, jogosUtilizado = 0;
+    let minutosTreinoCumpridos = 0, minutosTreinoTotais = 0, golosSofridos = 0;
     
-    if (calledUpList ? calledUpList.includes(playerId) : usedInMatch) jogosConvocado++;
-
-    if (state.trackSubs && m.finished) {
-      if (!m.ignoreMinutes) {
-        if (usedInMatch) jogosUtilizado++;
-        if ((m.lineup || []).includes(playerId)) jogosTitular++; 
-        if (typeof calcPlayerMinutes === 'function') totalSegundosJogo += calcPlayerMinutes(m, playerId); 
-      }
-    }    
-    (m.goals || []).forEach(g => { 
-      if (g && g.type === 'scored' && g.scorerId === playerId) golos++; 
-      if (g && g.type === 'scored' && g.assistId === playerId) assistencias++; 
-      
-      if (g && g.type === 'conceded') {
-          if (g.gkId && g.gkId !== 'auto' && g.gkId !== 'none') {
-              if (g.gkId === playerId) golosSofridos++;
-          } else {
-              if (isGK) {
-                  if (!state.trackSubs || m.ignoreMinutes || !m.lineup || m.lineup.length === 0) {
-                      if (m.lineup && m.lineup.includes(playerId)) golosSofridos++;
-                  } else {
-                      let goalHalf = g.half || 1; let goalMin = g.minute || 0;
-                      let currentXI = [...(m.lineup || [])];
-                      let subsBeforeGoal = (m.subs || []).filter(s => {
-                          if (s.half < goalHalf) return true;
-                          if (s.half === goalHalf) { if (s.isHalftime) return true; return (s.minute || 0) <= goalMin; }
-                          return false;
-                      }).sort((a,b) => (a.half - b.half) || (a.isHalftime ? -1 : 1) || ((a.minute||0) - (b.minute||0)));
-                      subsBeforeGoal.forEach(s => { currentXI = currentXI.filter(id => id !== s.outId); currentXI.push(s.inId); });
-                      if (currentXI.includes(playerId)) golosSofridos++;
+    if (typeof IS_LICENSED !== 'undefined' && !IS_LICENSED || !state || !playerId) {
+        return { golos:0, assistencias:0, amarelos:0, vermelhos:0, media:'-', faltasTreino:0, presencasTreino:0, totalTreinos:0, minutosTreinoCumpridos:0, minutosTreinoTotais:0, jogosTitular:0, jogosConvocado:0, jogosUtilizado:0, minutos:"0m 0s", totalSegundosJogo:0, golosSofridos:0 };
+    }
+    
+    const pInfo = state.roster.find(x => x.id === playerId);
+    const isGK = pInfo && typeof pInfo.positions === 'string' && getPosRank(pInfo.positions) === 1;
+    const playerJoinDate = (pInfo && pInfo.joinDate) ? pInfo.joinDate : null;
+    
+    // OTIMIZAÇÃO: Filtrar jogos UMA VEZ só
+    const validMatches = (state.matches || []).filter(m => {
+        if (!m) return false;
+        if (targetSeason !== 'TUDO' && getEntitySeason(m) !== targetSeason) return false;
+        if (typeFilter !== 'todos' && m.type !== typeFilter) return false;
+        if (typeFilter === 'campeonato' && phaseFilter !== 'todas' && (m.phase || '').trim() !== phaseFilter) return false;
+        if (typeFilter === 'torneio' && tourFilter !== 'todas' && (m.tournamentName || '').trim() !== tourFilter) return false;
+        return true;
+    });
+    
+    // OTIMIZAÇÃO: Filtrar treinos UMA VEZ só
+    const validTrainings = (state.trainings || []).filter(tr => 
+        tr && (tr.status === undefined || tr.status === 'completed') && 
+        (targetSeason === 'TUDO' || getEntitySeason(tr) === targetSeason)
+    );
+    
+    let totalTreinos = 0;
+    
+    // OTIMIZAÇÃO: Criar Map de substituições por jogo (evita filter repetido)
+    const matchSubsMap = new Map();
+    validMatches.forEach(m => {
+        if (m.subs && m.subs.length > 0) {
+            matchSubsMap.set(m.id, m.subs);
+        }
+    });
+    
+    // Processar jogos
+    validMatches.forEach(m => {
+        const usedInMatch = (m.lineup || []).includes(playerId) || (m.subs || []).some(s => s && s.inId === playerId);
+        const calledUpList = (m.originalSchedule && m.originalSchedule.callup && m.originalSchedule.callup.length > 0) ? m.originalSchedule.callup : null;
+        
+        if (calledUpList ? calledUpList.includes(playerId) : usedInMatch) jogosConvocado++;
+        
+        if (state.trackSubs && m.finished) {
+            if (!m.ignoreMinutes) {
+                if (usedInMatch) jogosUtilizado++;
+                if ((m.lineup || []).includes(playerId)) jogosTitular++;
+                if (typeof calcPlayerMinutes === 'function') totalSegundosJogo += calcPlayerMinutes(m, playerId);
+            }
+        }
+        
+        // OTIMIZAÇÃO: Usar Map de substituições
+        (m.goals || []).forEach(g => {
+            if (g && g.type === 'scored') {
+                if (g.scorerId === playerId) golos++;
+                if (g.assistId === playerId) assistencias++;
+            } else if (g && g.type === 'conceded') {
+                if (g.gkId && g.gkId !== 'auto' && g.gkId !== 'none') {
+                    if (g.gkId === playerId) golosSofridos++;
+                } else if (isGK) {
+                    if (!state.trackSubs || m.ignoreMinutes || !m.lineup || m.lineup.length === 0) {
+                        if (m.lineup && m.lineup.includes(playerId)) golosSofridos++;
+                    } else {
+                        let goalHalf = g.half || 1;
+                        let goalMin = g.minute || 0;
+                        let currentXI = [...(m.lineup || [])];
+                        
+                        // OTIMIZAÇÃO: Usar Map de substituições
+                        const matchSubs = matchSubsMap.get(m.id) || [];
+                        let subsBeforeGoal = matchSubs.filter(s => {
+                            if (s.half < goalHalf) return true;
+                            if (s.half === goalHalf) {
+                                if (s.isHalftime) return true;
+                                return (s.minute || 0) <= goalMin;
+                            }
+                            return false;
+                        }).sort((a, b) => (a.half - b.half) || (a.isHalftime ? -1 : 1) || ((a.minute || 0) - (b.minute || 0)));
+                        
+                        subsBeforeGoal.forEach(s => {
+                            currentXI = currentXI.filter(id => id !== s.outId);
+                            currentXI.push(s.inId);
+                        });
+                        
+                        if (currentXI.includes(playerId)) golosSofridos++;
+                    }
+                }
+            }
+        });
+        
+      // 🛡️ LÓGICA DE CARTÕES: 2 Amarelos no mesmo jogo = 1 Vermelho
+      const cardsByMatch = {};
+      (m.cards || []).forEach(c => {
+          if (c && c.playerId === playerId) {
+              if (!cardsByMatch[m.id]) cardsByMatch[m.id] = { yellow: 0, red: 0 };
+              if (c.color === 'Amarelo') {
+                  cardsByMatch[m.id].yellow++;
+                  if (cardsByMatch[m.id].yellow === 2) {
+                      cardsByMatch[m.id].red++;
+                      cardsByMatch[m.id].yellow = 0; // Reseta para não contar duplamente
                   }
+              } else if (c.color === 'Vermelho') {
+                  cardsByMatch[m.id].red++;
               }
           }
-      }
-    });  
-    (m.cards || []).forEach(c => { 
-      if (c && c.playerId === playerId) { if (c.color === 'Amarelo') amarelos++; else vermelhos++; } 
+      });
+      // Soma os totais processados por jogo
+      Object.values(cardsByMatch).forEach(stats => {
+          amarelos += stats.yellow;
+          vermelhos += stats.red;
+      });
+        
+        if (m.ratings && m.ratings[playerId]) {
+            somaAvaliacoes += m.ratings[playerId];
+            numAvaliacoes++;
+        }
     });
-    if (m.ratings && m.ratings[playerId]) { somaAvaliacoes += m.ratings[playerId]; numAvaliacoes++; }
-  });
-  
-  validTrainings.forEach(tr => {
-    // 🛡️ REGRA DE OURO: SE O TREINO FOI ANTES DO JOGADOR ENTRAR, É IGNORADO!
-    if (playerJoinDate && tr.date && tr.date < playerJoinDate) return;
-
-    totalTreinos++;
-    const dur = parseInt(tr.duration, 10) || 90;
-    minutosTreinoTotais += dur;
-
-    let absReason = null;
-    if (Array.isArray(tr.absences)) { absReason = tr.absences.includes(playerId) ? 'injustificada' : null; }
-    else if (tr.absences && tr.absences[playerId]) { absReason = tr.absences[playerId]; }
-
-    const trueAbsenceReasons = ['injustificada', 'justificada'];
-
-    if (absReason && trueAbsenceReasons.includes(absReason)) {
-      faltasTreino++;
-      if (tr.customMinutes && tr.customMinutes[playerId] != null) { minutosTreinoCumpridos += parseInt(tr.customMinutes[playerId], 10); }
-    } else if (absReason) {
-      presencasTreino++;
-      minutosTreinoCumpridos += (tr.customMinutes && tr.customMinutes[playerId] != null) ? parseInt(tr.customMinutes[playerId], 10) : 0;
-    } else { 
-      presencasTreino++; minutosTreinoCumpridos += dur; 
-    }
-  });
-  
-  return { 
-    golos, assistencias, amarelos, vermelhos, 
-    media: numAvaliacoes > 0 ? (somaAvaliacoes / numAvaliacoes).toFixed(1) : '-', 
-    faltasTreino, presencasTreino, totalTreinos, 
-    minutosTreinoCumpridos, minutosTreinoTotais,
-    jogosTitular, jogosConvocado, jogosUtilizado, 
-    minutos: typeof formatSecsToMinSec === 'function' ? formatSecsToMinSec(totalSegundosJogo) : Math.round(totalSegundosJogo/60) + "'",
-    totalSegundosJogo, golosSofridos 
-  };
+    
+    // Processar treinos
+    validTrainings.forEach(tr => {
+        if (playerJoinDate && tr.date && tr.date < playerJoinDate) return;
+        totalTreinos++;
+        
+        const dur = parseInt(tr.duration, 10) || 90;
+        minutosTreinoTotais += dur;
+        
+        let absReason = null;
+        if (Array.isArray(tr.absences)) {
+            absReason = tr.absences.includes(playerId) ? 'injustificada' : null;
+        } else if (tr.absences && tr.absences[playerId]) {
+            absReason = tr.absences[playerId];
+        }
+        
+        const trueAbsenceReasons = ['injustificada', 'justificada'];
+        if (absReason && trueAbsenceReasons.includes(absReason)) {
+            faltasTreino++;
+            if (tr.customMinutes && tr.customMinutes[playerId] != null) {
+                minutosTreinoCumpridos += parseInt(tr.customMinutes[playerId], 10);
+            }
+        } else if (absReason) {
+            presencasTreino++;
+            minutosTreinoCumpridos += (tr.customMinutes && tr.customMinutes[playerId] != null) ? parseInt(tr.customMinutes[playerId], 10) : 0;
+        } else {
+            presencasTreino++;
+            minutosTreinoCumpridos += dur;
+        }
+    });
+    
+    return {
+        golos, assistencias, amarelos, vermelhos,
+        media: numAvaliacoes > 0 ? (somaAvaliacoes / numAvaliacoes).toFixed(1) : '-',
+        faltasTreino, presencasTreino, totalTreinos,
+        minutosTreinoCumpridos, minutosTreinoTotais,
+        jogosTitular, jogosConvocado, jogosUtilizado,
+        minutos: typeof formatSecsToMinSec === 'function' ? formatSecsToMinSec(totalSegundosJogo) : Math.round(totalSegundosJogo / 60) + "'",
+        totalSegundosJogo, golosSofridos
+    };
 }
 
 function generatePlayerBarsHTML(stats, maxStats, isGK = false, isPDF = false) {

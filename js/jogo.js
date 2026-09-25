@@ -494,3 +494,51 @@ window.saveMatchTacticalBoardAndReturn = function() {
   if(typeof navigateToHub === 'function') navigateToHub('jogo');
   if(typeof navigateToTab === 'function') navigateToTab('jogo');
 };
+
+window.undoLastEvent = function(mId) {
+  const m = state.matches.find(x => x.id === mId);
+  if (!m) return;
+  
+  let latestEvent = null;
+  let eventType = null;
+  let latestIdx = -1;
+  let maxTime = -1;
+  
+  // Função auxiliar para procurar o evento mais recente
+  const checkArray = (arr, type) => {
+    if (arr && arr.length > 0) {
+      for (let i = 0; i < arr.length; i++) {
+        // Usa timestamp real OU cria um baseado na data do jogo + índice
+        const t = arr[i].timestamp || (new Date(m.date).getTime() + i * 1000);
+        if (t >= maxTime) {
+          maxTime = t;
+          latestEvent = arr[i];
+          eventType = type;
+          latestIdx = i;
+        }
+      }
+    }
+  };
+  
+  // Procura em todas as listas de eventos
+  checkArray(m.goals, 'goal');
+  checkArray(m.cards, 'card');
+  checkArray(m.subs, 'sub');
+  checkArray(m.events, 'event');
+  
+  if (latestIdx === -1) {
+    if (typeof showToast === 'function') showToast("⚠️ Não há eventos para anular.");
+    return;
+  }
+  
+  // Executa o corte na gaveta correta
+  if (eventType === 'goal') m.goals.splice(latestIdx, 1);
+  else if (eventType === 'card') m.cards.splice(latestIdx, 1);
+  else if (eventType === 'sub') m.subs.splice(latestIdx, 1);
+  else if (eventType === 'event') m.events.splice(latestIdx, 1);
+  
+  saveState();
+  render();
+  
+  if (typeof showToast === 'function') showToast("⏪ Ação anulada com sucesso!");
+};

@@ -112,44 +112,60 @@ function interpretarComando(transcricao) {
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 const recognition = SpeechRecognition ? new SpeechRecognition() : null;
 
+// Nova variável para controlar o estado do microfone e forçar o corte no iOS
+let isRecognizing = false;
+
 if (recognition) {
     recognition.lang = 'pt-PT';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
+    recognition.continuous = false; // Garante que não é gravação contínua
 
     recognition.onstart = function() {
+        isRecognizing = true;
         const btn = document.getElementById('btn-mic-floating');
         if(btn) { btn.style.background = 'var(--red)'; btn.innerHTML = '🎙️'; btn.style.animation = 'pulse 1s infinite'; }
     };
 
     recognition.onend = function() {
+        isRecognizing = false;
         const btn = document.getElementById('btn-mic-floating');
         if(btn) { btn.style.background = 'var(--gold)'; btn.innerHTML = '🎤'; btn.style.animation = 'none'; }
-        // 🛡️ FORÇA O IOS A LARGAR O MICROFONE
-        try { recognition.stop(); } catch(e) {} 
     };
 
     recognition.onresult = function(event) {
         processarAcaoVoz(event.results[0][0].transcript);
-        // 🛡️ CORTA O MIC ASSIM QUE OUVE A FRASE
-        try { recognition.stop(); } catch(e) {} 
     };
-    
+
     recognition.onerror = function(event) {
+        isRecognizing = false;
         const btn = document.getElementById('btn-mic-floating');
         if(btn) { btn.style.background = 'var(--gold)'; btn.innerHTML = '🎤'; btn.style.animation = 'none'; }
-        // 🛡️ CORTA O MIC EM CASO DE FALHA DE INTERNET OU ERRO
-        try { recognition.stop(); } catch(e) {} 
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+            showToast("⚠️ Erro no mic: " + event.error);
+        }
     };
 }
 
 window.iniciarEscutaVoz = function() {
     if (!recognition) return showToast("O browser não suporta comandos de voz.");
-    try { recognition.start(); } 
+    
+    if (isRecognizing) {
+        // Se já está vermelho, o segundo toque força o iOS a desligar e processar a frase instantaneamente!
+        try { recognition.stop(); } catch(e) {}
+        return;
+    }
+
+    try { 
+        recognition.start(); 
+    } 
     catch (e) {
-        if (e.name !== 'InvalidStateError') {
-            if (e.name === 'NotAllowedError') showToast("⚠️ Permissão negada ou falta de ligação HTTPS.");
-            else showToast("⚠️ Erro no mic: " + e.message);
+        if (e.name === 'InvalidStateError') {
+            try { recognition.stop(); } catch(err) {}
+        } else if (e.name === 'NotAllowedError') {
+            showToast("⚠️ Permissão negada ou falta de ligação HTTPS.");
+        } else {
+            showToast("⚠️ Erro no mic: " + e.message);
         }
     }
 };

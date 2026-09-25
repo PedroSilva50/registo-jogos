@@ -188,7 +188,13 @@ window.saveScoutingData = function(schId) {
 };
 
 window.deleteScoutingData = function(schId) {
-  const s = state.schedule.find(x => x.id === schId);
+  // Agora procura no calendário E nos jogos que já começaram/terminaram
+  let s = state.schedule.find(x => x.id === schId);
+  if (!s) {
+    const m = state.matches.find(x => x.id === schId || (x.originalSchedule && x.originalSchedule.id === schId));
+    if (m && m.originalSchedule) s = m.originalSchedule;
+  }
+
   if (!s || !s.scouting) return;
   
   if (confirm('Tem a certeza que deseja eliminar a análise de scouting deste jogo?')) {
@@ -313,6 +319,10 @@ function renderCalendario(){
       const isHomeMatch = (s.location === 'casa' || !s.location);
       const locLabel = isHomeMatch ? t('match_home') : t('match_away');
       const badgeClass = isHomeMatch ? 'casa' : 'fora';
+      
+      // 🛡️ NOVO: Procura na base de dados global se já tens scouting deste adversário
+      const oppKey = (s.opponent || '').trim().toLowerCase();
+      const hasScoutingGlobally = s.scouting || (state.scoutingBook && state.scoutingBook[oppKey]);
 
       let h2hHtml = '';
       if(s.opponent && s.opponent.trim() !== '') {
@@ -379,7 +389,7 @@ function renderCalendario(){
                 <div>
                     <div class="opp">
                         ${typeLabel}
-                        ${s.opponent} <span class="badge-loc ${badgeClass}">${locLabel}</span>
+                        ${s.opponent} ${hasScoutingGlobally ? '<span title="Scouting Registado">👁️</span>' : ''} <span class="badge-loc ${badgeClass}">${locLabel}</span>
                     </div>
                     <div class="date">${s.date.split('-').reverse().join('/')} às ${s.time} | ${s.numberOfHalves || 2}P de ${s.halfDuration || state.defaultHalfDuration || 30}'</div>
                 </div>

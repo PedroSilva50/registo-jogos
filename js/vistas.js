@@ -652,6 +652,10 @@ function renderJogo(){
      const onPitchPlayers = sortPlayerObjs(onPitchIds.map(id => state.roster.find(p=>p.id===id)).filter(Boolean));
      const onBench = window.getMatchEligiblePlayers(m).filter(p => !onPitchIds.includes(p.id));
 
+     // Garante que a seleção suporta múltiplos
+     if (!pendingSub.outIds) pendingSub.outIds = [];
+     if (!pendingSub.inIds) pendingSub.inIds = [];
+
      let subMinInputVal = '';
      const subMinEl = document.getElementById('manual-sub-min');
      if (subMinEl) subMinInputVal = subMinEl.value;
@@ -661,27 +665,41 @@ function renderJogo(){
          subMinField = `<div class="field" style="margin-bottom:10px;"><label>Minuto</label><input type="number" id="manual-sub-min" placeholder="Ex: 22" value="${subMinInputVal}" style="text-align:center; font-weight:bold;"></div>`;
      }
 
+     const outBtnHtml = onPitchPlayers.map(p => {
+         const isOut = pendingSub.outIds.includes(p.id);
+         return `<button class="card-mini-btn ${isOut?'red':''}" style="border:1px solid ${isOut?'var(--red)':'var(--line)'}; color:${isOut?'var(--red)':'var(--chalk)'};" onclick="if(pendingSub.outIds.includes('${p.id}')) pendingSub.outIds=pendingSub.outIds.filter(x=>x!=='${p.id}'); else pendingSub.outIds.push('${p.id}'); render()">${playerLabel(p)}</button>`;
+     }).join('');
+
+     const inBtnHtml = onBench.map(p => {
+         const isIn = pendingSub.inIds.includes(p.id);
+         return `<button class="card-mini-btn ${isIn?'active-green':''}" style="border:1px solid ${isIn?'var(--green)':'var(--line)'}; color:${isIn?'var(--green)':'var(--chalk)'};" onclick="if(pendingSub.inIds.includes('${p.id}')) pendingSub.inIds=pendingSub.inIds.filter(x=>x!=='${p.id}'); else pendingSub.inIds.push('${p.id}'); render()">${playerLabel(p)}</button>`;
+     }).join('');
+
+     // Apenas ativa o botão Confirmar se o número de saídas for igual às entradas
+     const canConfirm = pendingSub.outIds.length > 0 && pendingSub.outIds.length === pendingSub.inIds.length;
+
      dynamicPanel = `
         <div class="panel" style="border-color:var(--gold);">
            <div class="panel-title" style="color:var(--gold);">${t('match_sub_title')} ${isHT ? '('+t('match_ht')+')' : ''}</div>
            ${subMinField}
+           <div style="font-size:10px; color:var(--muted); margin-bottom:10px; text-align:center; text-transform:uppercase; letter-spacing:0.05em;">Podes selecionar vários em simultâneo</div>
            <div style="display:flex; gap:10px;">
              <div style="flex:1;">
-               <div style="font-size:10px; color:var(--red); text-transform:uppercase; font-weight:600;">${t('match_sub_out')}</div>
+               <div style="font-size:10px; color:var(--red); text-transform:uppercase; font-weight:600;">${t('match_sub_out')} (${pendingSub.outIds.length})</div>
                <div style="display:flex; flex-direction:column; gap:4px; margin-top:6px; max-height:180px; overflow-y:auto;">
-                 ${onPitchPlayers.map(p => `<button class="card-mini-btn ${pendingSub.outId===p.id?'red':''}" style="border:1px solid ${pendingSub.outId===p.id?'var(--red)':'var(--line)'}; color:${pendingSub.outId===p.id?'var(--red)':'var(--chalk)'};" onclick="pendingSub.outId='${p.id}'; render()">${playerLabel(p)}</button>`).join('')}
+                 ${outBtnHtml}
                </div>
              </div>
              <div style="flex:1;">
-               <div style="font-size:10px; color:var(--green); text-transform:uppercase; font-weight:600;">${t('match_sub_in')}</div>
+               <div style="font-size:10px; color:var(--green); text-transform:uppercase; font-weight:600;">${t('match_sub_in')} (${pendingSub.inIds.length})</div>
                <div style="display:flex; flex-direction:column; gap:4px; margin-top:6px; max-height:180px; overflow-y:auto;">
-                 ${onBench.map(p => `<button class="card-mini-btn ${pendingSub.inId===p.id?'active-green':''}" style="border:1px solid ${pendingSub.inId===p.id?'var(--green)':'var(--line)'}; color:${pendingSub.inId===p.id?'var(--green)':'var(--chalk)'};" onclick="pendingSub.inId='${p.id}'; render()">${playerLabel(p)}</button>`).join('')}
+                 ${inBtnHtml}
                </div>
              </div>
            </div>
            <div style="display:flex; gap:10px; margin-top:12px;">
              <button class="btn btn-outline" style="padding:8px;" onclick="pendingSub=null; render()">${t('cancel')}</button>
-             <button class="btn btn-gold" style="padding:8px;" ${(!pendingSub.outId || !pendingSub.inId) ? 'disabled' : ''} onclick="const el = document.getElementById('manual-sub-min'); confirmSub('${m.id}', el ? el.value : '')">${t('confirm')}</button>
+             <button class="btn btn-gold" style="padding:8px;" ${!canConfirm ? 'disabled' : ''} onclick="const el = document.getElementById('manual-sub-min'); confirmSub('${m.id}', el ? el.value : '')">${t('confirm')} (${pendingSub.outIds.length}🔄)</button>
            </div>
         </div>
      `;
@@ -737,7 +755,7 @@ function renderJogo(){
   if (!isMatchEnded || isUnlocked) {
       let subBtnHtml = '';
       if (state.trackSubs) {
-          subBtnHtml = `<button class="card-mini-btn" style="border:1px solid var(--chalk); color:var(--chalk);" onclick="pendingSub={outId:null, inId:null, half: window.resolveEventHalf(getActiveMatch())}; render()" ${disabledAttr}>${t('match_sub_title')}</button>`;
+          subBtnHtml = `<button class="card-mini-btn" style="border:1px solid var(--chalk); color:var(--chalk);" onclick="pendingSub={outIds:[], inIds:[], half: window.resolveEventHalf(getActiveMatch())}; render()" ${disabledAttr}>${t('match_sub_title')}</button>`;
       }
 
       let extraBtnsHtml = '';
@@ -865,7 +883,8 @@ function renderJogos(){
       const badgeClass = isHomeMatch ? 'casa' : 'fora';
 
       const schedId = m.originalSchedule ? m.originalSchedule.id : m.id;
-      const hasScouting = m.originalSchedule && m.originalSchedule.scouting;
+      const oppKey = (m.opponent || '').trim().toLowerCase();
+      const hasScouting = (m.originalSchedule && m.originalSchedule.scouting) || (state.scoutingBook && state.scoutingBook[oppKey]);
 
       let ratingsHtml = ''; 
       if(m.ratings && Object.keys(m.ratings).length > 0){ 

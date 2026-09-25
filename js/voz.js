@@ -1,4 +1,4 @@
-// voz.js - Motor de Processamento de Voz Inteligente (Coachfolio PRO)
+// voz.js - Motor de Processamento de Voz Inteligente (Coachfolio PRO - Opção B Segura)
 
 const dicionarioNumeros = {
     "zero": 0, "um": 1, "uma": 1, "dois": 2, "duas": 2, "três": 3, "tres": 3, 
@@ -9,12 +9,10 @@ const dicionarioNumeros = {
     "trinta": 30, "quarenta": 40, "cinquenta": 50, "sessenta": 60, "setenta": 70, "oitenta": 80, "noventa": 90
 };
 
-// Ordenar as chaves por tamanho para evitar cortar palavras compostas
 const chavesOrdenadas = Object.keys(dicionarioNumeros).sort((a, b) => b.length - a.length);
 
 function extrairNumeros(frase) {
     let fraseLimpa = frase.toLowerCase();
-    
     chavesOrdenadas.forEach(chave => {
         if (chave.includes(" ")) {
             fraseLimpa = fraseLimpa.replace(new RegExp(`\\b${chave}\\b`, "g"), dicionarioNumeros[chave]);
@@ -46,7 +44,6 @@ function interpretarComando(transcricao) {
     const numeros = extrairNumeros(texto);
     const tem = (palavras) => palavras.some(palavra => texto.includes(palavra));
 
-    // 1. SUBSTITUIÇÕES
     if (tem(["substituição", "sai", "entra", "troca", "tira", "mete"])) {
         if (numeros.length < 2) return { acao: "SUBSTITUICAO_ERRO" };
         
@@ -63,7 +60,6 @@ function interpretarComando(transcricao) {
         else return { acao: "SUBSTITUICAO", sai: numeros[0], entra: numeros[1] }; 
     }
 
-    // 2. CARTÕES
     if (tem(["amarelo", "amarelado"])) {
         if (tem(["adversário", "deles", "banco"])) return { acao: "CARTAO_AMARELO_OPP", jogador: "opp" };
         return { acao: "CARTAO_AMARELO", jogador: numeros[0] };
@@ -73,62 +69,43 @@ function interpretarComando(transcricao) {
         return { acao: "CARTAO_VERMELHO", jogador: numeros[0] };
     }
 
-    // 3. AUTOGOLOS
     if (tem(["autogolo", "própria", "traição"])) {
         if (tem(["adversário", "deles", "favor"])) return { acao: "GOLO_FAVOR_AUTOGOLO", jogador: null };
         return { acao: "AUTOGOLO_NOSSO", jogador: numeros[0] };
     }
 
-    // 4. PENÁLTIS
     if (tem(["penálti", "penalty", "castigo máximo", "onze metros"])) {
         if (tem(["sofrido", "contra", "adversário", "deles"])) return { acao: "GOLO_CONTRA_PENALTI", guardaRedes: numeros.length > 0 ? numeros[0] : null };
         return { acao: "GOLO_PENALTI", jogador: numeros[0] };
     }
 
-    // 5. GOLOS SOFRIDOS (Normal)
     if (tem(["sofreu", "sofrido", "sofremos", "adversário marcou", "golo deles", "golo contra", "levámos"])) {
         return { acao: "GOLO_CONTRA", guardaRedes: numeros.length > 0 ? numeros[0] : null };
     }
 
-    // 6. GOLOS A FAVOR (Normal, Livre e com Assistência)
     if (tem(["golo", "marcou", "golaço", "faturou", "encostou", "livre", "falta direta"])) {
         let isLivre = tem(["livre", "falta direta"]);
         let assist = null;
-        
-        if (tem(["assistência", "passe", "cruzamento", "assistiu", "serviu"]) && numeros.length > 1) {
-            assist = numeros[1]; 
-        }
-        
-        return { 
-            acao: isLivre ? "GOLO_LIVRE" : "GOLO_FAVOR", 
-            jogador: numeros[0], 
-            assistencia: assist 
-        };
+        if (tem(["assistência", "passe", "cruzamento", "assistiu", "serviu"]) && numeros.length > 1) { assist = numeros[1]; }
+        return { acao: isLivre ? "GOLO_LIVRE" : "GOLO_FAVOR", jogador: numeros[0], assistencia: assist };
     }
 
     return null; 
 }
 
-// =====================================
-// MOTOR DE VOZ (PWA iOS & ANDROID)
-// =====================================
-let recognition = null;
 let isRecognizing = false;
-let lastEscutaTempo = 0; // Cooldown de segurança
+let lastEscutaTempo = 0;
 
 window.iniciarEscutaVoz = function() {
     const agora = Date.now();
-    const cooldownMs = 800; // Tempo de repouso obrigatório (resolve crash do iOS)
+    const cooldownMs = 600;
 
-    // 1. Se já está a gravar, atua como botão de Cancelar (Força Paragem)
+    // Modo Botão Opção B: Clicou de novo enquanto grava? Cancela logo.
     if (isRecognizing) {
-        if (recognition) {
-            try { recognition.stop(); } catch(e) {}
-        }
-        return;
+        return; // Ignora toques repetidos no calor do jogo, a app desliga-se sozinha.
     }
 
-    // 2. Cooldown inteligente: Espera o tempo em falta em vez de falhar e bloquear
+    // Cooldown para proteger o hardware do iOS
     if (agora - lastEscutaTempo < cooldownMs) {
         const tempoEmFalta = cooldownMs - (agora - lastEscutaTempo);
         setTimeout(() => window.iniciarEscutaVoz(), tempoEmFalta);
@@ -138,13 +115,12 @@ window.iniciarEscutaVoz = function() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return showToast("O browser não suporta comandos de voz.");
 
-    // 3. A MAGIA PARA iOS PWA: Criar a instância AQUI, DENTRO DO CLIQUE!
-    // Isto garante que o Safari dá acesso imediato ao Hardware.
-    recognition = new SpeechRecognition();
+    // CRIAR NOVA INSTÂNCIA - Resolve o Bug do PWA iOS!
+    const recognition = new SpeechRecognition();
     recognition.lang = 'pt-PT';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    recognition.continuous = false;
+    recognition.continuous = false; // MODO AUTOMÁTICO LIMPO: O telemóvel desliga sozinho após ouvir!
 
     recognition.onstart = function() {
         isRecognizing = true;
@@ -153,6 +129,7 @@ window.iniciarEscutaVoz = function() {
     };
 
     recognition.onend = function() {
+        // Fecho limpo natural
         isRecognizing = false;
         lastEscutaTempo = Date.now();
         const btn = document.getElementById('btn-mic-floating');
@@ -161,14 +138,7 @@ window.iniciarEscutaVoz = function() {
 
     recognition.onresult = function(event) {
         const transcript = event.results[0][0].transcript;
-        
-        // Corta imediatamente a gravação para o telemóvel ficar livre
-        try { recognition.stop(); } catch(e) {}
-        
-        // Timeout pequeno para dar tempo à interface de processar o fecho do mic
-        setTimeout(() => {
-            processarAcaoVoz(transcript);
-        }, 150);
+        setTimeout(() => { processarAcaoVoz(transcript); }, 50);
     };
 
     recognition.onerror = function(event) {
@@ -182,10 +152,7 @@ window.iniciarEscutaVoz = function() {
         }
     };
 
-    // 4. Arranca a escuta
-    try { 
-        recognition.start(); 
-    } 
+    try { recognition.start(); } 
     catch (e) {
         isRecognizing = false;
         if (e.name === 'NotAllowedError') {
@@ -203,7 +170,7 @@ function processarAcaoVoz(transcricao) {
     if (intencao.acao === "SUBSTITUICAO_ERRO") return showToast("Diz dois números. Ex: 'Sai o 9, entra o 10'.");
 
     const half = window.resolveEventHalf(m);
-    const currH = half === 'halftime' ? 1 : half; // Famosa correção do "halftime"
+    const currH = half === 'halftime' ? 1 : half;
     
     const isLiveTracking = state.trackSubs && m.lineup && m.lineup.length > 0 && !m.ignoreMinutes;
     const onPitchIds = isLiveTracking ? getPlayersOnPitchAtEndOfHalf(m, currH) : [];
@@ -220,8 +187,8 @@ function processarAcaoVoz(transcricao) {
         pId = getPlayerIdByNumber(intencao.sai);
         pInId = getPlayerIdByNumber(intencao.entra);
 
-        if (!pId) return showToast(`Nº ${intencao.sai} (que sai) não encontrado.`);
-        if (!pInId) return showToast(`Nº ${intencao.entra} (que entra) não encontrado.`);
+        if (!pId) return showToast(`Nº ${intencao.sai} não encontrado.`);
+        if (!pInId) return showToast(`Nº ${intencao.entra} não encontrado.`);
 
         if (isLiveTracking) {
             if (!onPitchIds.includes(pId)) return showToast(`❌ O Nº ${intencao.sai} está no banco! Não pode sair.`);
@@ -229,7 +196,9 @@ function processarAcaoVoz(transcricao) {
         }
 
         msgUI += `<div style="font-size:16px;">🔄 Substituição:<br><span style="color:var(--red);">Sai: ${playerName(pId)}</span><br><span style="color:var(--green);">Entra: ${playerName(pInId)}</span></div>`;
-        cb = () => { pendingSub = { outId: pId, inId: pInId, half: half }; confirmSub(m.id, null); };
+        
+        // ADAPTADO: A voz envia um array com 1 elemento, compatível com as novas "Multi-Subs"!
+        cb = () => { pendingSub = { outIds: [pId], inIds: [pInId], half: half }; confirmSub(m.id, null); };
         
         return askConfirm(msgUI, cb, 'btn-gold');
     }
@@ -290,10 +259,7 @@ function processarAcaoVoz(transcricao) {
 
         case "GOLO_CONTRA":
             let gkIdContra = 'auto'; let nomeGkContra = '';
-            if(intencao.guardaRedes) { 
-                gkIdContra = getPlayerIdByNumber(intencao.guardaRedes); 
-                if(gkIdContra) nomeGkContra = playerName(gkIdContra); 
-            }
+            if(intencao.guardaRedes) { gkIdContra = getPlayerIdByNumber(intencao.guardaRedes); if(gkIdContra) nomeGkContra = playerName(gkIdContra); }
             msgUI += `<div style="font-size:16px;">🥅 Confirmar Golo Sofrido?</div>`;
             if(nomeGkContra) msgUI += `<div style="font-size:12px; color:var(--muted); margin-top:4px;">Na baliza: ${nomeGkContra}</div>`;
             cb = () => addGoal(m.id, 'conceded', half, null, null, null, 'normal', gkIdContra || 'none');
@@ -301,10 +267,7 @@ function processarAcaoVoz(transcricao) {
 
         case "GOLO_CONTRA_PENALTI":
             let gkIdPenalti = 'auto'; let nomeGkPenalti = '';
-            if(intencao.guardaRedes) { 
-                gkIdPenalti = getPlayerIdByNumber(intencao.guardaRedes); 
-                if(gkIdPenalti) nomeGkPenalti = playerName(gkIdPenalti); 
-            }
+            if(intencao.guardaRedes) { gkIdPenalti = getPlayerIdByNumber(intencao.guardaRedes); if(gkIdPenalti) nomeGkPenalti = playerName(gkIdPenalti); }
             msgUI += `<div style="font-size:16px;">🎯 Confirmar Penálti Sofrido?</div>`;
             if(nomeGkPenalti) msgUI += `<div style="font-size:12px; color:var(--muted); margin-top:4px;">Na baliza: ${nomeGkPenalti}</div>`;
             cb = () => addGoal(m.id, 'conceded', half, null, null, null, 'penalti', gkIdPenalti || 'none');

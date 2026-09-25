@@ -375,7 +375,7 @@ function getEntitySeason(entity) {
     }
     return state.currentSeason;
 }
-
+let pendingMinute = '';
 let currentHub = 'home'; let currentTab = 'home'; let statsViewMode = 'team';
 let staffSubTab = 'jogadores';
 let staffForm = null;
@@ -949,7 +949,7 @@ window.getGoalInputPanelHTML = function(m, isManualMode) {
 
       return `<div class="panel">
         <div class="panel-title">${pending.goalSubtype === 'penalti' ? '🎯 Marcador do Penálti' : t('match_scorer')}</div>
-        ${showMinInput ? `<div class="field" style="margin-bottom:10px;"><label>Minuto</label><input type="number" id="manual-event-min" placeholder="Ex: 14" value="${document.getElementById('manual-event-min')?.value || ''}" style="text-align:center; font-weight:bold;"></div>` : ''}
+        ${showMinInput ? `<div class="field" style="margin-bottom:10px;"><label>Minuto</label><input type="number" id="manual-event-min" placeholder="Min" value="${pendingMinute}" oninput="pendingMinute = this.value" style="text-align:center; font-weight:bold;"></div>` : ''}
         <div style="max-height: 250px; overflow-y: auto; padding-right: 4px; margin-bottom: 8px;">
             <div class="grid-btns cols-4">${scorerChips}</div>
         </div>
@@ -963,19 +963,21 @@ window.getGoalInputPanelHTML = function(m, isManualMode) {
         ? window.getMatchEligiblePlayers(m).filter(p => p.id !== pending.scorerId)
         : window.getMatchEligiblePlayers(m).filter(p => getPlayersOnPitchAtEndOfHalf(m, currH).includes(p.id) && p.id !== pending.scorerId);
 
-      let eventMin = document.getElementById('manual-event-min')?.value;
-      let assistChips = availableAssisters.map(p => `<div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, '${p.id}', '${eventMin||''}', 'normal')">${playerLabel(p)}</div>`).join('');
-      
-      return `<div class="panel">
-        <div class="panel-title">${t('match_assist')}</div>
-        <div style="max-height: 250px; overflow-y: auto; padding-right: 4px; margin-bottom: 8px;">
-            <div class="grid-btns cols-4">${assistChips}</div>
-        </div>
-        <div class="grid-btns cols-1" style="margin-bottom:8px;">
-            <div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, 'none', '${eventMin||''}', 'normal')">${t('match_nobody')}</div>
-        </div>
-        <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; render()">${t('cancel')}</button>
-      </div>`;
+      const minToPass = pendingMinute || '';
+      let assistChips = availableAssisters.map(p => 
+        `<div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, '${p.id}', '${minToPass}', 'normal')">${playerLabel(p)}</div>`
+      ).join('');
+  
+       return `<div class="panel">
+         <div class="panel-title">${t('match_assist')}</div>
+         <div style="max-height: 250px; overflow-y: auto; padding-right: 4px; margin-bottom: 8px;">
+             <div class="grid-btns cols-4">${assistChips}</div>
+         </div>
+         <div class="grid-btns cols-1" style="margin-bottom:8px;">
+             <div class="chip chip-sm" onclick="addGoal('${m.id}', 'scored', pending.half, pending.scorerId, 'none', '${minToPass}', 'normal')">${t('match_nobody')}</div>
+         </div>
+         <button class="btn btn-outline" style="width:100%; margin-top:10px;" onclick="pending=null; pendingMinute=''; render()">${t('cancel')}</button>
+       </div>`;
     }
   }
 
@@ -1143,7 +1145,51 @@ window.deleteSub = function(mId, subId) { const m = state.matches.find(x=>x.id==
 window.deleteMatch = function(matchId){ state.matches = state.matches.filter(m => m.id !== matchId); saveState(); render(); };
 window.setCaptain = function(matchId, playerId){ const m = state.matches.find(m=>m.id===matchId); if(m){ m.capitao = playerId; saveState(); } pendingCaptain = false; render(); };
 window.setRating = function(matchId, playerId, rating){ const m = state.matches.find(m=>m.id===matchId); if(!m) return; if(!m.ratings) m.ratings = {}; if(m.ratings[playerId] === rating) delete m.ratings[playerId]; else m.ratings[playerId] = rating; saveState(); render(); };
-window.askConfirm = function(message, onConfirm, btnClass = 'btn-red'){ modalConfig = { type: 'confirm', message, onConfirm, btnClass }; document.getElementById('modal-root').innerHTML = renderModalHTML(); };
+window.askConfirm = function(msg, cb1, btn1Class = 'btn-gold', text1 = null, cb2 = null, text2 = null) {
+    const cancelText = typeof t === 'function' ? t('cancel') : 'Cancelar';
+    const confirmText1 = text1 || (typeof t === 'function' ? t('confirm') : 'Confirmar');
+    
+    window.tempConfirmCb1 = cb1;
+    window.tempConfirmCb2 = cb2;
+
+    window.execConfirmAction = function(opt) {
+        if(typeof closeModal === 'function') closeModal();
+        if (opt === 1 && typeof window.tempConfirmCb1 === 'function') window.tempConfirmCb1();
+        if (opt === 2 && typeof window.tempConfirmCb2 === 'function') window.tempConfirmCb2();
+    };
+
+    let buttonsHtml = '';
+    
+    if (cb2 && text2) {
+        buttonsHtml = `
+            <div style="display:flex; flex-direction:column; gap:10px; margin-top:15px;">
+                <div style="display:flex; gap:10px;">
+                    <button class="btn ${btn1Class}" style="flex:1; font-weight:bold;" onclick="execConfirmAction(1)">${confirmText1}</button>
+                    <button class="btn btn-red" style="flex:1; font-weight:bold;" onclick="execConfirmAction(2)">${text2}</button>
+                </div>
+                <button class="btn btn-outline" style="width:100%;" onclick="closeModal()">${cancelText}</button>
+            </div>
+        `;
+    } else {
+        buttonsHtml = `
+            <div style="display:flex; gap:10px; margin-top:15px;">
+                <button class="btn btn-outline" style="flex:1;" onclick="closeModal()">${cancelText}</button>
+                <button class="btn ${btn1Class}" style="flex:1; font-weight:bold;" onclick="execConfirmAction(1)">${confirmText1}</button>
+            </div>
+        `;
+    }
+
+    const modalHtml = `
+        <div class="modal-overlay" onclick="if(typeof closeModal==='function') closeModal()" style="display:flex; align-items:center; justify-content:center; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:9999;">
+            <div class="modal-content" onclick="event.stopPropagation()" style="background:var(--bg, #1a1d21); border:1px solid var(--line, #2a2e33); border-radius:12px; padding:20px; width:90%; max-width:400px; text-align:center; box-shadow:0 10px 25px rgba(0,0,0,0.5);">
+                ${msg}
+                ${buttonsHtml}
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('modal-root').innerHTML = modalHtml;
+};
 window.closeModal = function(){ modalConfig = null; document.getElementById('modal-root').innerHTML = ''; };
 window.confirmModal = function(){ const cb = modalConfig ? modalConfig.onConfirm : null; window.closeModal(); if(cb) cb(); };
 window.openSafePrintModal = function() { 

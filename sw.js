@@ -1,4 +1,4 @@
-const CACHE_NAME = 'coachfolio-v4.0a';
+const CACHE_NAME = 'coachfolio-v4.0b';
 // A lista de bagagem obrigatória (Ficheiros base e Ícones) — tem de funcionar sempre,
 // mesmo sem internet nem acesso a CDNs externos.
 const urlsToCache = [

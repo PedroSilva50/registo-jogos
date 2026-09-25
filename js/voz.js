@@ -1,4 +1,4 @@
-// voz.js - Motor de Processamento de Voz Inteligente (Coachfolio PRO - Opção B Segura)
+// voz.js - Motor de Voz (Watchdog, Dicionário e Grafismo Premium)
 
 const dicionarioNumeros = {
     "zero": 0, "um": 1, "uma": 1, "dois": 2, "duas": 2, "três": 3, "tres": 3, 
@@ -46,104 +46,101 @@ function interpretarComando(transcricao) {
 
     if (tem(["substituição", "sai", "entra", "troca", "tira", "mete"])) {
         if (numeros.length < 2) return { acao: "SUBSTITUICAO_ERRO" };
-        
-        let idxEntra = Math.min(
-            texto.indexOf("entra") !== -1 ? texto.indexOf("entra") : 9999,
-            texto.indexOf("mete") !== -1 ? texto.indexOf("mete") : 9999
-        );
-        let idxSai = Math.min(
-            texto.indexOf("sai") !== -1 ? texto.indexOf("sai") : 9999,
-            texto.indexOf("tira") !== -1 ? texto.indexOf("tira") : 9999
-        );
-        
+        let idxEntra = Math.min(texto.indexOf("entra") !== -1 ? texto.indexOf("entra") : 9999, texto.indexOf("mete") !== -1 ? texto.indexOf("mete") : 9999);
+        let idxSai = Math.min(texto.indexOf("sai") !== -1 ? texto.indexOf("sai") : 9999, texto.indexOf("tira") !== -1 ? texto.indexOf("tira") : 9999);
         if (idxEntra < idxSai) return { acao: "SUBSTITUICAO", entra: numeros[0], sai: numeros[1] }; 
         else return { acao: "SUBSTITUICAO", sai: numeros[0], entra: numeros[1] }; 
     }
 
-    if (tem(["amarelo", "amarelado"])) {
-        if (tem(["adversário", "deles", "banco"])) return { acao: "CARTAO_AMARELO_OPP", jogador: "opp" };
-        return { acao: "CARTAO_AMARELO", jogador: numeros[0] };
-    }
-    if (tem(["vermelho", "expulso", "rua"])) {
-        if (tem(["adversário", "deles", "banco"])) return { acao: "CARTAO_VERMELHO_OPP", jogador: "opp" };
-        return { acao: "CARTAO_VERMELHO", jogador: numeros[0] };
-    }
-
-    if (tem(["autogolo", "própria", "traição"])) {
-        if (tem(["adversário", "deles", "favor"])) return { acao: "GOLO_FAVOR_AUTOGOLO", jogador: null };
-        return { acao: "AUTOGOLO_NOSSO", jogador: numeros[0] };
-    }
-
-    if (tem(["penálti", "penalty", "castigo máximo", "onze metros"])) {
-        if (tem(["sofrido", "contra", "adversário", "deles"])) return { acao: "GOLO_CONTRA_PENALTI", guardaRedes: numeros.length > 0 ? numeros[0] : null };
-        return { acao: "GOLO_PENALTI", jogador: numeros[0] };
-    }
-
-    if (tem(["sofreu", "sofrido", "sofremos", "adversário marcou", "golo deles", "golo contra", "levámos"])) {
-        return { acao: "GOLO_CONTRA", guardaRedes: numeros.length > 0 ? numeros[0] : null };
-    }
-
+    if (tem(["amarelo", "amarelado"])) return { acao: tem(["adversário", "deles", "banco"]) ? "CARTAO_AMARELO_OPP" : "CARTAO_AMARELO", jogador: numeros[0] || "opp" };
+    if (tem(["vermelho", "expulso", "rua"])) return { acao: tem(["adversário", "deles", "banco"]) ? "CARTAO_VERMELHO_OPP" : "CARTAO_VERMELHO", jogador: numeros[0] || "opp" };
+    if (tem(["autogolo", "própria", "traição"])) return { acao: tem(["adversário", "deles", "favor"]) ? "GOLO_FAVOR_AUTOGOLO" : "AUTOGOLO_NOSSO", jogador: numeros[0] || null };
+    if (tem(["penálti", "penalty", "castigo máximo"])) return { acao: tem(["sofrido", "contra", "adversário", "deles"]) ? "GOLO_CONTRA_PENALTI" : "GOLO_PENALTI", jogador: numeros[0], guardaRedes: numeros[0] || null };
+    if (tem(["sofreu", "sofrido", "sofremos", "adversário marcou", "golo deles", "golo contra"])) return { acao: "GOLO_CONTRA", guardaRedes: numeros.length > 0 ? numeros[0] : null };
+    
     if (tem(["golo", "marcou", "golaço", "faturou", "encostou", "livre", "falta direta"])) {
         let isLivre = tem(["livre", "falta direta"]);
-        let assist = null;
-        if (tem(["assistência", "passe", "cruzamento", "assistiu", "serviu"]) && numeros.length > 1) { assist = numeros[1]; }
+        let assist = (tem(["assistência", "passe", "cruzamento", "assistiu"]) && numeros.length > 1) ? numeros[1] : null;
         return { acao: isLivre ? "GOLO_LIVRE" : "GOLO_FAVOR", jogador: numeros[0], assistencia: assist };
     }
 
     return null; 
 }
 
+// =====================================
+// MOTOR DE VOZ (COM WATCHDOG E GRAMÁTICA)
+// =====================================
+let recognition = null;
 let isRecognizing = false;
-let lastEscutaTempo = 0;
+let watchdogTimer = null; 
 
-window.iniciarEscutaVoz = function() {
-    const agora = Date.now();
-    const cooldownMs = 600;
-
-    // Modo Botão Opção B: Clicou de novo enquanto grava? Cancela logo.
-    if (isRecognizing) {
-        return; // Ignora toques repetidos no calor do jogo, a app desliga-se sozinha.
+function limparWatchdog() {
+    if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
     }
+}
 
-    // Cooldown para proteger o hardware do iOS
-    if (agora - lastEscutaTempo < cooldownMs) {
-        const tempoEmFalta = cooldownMs - (agora - lastEscutaTempo);
-        setTimeout(() => window.iniciarEscutaVoz(), tempoEmFalta);
+window.iniciarEscutaVoz = function(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechGrammarList = window.SpeechGrammarList || window.webkitSpeechGrammarList;
+    
+    if (!SpeechRecognition) return showToast("O browser não suporta comandos de voz.");
+
+    if (isRecognizing) {
+        if (recognition) { try { recognition.abort(); } catch(err) {} }
+        limparWatchdog();
         return;
     }
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return showToast("O browser não suporta comandos de voz.");
-
-    // CRIAR NOVA INSTÂNCIA - Resolve o Bug do PWA iOS!
-    const recognition = new SpeechRecognition();
+    recognition = new SpeechRecognition();
     recognition.lang = 'pt-PT';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    recognition.continuous = false; // MODO AUTOMÁTICO LIMPO: O telemóvel desliga sozinho após ouvir!
+    recognition.continuous = false; 
+
+    if (SpeechGrammarList) {
+        const palavrasChave = [
+            'golo', 'amarelo', 'vermelho', 'substituição', 'sai', 'entra', 
+            'penálti', 'livre', 'assistência', 'autogolo', 'adversário', 'favor'
+        ];
+        const grammar = '#JSGF V1.0; grammar futebol; public <comando> = ' + palavrasChave.join(' | ') + ' ;';
+        const speechRecognitionList = new SpeechGrammarList();
+        speechRecognitionList.addFromString(grammar, 1);
+        recognition.grammars = speechRecognitionList;
+    }
 
     recognition.onstart = function() {
         isRecognizing = true;
         const btn = document.getElementById('btn-mic-floating');
         if(btn) { btn.style.background = 'var(--red)'; btn.innerHTML = '🎙️'; btn.style.animation = 'pulse 1s infinite'; }
+        
+        watchdogTimer = setTimeout(() => {
+            if (isRecognizing && recognition) {
+                try { recognition.abort(); } catch(err) {}
+                showToast("⚠️ O microfone não te ouviu (Tempo Esgotado).");
+            }
+        }, 7000);
     };
 
     recognition.onend = function() {
-        // Fecho limpo natural
         isRecognizing = false;
-        lastEscutaTempo = Date.now();
+        limparWatchdog();
         const btn = document.getElementById('btn-mic-floating');
         if(btn) { btn.style.background = 'var(--gold)'; btn.innerHTML = '🎤'; btn.style.animation = 'none'; }
     };
 
     recognition.onresult = function(event) {
+        limparWatchdog(); 
         const transcript = event.results[0][0].transcript;
-        setTimeout(() => { processarAcaoVoz(transcript); }, 50);
+        processarAcaoVoz(transcript);
     };
 
     recognition.onerror = function(event) {
         isRecognizing = false;
-        lastEscutaTempo = Date.now();
+        limparWatchdog();
         const btn = document.getElementById('btn-mic-floating');
         if(btn) { btn.style.background = 'var(--gold)'; btn.innerHTML = '🎤'; btn.style.animation = 'none'; }
         
@@ -153,14 +150,15 @@ window.iniciarEscutaVoz = function() {
     };
 
     try { recognition.start(); } 
-    catch (e) {
+    catch (err) {
         isRecognizing = false;
-        if (e.name === 'NotAllowedError') {
-            showToast("⚠️ Permissão negada. Vai a Definições > Safari > Microfone.");
-        }
+        if (err.name === 'NotAllowedError') showToast("⚠️ Permissão negada no browser.");
     }
 };
 
+// =====================================
+// PROCESSAMENTO FINAL (Com o Grafismo Restabelecido)
+// =====================================
 function processarAcaoVoz(transcricao) {
     const m = getActiveMatch();
     if (!m) return showToast("Nenhum jogo em curso.");
@@ -196,8 +194,6 @@ function processarAcaoVoz(transcricao) {
         }
 
         msgUI += `<div style="font-size:16px;">🔄 Substituição:<br><span style="color:var(--red);">Sai: ${playerName(pId)}</span><br><span style="color:var(--green);">Entra: ${playerName(pInId)}</span></div>`;
-        
-        // ADAPTADO: A voz envia um array com 1 elemento, compatível com as novas "Multi-Subs"!
         cb = () => { pendingSub = { outIds: [pId], inIds: [pInId], half: half }; confirmSub(m.id, null); };
         
         return askConfirm(msgUI, cb, 'btn-gold');
@@ -259,7 +255,10 @@ function processarAcaoVoz(transcricao) {
 
         case "GOLO_CONTRA":
             let gkIdContra = 'auto'; let nomeGkContra = '';
-            if(intencao.guardaRedes) { gkIdContra = getPlayerIdByNumber(intencao.guardaRedes); if(gkIdContra) nomeGkContra = playerName(gkIdContra); }
+            if(intencao.guardaRedes) { 
+                gkIdContra = getPlayerIdByNumber(intencao.guardaRedes); 
+                if(gkIdContra) nomeGkContra = playerName(gkIdContra); 
+            }
             msgUI += `<div style="font-size:16px;">🥅 Confirmar Golo Sofrido?</div>`;
             if(nomeGkContra) msgUI += `<div style="font-size:12px; color:var(--muted); margin-top:4px;">Na baliza: ${nomeGkContra}</div>`;
             cb = () => addGoal(m.id, 'conceded', half, null, null, null, 'normal', gkIdContra || 'none');
@@ -267,7 +266,10 @@ function processarAcaoVoz(transcricao) {
 
         case "GOLO_CONTRA_PENALTI":
             let gkIdPenalti = 'auto'; let nomeGkPenalti = '';
-            if(intencao.guardaRedes) { gkIdPenalti = getPlayerIdByNumber(intencao.guardaRedes); if(gkIdPenalti) nomeGkPenalti = playerName(gkIdPenalti); }
+            if(intencao.guardaRedes) { 
+                gkIdPenalti = getPlayerIdByNumber(intencao.guardaRedes); 
+                if(gkIdPenalti) nomeGkPenalti = playerName(gkIdPenalti); 
+            }
             msgUI += `<div style="font-size:16px;">🎯 Confirmar Penálti Sofrido?</div>`;
             if(nomeGkPenalti) msgUI += `<div style="font-size:12px; color:var(--muted); margin-top:4px;">Na baliza: ${nomeGkPenalti}</div>`;
             cb = () => addGoal(m.id, 'conceded', half, null, null, null, 'penalti', gkIdPenalti || 'none');

@@ -110,17 +110,17 @@ function interpretarComando(transcricao) {
 }
 
 // =====================================
-// MOTOR DE VOZ (NOVA INSTÂNCIA & COOLDOWN)
+// MOTOR DE VOZ (PWA iOS & ANDROID)
 // =====================================
 let recognition = null;
 let isRecognizing = false;
-let lastEscutaTempo = 0; // Temporizador para o Cooldown (resolve crashes no iOS)
+let lastEscutaTempo = 0; // Cooldown de segurança
 
 window.iniciarEscutaVoz = function() {
     const agora = Date.now();
-    const cooldownMs = 600; // Tempo mínimo de repouso entre cliques para não encravar
+    const cooldownMs = 800; // Tempo de repouso obrigatório (resolve crash do iOS)
 
-    // 1. Se já está a gravar, o clique atua como cancelamento manual
+    // 1. Se já está a gravar, atua como botão de Cancelar (Força Paragem)
     if (isRecognizing) {
         if (recognition) {
             try { recognition.stop(); } catch(e) {}
@@ -128,7 +128,7 @@ window.iniciarEscutaVoz = function() {
         return;
     }
 
-    // 2. Cooldown inteligente: Se foi demasiado rápido, a app espera em vez de dar erro
+    // 2. Cooldown inteligente: Espera o tempo em falta em vez de falhar e bloquear
     if (agora - lastEscutaTempo < cooldownMs) {
         const tempoEmFalta = cooldownMs - (agora - lastEscutaTempo);
         setTimeout(() => window.iniciarEscutaVoz(), tempoEmFalta);
@@ -138,12 +138,13 @@ window.iniciarEscutaVoz = function() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return showToast("O browser não suporta comandos de voz.");
 
-    // 3. A MAGIA: Criar motor limpo e sem lixo na memória a cada toque!
+    // 3. A MAGIA PARA iOS PWA: Criar a instância AQUI, DENTRO DO CLIQUE!
+    // Isto garante que o Safari dá acesso imediato ao Hardware.
     recognition = new SpeechRecognition();
     recognition.lang = 'pt-PT';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    recognition.continuous = false; // Em Android desliga sozinho com isto
+    recognition.continuous = false;
 
     recognition.onstart = function() {
         isRecognizing = true;
@@ -153,7 +154,7 @@ window.iniciarEscutaVoz = function() {
 
     recognition.onend = function() {
         isRecognizing = false;
-        lastEscutaTempo = Date.now(); // Grava a hora em que o mic dormiu
+        lastEscutaTempo = Date.now();
         const btn = document.getElementById('btn-mic-floating');
         if(btn) { btn.style.background = 'var(--gold)'; btn.innerHTML = '🎤'; btn.style.animation = 'none'; }
     };
@@ -161,10 +162,10 @@ window.iniciarEscutaVoz = function() {
     recognition.onresult = function(event) {
         const transcript = event.results[0][0].transcript;
         
-        // 4. FORÇA o corte no Safari do iOS imediatamente ao ouvir o texto
+        // Corta imediatamente a gravação para o telemóvel ficar livre
         try { recognition.stop(); } catch(e) {}
         
-        // Dá folga ao processador do telemóvel antes de puxar a UI
+        // Timeout pequeno para dar tempo à interface de processar o fecho do mic
         setTimeout(() => {
             processarAcaoVoz(transcript);
         }, 150);
@@ -175,11 +176,13 @@ window.iniciarEscutaVoz = function() {
         lastEscutaTempo = Date.now();
         const btn = document.getElementById('btn-mic-floating');
         if(btn) { btn.style.background = 'var(--gold)'; btn.innerHTML = '🎤'; btn.style.animation = 'none'; }
+        
         if (event.error !== 'no-speech' && event.error !== 'aborted') {
             showToast("⚠️ Erro no mic: " + event.error);
         }
     };
 
+    // 4. Arranca a escuta
     try { 
         recognition.start(); 
     } 
@@ -200,9 +203,7 @@ function processarAcaoVoz(transcricao) {
     if (intencao.acao === "SUBSTITUICAO_ERRO") return showToast("Diz dois números. Ex: 'Sai o 9, entra o 10'.");
 
     const half = window.resolveEventHalf(m);
-    
-    // A MATEMÁTICA: O "halftime" vira 1 para os cálculos de quem está em campo!
-    const currH = half === 'halftime' ? 1 : half;
+    const currH = half === 'halftime' ? 1 : half; // Famosa correção do "halftime"
     
     const isLiveTracking = state.trackSubs && m.lineup && m.lineup.length > 0 && !m.ignoreMinutes;
     const onPitchIds = isLiveTracking ? getPlayersOnPitchAtEndOfHalf(m, currH) : [];
@@ -215,9 +216,6 @@ function processarAcaoVoz(transcricao) {
     let msgUI = `<div style="font-size:11px; color:var(--muted); margin-bottom:10px;">Ouvido: "${transcricao}"</div>`;
     let cb = null;
 
-    // =====================================
-    // TRATAR SUBSTITUIÇÕES
-    // =====================================
     if (intencao.acao === "SUBSTITUICAO") {
         pId = getPlayerIdByNumber(intencao.sai);
         pInId = getPlayerIdByNumber(intencao.entra);
@@ -236,9 +234,6 @@ function processarAcaoVoz(transcricao) {
         return askConfirm(msgUI, cb, 'btn-gold');
     }
 
-    // =====================================
-    // TRATAR RESTANTES AÇÕES
-    // =====================================
     const acoesSemNossoJogador = ["GOLO_CONTRA", "GOLO_CONTRA_PENALTI", "GOLO_FAVOR_AUTOGOLO", "CARTAO_AMARELO_OPP", "CARTAO_VERMELHO_OPP"];
     const precisaJogador = !acoesSemNossoJogador.includes(intencao.acao);
 

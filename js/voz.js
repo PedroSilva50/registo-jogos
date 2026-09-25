@@ -109,15 +109,41 @@ function interpretarComando(transcricao) {
     return null; 
 }
 
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+// =====================================
+// MOTOR DE VOZ (NOVA INSTÂNCIA & COOLDOWN)
+// =====================================
+let recognition = null;
 let isRecognizing = false;
+let lastEscutaTempo = 0; // Temporizador para o Cooldown (resolve crashes no iOS)
 
-if (recognition) {
+window.iniciarEscutaVoz = function() {
+    const agora = Date.now();
+    const cooldownMs = 600; // Tempo mínimo de repouso entre cliques para não encravar
+
+    // 1. Se já está a gravar, o clique atua como cancelamento manual
+    if (isRecognizing) {
+        if (recognition) {
+            try { recognition.stop(); } catch(e) {}
+        }
+        return;
+    }
+
+    // 2. Cooldown inteligente: Se foi demasiado rápido, a app espera em vez de dar erro
+    if (agora - lastEscutaTempo < cooldownMs) {
+        const tempoEmFalta = cooldownMs - (agora - lastEscutaTempo);
+        setTimeout(() => window.iniciarEscutaVoz(), tempoEmFalta);
+        return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return showToast("O browser não suporta comandos de voz.");
+
+    // 3. A MAGIA: Criar motor limpo e sem lixo na memória a cada toque!
+    recognition = new SpeechRecognition();
     recognition.lang = 'pt-PT';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    recognition.continuous = false; 
+    recognition.continuous = false; // Em Android desliga sozinho com isto
 
     recognition.onstart = function() {
         isRecognizing = true;
@@ -127,6 +153,7 @@ if (recognition) {
 
     recognition.onend = function() {
         isRecognizing = false;
+        lastEscutaTempo = Date.now(); // Grava a hora em que o mic dormiu
         const btn = document.getElementById('btn-mic-floating');
         if(btn) { btn.style.background = 'var(--gold)'; btn.innerHTML = '🎤'; btn.style.animation = 'none'; }
     };
@@ -134,38 +161,31 @@ if (recognition) {
     recognition.onresult = function(event) {
         const transcript = event.results[0][0].transcript;
         
-        // 🛡️ NOVO: Força a paragem no iOS imediatamente após receber a frase!
+        // 4. FORÇA o corte no Safari do iOS imediatamente ao ouvir o texto
         try { recognition.stop(); } catch(e) {}
         
-        // Dá 100ms de folga para a UI atualizar e não bloquear o telemóvel antes de abrir o menu
+        // Dá folga ao processador do telemóvel antes de puxar a UI
         setTimeout(() => {
             processarAcaoVoz(transcript);
-        }, 100);
+        }, 150);
     };
 
     recognition.onerror = function(event) {
         isRecognizing = false;
+        lastEscutaTempo = Date.now();
         const btn = document.getElementById('btn-mic-floating');
         if(btn) { btn.style.background = 'var(--gold)'; btn.innerHTML = '🎤'; btn.style.animation = 'none'; }
         if (event.error !== 'no-speech' && event.error !== 'aborted') {
             showToast("⚠️ Erro no mic: " + event.error);
         }
     };
-}
 
-window.iniciarEscutaVoz = function() {
-    if (!recognition) return showToast("O browser não suporta comandos de voz.");
-    
-    if (isRecognizing) {
-        try { recognition.stop(); } catch(e) {}
-        return;
-    }
-
-    try { recognition.start(); } 
+    try { 
+        recognition.start(); 
+    } 
     catch (e) {
-        if (e.name === 'InvalidStateError') {
-            try { recognition.stop(); } catch(err) {}
-        } else if (e.name === 'NotAllowedError') {
+        isRecognizing = false;
+        if (e.name === 'NotAllowedError') {
             showToast("⚠️ Permissão negada. Vai a Definições > Safari > Microfone.");
         }
     }
@@ -181,11 +201,9 @@ function processarAcaoVoz(transcricao) {
 
     const half = window.resolveEventHalf(m);
     
-    // 🛡️ CORREÇÃO CIRÚRGICA DA MATEMÁTICA DO JAVASCRIPT
-    // Se estivermos no intervalo ('halftime'), o valor muda para 1. Assim o filtro consegue calcular corretamente.
+    // A MATEMÁTICA: O "halftime" vira 1 para os cálculos de quem está em campo!
     const currH = half === 'halftime' ? 1 : half;
     
-    // VALIDAÇÃO: Saber quem está ativamente em campo
     const isLiveTracking = state.trackSubs && m.lineup && m.lineup.length > 0 && !m.ignoreMinutes;
     const onPitchIds = isLiveTracking ? getPlayersOnPitchAtEndOfHalf(m, currH) : [];
 

@@ -308,27 +308,30 @@ function renderTatica() {
 }
 
 window.saveTacticalPlay = function(category = 'jogada') {
-    if((!state.tactics || state.tactics.length === 0) && (!state.tacticPaths || state.tacticPaths.length === 0)) {
-        showToast('O quadro está vazio!'); return;
-    }
-    const labelText = category === 'treino' ? 'Nome do Exercício de Treino:' : 'Nome da Jogada Tática:';
-    const playName = prompt(labelText);
-    if(!playName || !playName.trim()) return;
-    if(!state.tacticalNotebook) state.tacticalNotebook = [];
+if((!state.tactics || state.tactics.length === 0) && (!state.tacticPaths || state.tacticPaths.length === 0)) {
+showToast('O quadro está vazio!'); return;
+}
+const labelText = category === 'treino' ? 'Nome do Exercício de Treino:' : 'Nome da Jogada Tática:';
+const playName = prompt(labelText);
+if(!playName || !playName.trim()) return;
 
-    state.tacticalNotebook.unshift({
-        id: uid(),
-        name: escapeHTML(playName.trim()),
-        category: category, 
-        format: state.tacticFormat || 11,
-        halfPitch: !!state.tacticHalfPitch,
-        tactics: JSON.parse(JSON.stringify(state.tactics || [])),
-        tacticPaths: JSON.parse(JSON.stringify(state.tacticPaths || []))
-    });
+// 🛡️ NOVO: Pedir Legenda (Opcional)
+const playNotes = prompt("Legenda / Descrição (Opcional):") || "";
 
-    saveState();
-    render();
-    showToast(category === 'treino' ? 'Exercício guardado no Caderno! 🏋️' : 'Jogada guardada no Caderno! 📋');
+if(!state.tacticalNotebook) state.tacticalNotebook = [];
+state.tacticalNotebook.unshift({
+    id: uid(),
+    name: escapeHTML(playName.trim()),
+    notes: escapeHTML(playNotes.trim()), // <--- NOVO CAMPO
+    category: category, 
+    format: state.tacticFormat || 11,
+    halfPitch: !!state.tacticHalfPitch,
+    tactics: JSON.parse(JSON.stringify(state.tactics || [])),
+    tacticPaths: JSON.parse(JSON.stringify(state.tacticPaths || []))
+});
+saveState();
+render();
+showToast(category === 'treino' ? 'Exercício guardado no Caderno! 🏋️' : 'Jogada guardada no Caderno! 📋');
 };
 
 window.loadTacticalPlay = function(id) {
@@ -508,14 +511,18 @@ function renderCaderno() {
 
                 html += `
                     <div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0;">
-                        <div>
-                            <strong style="font-size:14px; color:var(--chalk); display:block;">${escapeHTML(play.name)}</strong>
-                            <span style="font-size:10px; color:${badgeColor}; font-weight:bold; text-transform:uppercase;">${badgeText}</span>
-                            <span style="font-size:10px; color:var(--muted); margin-left:6px;">· ${play.halfPitch ? 'Meio Campo' : 'Campo Inteiro'}</span>
+                        <div style="flex:1; padding-right:8px;">
+                            <strong style="font-size:14px; color:var(--chalk); display:block;">${escapeHTML(play.name)} ${play.notes ? '<span style="font-size:12px;">📝</span>' : ''}</strong>
+                            ${play.notes ? `<div style="font-size:10px; color:var(--muted); margin-top:2px; font-style:italic; line-height:1.3;">${play.notes}</div>` : ''}
+                            <div style="margin-top:4px;">
+                                <span style="font-size:10px; color:${badgeColor}; font-weight:bold; text-transform:uppercase;">${badgeText}</span>
+                                <span style="font-size:10px; color:var(--muted); margin-left:6px;">· ${play.halfPitch ? 'Meio Campo' : 'Campo Inteiro'}</span>
+                            </div>
                         </div>
-                        <div style="display:flex; gap:8px;">
-                            <button class="btn ${isTreino ? 'btn-green' : 'btn-gold'}" style="padding:6px 12px; font-size:11px;" onclick="loadTacticalPlay('${play.id}')">▶ Carregar</button>
-                            <button class="quick-del" style="color:var(--red);" onclick="askConfirm('Apagar do caderno?', ()=>deleteTacticalPlay('${play.id}'))">🗑</button>
+                        <div style="display:flex; gap:6px; flex-direction:column;">
+                            <button class="btn btn-outline" style="padding:4px 8px; font-size:10px;" onclick="viewExerciseScheme('${play.id}')">️ Ver</button>
+                            <button class="btn ${isTreino ? 'btn-green' : 'btn-gold'}" style="padding:4px 8px; font-size:10px;" onclick="loadTacticalPlay('${play.id}')">▶ Carregar</button>
+                            <button class="quick-del" style="color:var(--red); font-size:12px;" onclick="askConfirm('Apagar do caderno?', ()=>deleteTacticalPlay('${play.id}'))">🗑</button>
                         </div>
                     </div>`;
             });

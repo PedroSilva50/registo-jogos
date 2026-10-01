@@ -563,17 +563,25 @@ window.exportTrainingPDF = function(trId, mode) {
 
   let exercisesHtml = '';
   if (tr.exercises && tr.exercises.length > 0) {
-    tr.exercises.forEach((ex, idx) => {
+  // Agrupar exercícios em pares (2 por linha)
+  for (let i = 0; i < tr.exercises.length; i += 2) {
+    const ex1 = tr.exercises[i];
+    const ex2 = tr.exercises[i + 1];
+    
+    const renderExCard = (ex, num) => {
       const svg = window.buildExerciseTacticalPitchSVG ? window.buildExerciseTacticalPitchSVG(ex.notebookId) : '';
-      exercisesHtml += `
-        <div style="margin-bottom:15px; page-break-inside:avoid; border:1px solid #CCC; padding:10px; border-radius:8px; background:#F9F9F9;">
-          <h4 style="margin:0 0 10px 0; font-size:14px; color:#0E211A;">${idx + 1}. ${escapeHTML(ex.name)} (${ex.duration} min)</h4>
-          <div style="text-align:center; max-width:300px; margin:0 auto;">
-            ${svg}
-          </div>
-        </div>
-      `;
-    });
+      return `<div style="flex:1; min-width:0; border:1px solid #CCC; padding:8px; border-radius:8px; background:#F9F9F9;">
+        <h4 style="margin:0 0 8px 0; font-size:12px; color:#0E211A; text-align:center;">${num}. ${escapeHTML(ex.name)} (${ex.duration}')</h4>
+        <div style="text-align:center;">${svg}</div>
+        ${ex.notes ? `<div style="margin-top:8px; padding:6px; background:#FFF; border-left:3px solid #D9A441; border-radius:4px; font-size:10px; color:#333; font-style:italic; line-height:1.3;">📝 ${escapeHTML(ex.notes)}</div>` : ''}
+      </div>`;
+    };
+    
+    exercisesHtml += `<div style="display:flex; gap:10px; margin-bottom:15px; page-break-inside:avoid;">`;
+    exercisesHtml += renderExCard(ex1, i + 1);
+    if (ex2) exercisesHtml += renderExCard(ex2, i + 2);
+    exercisesHtml += `</div>`;
+  }
   } else {
     exercisesHtml = '<p style="color:#666; font-size:12px;">Sem exercícios visuais associados.</p>';
   }
@@ -713,8 +721,9 @@ function renderTreinos(){
                     ${trainingForm.exercises.map((ex, idx) => `
                       <div style="background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:6px 10px; display:flex; justify-content:space-between; align-items:center;">
                         <div style="flex:1;">
-                          <div style="font-size:12px; font-weight:bold; color:var(--chalk);">${idx + 1}.${ex.name}</div>
-                          <div style="font-size:10px; color:var(--muted); display:flex; align-items:center; gap:6px; margin-top:2px;">
+                            <div style="font-size:12px; font-weight:bold; color:var(--chalk);">${idx + 1}.${ex.name}</div>
+                            ${ex.notes ? `<div style="font-size:10px; color:var(--muted); margin-top:2px; font-style:italic;">📝 ${ex.notes}</div>` : ''}
+                            <div style="font-size:10px; color:var(--muted); display:flex; align-items:center; gap:6px; margin-top:2px;">
                             <span>Duração:</span>
                             <input type="number" min="1" max="180" value="${ex.duration}" style="width:45px; padding:2px 4px; font-size:11px; text-align:center; background:var(--surface-2); border:1px solid var(--gold); color:var(--gold); font-weight:bold; border-radius:4px;" onchange="updateExerciseDurationInTraining(${idx}, this.value)">
                             <span>Min</span>
@@ -815,11 +824,14 @@ function renderTreinos(){
               <div style="font-size:11px; color:var(--gold); font-weight:bold; text-transform:uppercase; margin-bottom:6px;">🏋️ Exercícios da Sessão:</div>
               <div style="display:flex; flex-direction:column; gap:6px;">
                 ${tr.exercises.map((ex, idx) => `
-                  <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface); padding:6px 8px; border-radius:6px;">
-                    <span style="font-size:11px; color:var(--chalk);"><b>${idx + 1}.</b> ${ex.name} <b>(${ex.duration}m)</b></span>
-                    <button class="card-mini-btn" style="border:1px solid var(--gold); color:var(--gold); font-size:9px; padding:2px 6px;" onclick="event.stopPropagation(); viewExerciseScheme('${ex.notebookId}')">👁️ Ver Esquema</button>
+                  <div style="background:var(--surface); padding:8px 10px; border-radius:6px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                      <span style="font-size:11px; color:var(--chalk);"><b>${idx + 1}.</b> ${ex.name} <b style="color:var(--gold);">(${ex.duration}m)</b></span>
+                      <button class="card-mini-btn" style="border:1px solid var(--gold); color:var(--gold); font-size:9px; padding:2px 6px;" onclick="event.stopPropagation(); viewExerciseScheme('${ex.notebookId}')">👁️ Ver</button>
+                    </div>
+                    ${ex.notes ? `<div style="font-size:10px; color:var(--muted); font-style:italic; margin-top:4px; padding-top:4px; border-top:1px dashed var(--line);">📝 ${escapeHTML(ex.notes)}</div>` : ''}
                   </div>
-                `).join('')}
+        `).join('')}
               </div>
             </div>
           ` : ''}
@@ -950,6 +962,7 @@ window.addExerciseToTraining = function(exerciseId, customDur = 15) {
         id: uid(),
         notebookId: play.id,
         name: play.name,
+        notes: play.notes || "",
         duration: exDuration
     });
 

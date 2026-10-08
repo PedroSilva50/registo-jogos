@@ -1190,27 +1190,40 @@ window.renderPlantel = function() {
             </div>
             <div class="field" style="margin-bottom:10px;"><label>${t('pl_dob')}</label><input type="text" placeholder="Ex: 15.05.2010" value="${escapeHTML(p.birthDate || '')}" onchange="updatePlayerBirthDate('${p.id}', this.value)"></div>
     
-            <!-- NOVO BLOCO 1: PÉ DOMINANTE & BIOMETRIA -->
-            <div class="panel-title" style="color:var(--gold); margin-top:14px; margin-bottom:8px;">📐 Pé Dominante & Biometria</div>
+            <!-- NOVO BLOCO 1: PÉ DOMINANTE & BIOMETRIA INTELIGENTE -->
+            <div class="panel-title" style="color:var(--gold); margin-top:14px; margin-bottom:8px;">📐 Pé Dominante & Biometria Inteligente</div>
             <div class="field" style="margin-bottom:8px;">
               <label>Pé Dominante</label>
               <div class="seg">
                 <div class="seg-btn ${(!p.foot || p.foot==='Destro')?'active':''}" onclick="updatePlayerFoot('${p.id}', 'Destro')">Destro</div>
-                <div class="seg-btn ${p.foot==='Esquerdino'?'active':''}" onclick="updatePlayerFoot('${p.id}', 'Esquerdino')">Esquerdino</div>
                 <div class="seg-btn ${p.foot==='Ambidestro'?'active':''}" onclick="updatePlayerFoot('${p.id}', 'Ambidestro')">Ambidestro</div>
               </div>
             </div>
-            <div class="grid-btns" style="margin-bottom:8px;">
-              <div class="field" style="margin-bottom:0;"><label>Altura (cm)</label><input type="number" placeholder="Ex: 152" value="${p.height || ''}" onchange="updatePlayerHeight('${p.id}', this.value)"></div>
-              <div class="field" style="margin-bottom:0;"><label>Peso (kg)</label><input type="number" placeholder="Ex: 44" value="${p.weight || ''}" onchange="updatePlayerWeight('${p.id}', this.value)"></div>
-            </div>
-            <div class="field" style="margin-bottom:10px;">
-              <label>Maturação Biológica (PHV)</label>
-              <select onchange="updatePlayerPHV('${p.id}', this.value)" style="width:100%; padding:10px; background:var(--surface-2); border:1px solid var(--line); color:var(--chalk); border-radius:8px;">
-                <option value="Pre-PHV" ${(!p.phvStatus || p.phvStatus==='Pre-PHV')?'selected':''}>Pré-Estirão (Normal)</option>
-                <option value="In-PHV" ${p.phvStatus==='In-PHV'?'selected':''}>🟡 Pico de Estirão (Alerta Ativo)</option>
-                <option value="Post-PHV" ${p.phvStatus==='Post-PHV'?'selected':''}>Pós-Estirão (Consolidação)</option>
-              </select>
+            
+            <div style="background:var(--surface-2); border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <label style="margin:0;">Histórico de Crescimento</label>
+                <div style="font-size:10px;">
+                  ${(p.phvStatus === 'In-PHV') ? '<span style="color:#92400E; background:#FEF3C7; padding:2px 6px; border-radius:4px; font-weight:bold;">🟡 Alerta: Crescimento Rápido</span>' : (p.phvStatus === 'Post-PHV' ? '<span style="color:#1E40AF; background:#DBEAFE; padding:2px 6px; border-radius:4px;">🔵 Pós-Estirão</span>' : '<span style="color:#374151; background:#E5E7EB; padding:2px 6px; border-radius:4px;">⚪ Normal (Pré-Estirão)</span>')}
+                </div>
+              </div>
+              
+              <div style="max-height:120px; overflow-y:auto; margin-bottom:10px; padding-right:4px;">
+                ${(p.measurements && p.measurements.length > 0) ? p.measurements.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).map(m => `
+                  <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface); padding:6px 10px; border-radius:6px; margin-bottom:4px; font-size:11px; border:1px solid var(--line);">
+                    <span>📅 ${m.date.split('-').reverse().join('/')}</span>
+                    <span><b>${m.height} cm</b> | ${m.weight} kg</span>
+                    <button class="quick-del" style="color:var(--red);" onclick="event.stopPropagation(); deletePlayerMeasurement('${p.id}', '${m.id}')">✕</button>
+                  </div>
+                `).join('') : '<div style="font-size:10px; color:var(--muted);">Adiciona a 1ª medição abaixo. A app fará o cálculo de alerta a partir da 2ª medição.</div>'}
+              </div>
+
+              <div style="display:flex; gap:6px; align-items:center; border-top:1px dashed var(--line); padding-top:10px;">
+                <input type="date" id="new-med-date-${p.id}" value="${new Date().toISOString().slice(0,10)}" style="width:110px; padding:6px; font-size:10px; background:var(--surface); border:1px solid var(--line); color:var(--chalk); border-radius:4px;">
+                <input type="number" id="new-med-h-${p.id}" placeholder="Alt (cm)" style="width:65px; padding:6px; font-size:11px; background:var(--surface); border:1px solid var(--line); color:var(--chalk); border-radius:4px;">
+                <input type="number" id="new-med-w-${p.id}" placeholder="Kg" style="width:55px; padding:6px; font-size:11px; background:var(--surface); border:1px solid var(--line); color:var(--chalk); border-radius:4px;">
+                <button class="btn btn-gold" style="padding:6px; font-size:11px; flex:1; font-weight:bold;" onclick="addPlayerMeasurement('${p.id}')">Gravar</button>
+              </div>
             </div>
 
             <!-- NOVO BLOCO 2: ACOMPANHAMENTO ESCOLAR -->
@@ -1290,7 +1303,7 @@ window.renderPlantel = function() {
               <button class="btn btn-red" style="flex:none; padding:0 12px;" onclick="askConfirm('${t('msg_del_pl')}', ()=>{ removePlayer('${p.id}'); expandedPlayer=null; editingPlayerId=null; render(); })">🗑️</button>
             </div> 
           </div>`;
-        } else {
+        } else if (isExpanded) {
             const playerBars = generatePlayerBarsHTML(st, maxStats, isGK, false);
             const donutChart = generateDonutChartSVG(st.minutosTreinoCumpridos, st.minutosTreinoTotais);
 
@@ -1618,4 +1631,75 @@ window.updatePlayerSkill = function(id, key, val) {
     p.skills[key] = parseInt(val, 10) || 3;
     saveState();
   }
+};
+// ─── LÓGICA DE MATURAÇÃO BIOLÓGICA INTELIGENTE (PHV) ───
+window.addPlayerMeasurement = function(playerId) {
+    const p = state.roster.find(x => x.id === playerId);
+    if(!p) return;
+    
+    const dateInput = document.getElementById(`new-med-date-${playerId}`).value;
+    const hInput = parseInt(document.getElementById(`new-med-h-${playerId}`).value, 10);
+    const wInput = parseInt(document.getElementById(`new-med-w-${playerId}`).value, 10);
+
+    if(!dateInput || isNaN(hInput) || isNaN(wInput)) {
+        if(typeof showToast === 'function') showToast('Preenche a altura e o peso.');
+        return;
+    }
+
+    if(!p.measurements) p.measurements = [];
+    p.measurements.push({ id: uid(), date: dateInput, height: hInput, weight: wInput });
+    
+    window.calculatePlayerPHV(p);
+    saveState();
+    render();
+    if(typeof showToast === 'function') showToast('Medição guardada! 📏');
+};
+
+window.deletePlayerMeasurement = function(playerId, medId) {
+    const p = state.roster.find(x => x.id === playerId);
+    if(!p || !p.measurements) return;
+    
+    p.measurements = p.measurements.filter(m => m.id !== medId);
+    window.calculatePlayerPHV(p);
+    saveState();
+    render();
+};
+
+window.calculatePlayerPHV = function(p) {
+    if (!p.measurements || p.measurements.length === 0) {
+        p.height = null; p.weight = null; p.phvStatus = 'Pre-PHV';
+        return;
+    }
+
+    // Ordenar as medições da mais antiga para a mais recente
+    const sorted = [...p.measurements].sort((a,b) => new Date(a.date) - new Date(b.date));
+    const last = sorted[sorted.length - 1];
+    
+    // Atualizar os campos normais de peso/altura para continuarem a aparecer na ficha PDF
+    p.height = last.height;
+    p.weight = last.weight;
+
+    if (sorted.length < 2) {
+        p.phvStatus = 'Pre-PHV'; // Só há 1 medição, impossível calcular velocidade
+        return;
+    }
+
+    const prev = sorted[sorted.length - 2];
+    const msInMonth = 1000 * 60 * 60 * 24 * 30.44;
+    const monthsDiff = (new Date(last.date) - new Date(prev.date)) / msInMonth;
+
+    if (monthsDiff < 1) return; // Menos de 1 mês não é fiável para cálculos anuais
+
+    const cmDiff = last.height - prev.height;
+    const annualizedGrowth = (cmDiff / monthsDiff) * 12; // Projeção de crescimento em 1 ano
+
+    // O "Segredo": Crescer a um ritmo de mais de 7.2 cm/ano é o Pico de Estirão
+    if (annualizedGrowth >= 7.2) {
+        p.phvStatus = 'In-PHV';
+    } else if (annualizedGrowth <= 4 && p.phvStatus === 'In-PHV') {
+        // Se estava no pico e o ritmo caiu muito, significa que estabilizou
+        p.phvStatus = 'Post-PHV';
+    } else if (p.phvStatus !== 'Post-PHV') {
+        p.phvStatus = 'Pre-PHV';
+    }
 };

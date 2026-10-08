@@ -256,7 +256,7 @@ window.exportGlobalStatsPDF = function(){
     </div>
 
     <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
-      <div style="font-size:10px; color:#666;">• Relatório Consolidado — Coachfolio v3.6</div>
+      <div style="font-size:10px; color:#666;">• Relatório Consolidado — Coachfolio v4.1</div>
       <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">O Treinador</div>
     </div>
   </div>`;
@@ -920,6 +920,27 @@ window.exportPlayerPDF = function(pId) {
   const playerBarsHtml = generatePlayerBarsHTML(st, maxStats, isGK, true);
   const donutChartHtml = generateDonutChartSVG(st.minutosTreinoCumpridos, st.minutosTreinoTotais);
 
+  // Mapeamento visual das novas variáveis de Biometria, Escola e Atributos
+  const footLabel = p.foot || 'Destro';
+  const heightVal = p.height ? `${p.height} cm` : 'N/D';
+  const weightVal = p.weight ? `${p.weight} kg` : 'N/D';
+  
+  let phvBadge = 'Pré-Estirão';
+  let phvStyle = 'background:#E5E7EB; color:#374151;';
+  if (p.phvStatus === 'In-PHV') {
+    phvBadge = '🟡 Pico de Estirão (Alerta Ativo)';
+    phvStyle = 'background:#FEF3C7; color:#92400E; font-weight:bold; border:1px solid #F59E0B;';
+  } else if (p.phvStatus === 'Post-PHV') {
+    phvBadge = 'Pós-Estirão';
+    phvStyle = 'background:#DBEAFE; color:#1E40AF;';
+  }
+
+  let schoolBadgeColor = '#10B981';
+  if (p.schoolStatus === 'Requer Atenção') schoolBadgeColor = '#F59E0B';
+  if (p.schoolStatus === 'Em Risco') schoolBadgeColor = '#EF4444';
+
+  const skills = p.skills || { technique: 3, decision: 3, pace: 3, mentality: 3 };
+
   let html = `
   <div class="print-card" style="padding:20px; font-family:-apple-system, sans-serif;">
     <div class="print-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:15px;">
@@ -931,11 +952,44 @@ window.exportPlayerPDF = function(pId) {
       ${typeof getClubLogoHtml === 'function' ? getClubLogoHtml() : ''}
     </div>
 
-    <div style="background:#F3F4F6; border:1px solid #E5E7EB; border-radius:8px; padding:10px 14px; margin-bottom:15px; display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:11px;">
+    <!-- PAINEL BIOMÉTRICO E FÍSICO -->
+    <div style="background:#F3F4F6; border:1px solid #E5E7EB; border-radius:8px; padding:10px 14px; margin-bottom:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:11px;">
       <div><b>Posição Principal:</b> ${escapeHTML(firstPos)}</div>
       <div><b>Outras Posições:</b> ${escapeHTML(otherPos)}</div>
-      <div><b>Data de Nascimento:</b> ${escapeHTML(p.birthDate || 'N/D')}</div>
-      <div><b>Idade:</b> ${age !== null ? `${age} anos` : 'N/D'}</div>
+      <div><b>Data de Nascimento:</b> ${escapeHTML(p.birthDate || 'N/D')} (${age !== null ? `${age} anos` : 'N/D'})</div>
+      <div><b>Pé Dominante:</b> ${escapeHTML(footLabel)}</div>
+      <div><b>Biometria:</b> ${heightVal} &nbsp;|&nbsp; ${weightVal}</div>
+      <div style="grid-column:1/-1; padding:4px 8px; border-radius:4px; ${phvStyle}"><b>Maturação Biológica:</b> ${phvBadge}</div>
+    </div>
+
+    <!-- PAINEL ESCOLAR -->
+    <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:8px; padding:10px 14px; margin-bottom:12px; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <b>Acompanhamento Escolar:</b> <span style="color:${schoolBadgeColor}; font-weight:bold;">${escapeHTML(p.schoolStatus || 'A Correr Bem')}</span>
+        ${p.schoolResult ? ` &nbsp;•&nbsp; <b>Resultado / Média:</b> ${escapeHTML(p.schoolResult)}` : ''}
+      </div>
+      ${p.schoolNotes ? `<div style="font-size:10px; color:#6B7280;">${escapeHTML(p.schoolNotes)}</div>` : ''}
+    </div>
+
+    <!-- ATRIBUTOS TÉCNICOS DE 1 A 5 -->
+    <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">⭐ Perfil de Atributos (1 a 5)</h3>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:6px; margin-bottom:15px; text-align:center; font-size:10px;">
+      <div style="background:#FFF; border:1px solid #CCC; border-radius:6px; padding:6px;">
+        <div style="color:#666; font-weight:bold;">Técnica / Controlo</div>
+        <div style="font-size:14px; font-weight:bold; color:#D9A441; margin-top:2px;">${'★'.repeat(skills.technique)}${'☆'.repeat(5-skills.technique)}</div>
+      </div>
+      <div style="background:#FFF; border:1px solid #CCC; border-radius:6px; padding:6px;">
+        <div style="color:#666; font-weight:bold;">Tomada de Decisão</div>
+        <div style="font-size:14px; font-weight:bold; color:#D9A441; margin-top:2px;">${'★'.repeat(skills.decision)}${'☆'.repeat(5-skills.decision)}</div>
+      </div>
+      <div style="background:#FFF; border:1px solid #CCC; border-radius:6px; padding:6px;">
+        <div style="color:#666; font-weight:bold;">Velocidade / Agilidade</div>
+        <div style="font-size:14px; font-weight:bold; color:#D9A441; margin-top:2px;">${'★'.repeat(skills.pace)}${'☆'.repeat(5-skills.pace)}</div>
+      </div>
+      <div style="background:#FFF; border:1px solid #CCC; border-radius:6px; padding:6px;">
+        <div style="color:#666; font-weight:bold;">Atitude / Trabalho</div>
+        <div style="font-size:14px; font-weight:bold; color:#D9A441; margin-top:2px;">${'★'.repeat(skills.mentality)}${'☆'.repeat(5-skills.mentality)}</div>
+      </div>
     </div>
 
     <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">📊 Estatísticas de Competição</h3>
@@ -987,7 +1041,7 @@ window.exportPlayerPDF = function(pId) {
 
     <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:flex-end;">
       <div style="font-size:10px; color:#666;">
-        Relatório Individual Emitido por Coachfolio v4.0
+        Relatório Individual Emitido por Coachfolio v4.1
       </div>
       <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">
         O Treinador / Coordenação
@@ -1010,6 +1064,7 @@ window.renderPlantel = function() {
 
   let totalMins = 0; 
   let totalPlayersWithMins = 0;
+  
   if (state.showFairPlay) { 
     activeRoster.forEach(p => { 
       const st = playerStatsMap[p.id]; 
@@ -1030,6 +1085,7 @@ window.renderPlantel = function() {
     </div>
   `;
 
+  // --- TAB JOGADORES ---
   if (typeof staffSubTab === 'undefined' || staffSubTab === 'jogadores') {
     const currentSort = state.rosterSortBy || 'posicao';
     html += `
@@ -1123,47 +1179,118 @@ window.renderPlantel = function() {
             </div>
           </div>`;
 
-        if (isExpanded) {
-          if (isEditing) {
-            html += `<div style="background:var(--surface); border:1px solid var(--gold); border-radius:12px; padding:14px; margin:8px 0 14px; text-align:left;">
-              <div class="panel-title" style="color:var(--gold); margin-bottom:10px;">${t('pl_edit')}</div>
-              <div class="grid-btns" style="margin-bottom:10px;">
-                <div class="field" style="margin-bottom:0;"><label>${t('pl_num')}</label><input type="number" value="${p.number || ''}" onchange="updatePlayerNumber('${p.id}', this.value)"></div>
-                <div class="field" style="margin-bottom:0;"><label>${t('pl_name')}</label><input type="text" value="${escapeHTML(p.name || '')}" onchange="updatePlayerName('${p.id}', this.value)"></div>
-              </div>
-              <div class="field" style="margin-bottom:10px;"><label>${t('pl_dob')}</label><input type="text" placeholder="Ex: 15.05.2010" value="${escapeHTML(p.birthDate || '')}" onchange="updatePlayerBirthDate('${p.id}', this.value)"></div>
-              
-              <div class="field" style="margin-bottom:10px;">
-                <label>📝 Observações Individuais do Atleta</label>
-                <textarea placeholder="Ex: Atleta com boa visão de jogo. A trabalhar o pé não dominante..." onchange="updatePlayerNotes('${p.id}', this.value)" style="min-height:60px; font-size:12px;">${escapeHTML(p.notes || '')}</textarea>
-              </div>
+        if (isEditing) {
+          const sk = p.skills || { technique: 3, decision: 3, pace: 3, mentality: 3 };
 
-              <div class="panel-title" style="color:var(--gold); margin-top:16px; margin-bottom:10px;">🚑 Saúde & Emergência</div>
-              <div class="grid-btns" style="margin-bottom:10px;">
-                <div class="field" style="margin-bottom:0;"><label>Enc. de Educação / Emergência</label><input type="text" placeholder="Nome" value="${escapeHTML(p.contactName || '')}" onchange="updatePlayerContactName('${p.id}', this.value)"></div>
-                <div class="field" style="margin-bottom:0;"><label>Nº Telemóvel</label><input type="tel" placeholder="Ex: 912345678" value="${escapeHTML(p.contactPhone || '')}" onchange="updatePlayerContactPhone('${p.id}', this.value)"></div>
+          html += `<div style="background:var(--surface); border:1px solid var(--gold); border-radius:12px; padding:14px; margin:8px 0 14px; text-align:left;">
+            <div class="panel-title" style="color:var(--gold); margin-bottom:10px;">${t('pl_edit')}</div>
+            <div class="grid-btns" style="margin-bottom:10px;">
+              <div class="field" style="margin-bottom:0;"><label>${t('pl_num')}</label><input type="number" value="${p.number || ''}" onchange="updatePlayerNumber('${p.id}', this.value)"></div>
+              <div class="field" style="margin-bottom:0;"><label>${t('pl_name')}</label><input type="text" value="${escapeHTML(p.name || '')}" onchange="updatePlayerName('${p.id}', this.value)"></div>
+            </div>
+            <div class="field" style="margin-bottom:10px;"><label>${t('pl_dob')}</label><input type="text" placeholder="Ex: 15.05.2010" value="${escapeHTML(p.birthDate || '')}" onchange="updatePlayerBirthDate('${p.id}', this.value)"></div>
+    
+            <!-- NOVO BLOCO 1: PÉ DOMINANTE & BIOMETRIA -->
+            <div class="panel-title" style="color:var(--gold); margin-top:14px; margin-bottom:8px;">📐 Pé Dominante & Biometria</div>
+            <div class="field" style="margin-bottom:8px;">
+              <label>Pé Dominante</label>
+              <div class="seg">
+                <div class="seg-btn ${(!p.foot || p.foot==='Destro')?'active':''}" onclick="updatePlayerFoot('${p.id}', 'Destro')">Destro</div>
+                <div class="seg-btn ${p.foot==='Esquerdino'?'active':''}" onclick="updatePlayerFoot('${p.id}', 'Esquerdino')">Esquerdino</div>
+                <div class="seg-btn ${p.foot==='Ambidestro'?'active':''}" onclick="updatePlayerFoot('${p.id}', 'Ambidestro')">Ambidestro</div>
               </div>
-              <div class="field" style="margin-bottom:12px;">
-                <label>🩹 Notas Médicas (Alergias, Lesões...)</label>
-                <textarea placeholder="Ex: Asmático. Lesão no joelho direito em recuperação..." onchange="updatePlayerMedicalNotes('${p.id}', this.value)" style="min-height:60px; font-size:12px;">${escapeHTML(p.medicalNotes || '')}</textarea>
-              </div>
+            </div>
+            <div class="grid-btns" style="margin-bottom:8px;">
+              <div class="field" style="margin-bottom:0;"><label>Altura (cm)</label><input type="number" placeholder="Ex: 152" value="${p.height || ''}" onchange="updatePlayerHeight('${p.id}', this.value)"></div>
+              <div class="field" style="margin-bottom:0;"><label>Peso (kg)</label><input type="number" placeholder="Ex: 44" value="${p.weight || ''}" onchange="updatePlayerWeight('${p.id}', this.value)"></div>
+            </div>
+            <div class="field" style="margin-bottom:10px;">
+              <label>Maturação Biológica (PHV)</label>
+              <select onchange="updatePlayerPHV('${p.id}', this.value)" style="width:100%; padding:10px; background:var(--surface-2); border:1px solid var(--line); color:var(--chalk); border-radius:8px;">
+                <option value="Pre-PHV" ${(!p.phvStatus || p.phvStatus==='Pre-PHV')?'selected':''}>Pré-Estirão (Normal)</option>
+                <option value="In-PHV" ${p.phvStatus==='In-PHV'?'selected':''}>🟡 Pico de Estirão (Alerta Ativo)</option>
+                <option value="Post-PHV" ${p.phvStatus==='Post-PHV'?'selected':''}>Pós-Estirão (Consolidação)</option>
+              </select>
+            </div>
 
-              <div class="field" style="margin-bottom:12px; margin-top:12px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                  <label style="margin:0;">${t('pl_pos')}</label>
-                  ${safePos ? `<button class="quick-del" style="font-size:9px; border:1px solid var(--line); border-radius:4px; padding:2px 6px;" onclick="clearPlayerPos('${p.id}')">🧹 LIMPAR</button>` : ''}
-                </div>
-                <div style="font-size:11px; color:var(--gold); font-weight:bold; margin-bottom:8px;">${escapeHTML(safePos || 'Nenhuma')}</div>
-                <div class="seg" style="flex-wrap:wrap; gap:4px;">
-                  ${['GR','DC','DD','DE','MDC','MC','MOC','EXT','PL'].map(pos => `<div class="seg-btn ${safePos.includes(pos)?'active':''}" style="flex:none; padding:5px 8px; font-size:10px;" onclick="togglePlayerPos('${p.id}', '${pos}')">${pos}</div>`).join('')}
-                </div>
+            <!-- NOVO BLOCO 2: ACOMPANHAMENTO ESCOLAR -->
+            <div class="panel-title" style="color:var(--gold); margin-top:14px; margin-bottom:8px;">📚 Acompanhamento Escolar</div>
+            <div class="grid-btns" style="margin-bottom:8px;">
+              <div class="field" style="margin-bottom:0;"><label>Resultado / Nota / Média</label><input type="text" placeholder="Ex: 4.2 ou 14/20 ou Satisfaz" value="${escapeHTML(p.schoolResult || '')}" onchange="updatePlayerSchoolResult('${p.id}', this.value)"></div>
+              <div class="field" style="margin-bottom:0;">
+                <label>Estado na Escola</label>
+                <select onchange="updatePlayerSchoolStatus('${p.id}', this.value)" style="width:100%; padding:10px; background:var(--surface-2); border:1px solid var(--line); color:var(--chalk); border-radius:8px;">
+                  <option value="A Correr Bem" ${(!p.schoolStatus || p.schoolStatus==='A Correr Bem')?'selected':''}>🟢 A Correr Bem</option>
+                  <option value="Requer Atenção" ${p.schoolStatus==='Requer Atenção'?'selected':''}>🟡 Requer Atenção</option>
+                  <option value="Em Risco" ${p.schoolStatus==='Em Risco'?'selected':''}>🔴 Em Risco</option>
+                </select>
               </div>
-              <div style="display:flex; gap:8px; margin-top:12px;">
-                <button class="btn btn-gold" style="flex:1;" onclick="editingPlayerId=null; render();">${t('pl_done')}</button>
-                <button class="btn btn-red" style="flex:none; padding:0 12px;" onclick="askConfirm('${t('msg_del_pl')}', ()=>{ removePlayer('${p.id}'); expandedPlayer=null; editingPlayerId=null; render(); })">🗑️</button>
+            </div>
+            <div class="field" style="margin-bottom:10px;">
+              <label>Nota Rápida da Escola</label>
+              <input type="text" placeholder="Ex: Comportamento exemplar na sala de aula." value="${escapeHTML(p.schoolNotes || '')}" onchange="updatePlayerSchoolNotes('${p.id}', this.value)">
+            </div>
+
+            <!-- NOVO BLOCO 3: ATRIBUTOS TÉCNICOS (1 A 5) -->
+            <div class="panel-title" style="color:var(--gold); margin-top:14px; margin-bottom:8px;">⭐ Perfil de Atributos (1 a 5)</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+              <div class="field" style="margin-bottom:0;">
+                <label>Técnica / Controlo</label>
+                <select onchange="updatePlayerSkill('${p.id}', 'technique', this.value)">
+                  ${[1,2,3,4,5].map(v => `<option value="${v}" ${sk.technique===v?'selected':''}>${v} ★</option>`).join('')}
+                </select>
               </div>
-            </div>`;
-          } else {
+              <div class="field" style="margin-bottom:0;">
+                <label>Tomada de Decisão</label>
+                <select onchange="updatePlayerSkill('${p.id}', 'decision', this.value)">
+                  ${[1,2,3,4,5].map(v => `<option value="${v}" ${sk.decision===v?'selected':''}>${v} ★</option>`).join('')}
+                </select>
+              </div>
+              <div class="field" style="margin-bottom:0;">
+                <label>Velocidade / Agilidade</label>
+                <select onchange="updatePlayerSkill('${p.id}', 'pace', this.value)">
+                  ${[1,2,3,4,5].map(v => `<option value="${v}" ${sk.pace===v?'selected':''}>${v} ★</option>`).join('')}
+                </select>
+              </div>
+              <div class="field" style="margin-bottom:0;">
+                <label>Atitude / Trabalho</label>
+                <select onchange="updatePlayerSkill('${p.id}', 'mentality', this.value)">
+                  ${[1,2,3,4,5].map(v => `<option value="${v}" ${sk.mentality===v?'selected':''}>${v} ★</option>`).join('')}
+                </select>
+              </div>
+            </div>
+
+            <div class="field" style="margin-bottom:10px;">
+              <label>📝 Observações Individuais do Atleta</label>
+              <textarea placeholder="Ex: Atleta com boa visão de jogo. A trabalhar o pé não dominante..." onchange="updatePlayerNotes('${p.id}', this.value)" style="min-height:60px; font-size:12px;">${escapeHTML(p.notes || '')}</textarea>
+            </div>
+
+            <div class="panel-title" style="color:var(--gold); margin-top:16px; margin-bottom:10px;">🚑 Saúde & Emergência</div>
+            <div class="grid-btns" style="margin-bottom:10px;">
+              <div class="field" style="margin-bottom:0;"><label>Enc. de Educação / Emergência</label><input type="text" placeholder="Nome" value="${escapeHTML(p.contactName || '')}" onchange="updatePlayerContactName('${p.id}', this.value)"></div>
+              <div class="field" style="margin-bottom:0;"><label>Nº Telemóvel</label><input type="tel" placeholder="Ex: 912345678" value="${escapeHTML(p.contactPhone || '')}" onchange="updatePlayerContactPhone('${p.id}', this.value)"></div>
+            </div>
+            <div class="field" style="margin-bottom:12px;">
+              <label>🩹 Notas Médicas (Alergias, Lesões...)</label>
+              <textarea placeholder="Ex: Asmático. Lesão no joelho direito em recuperação..." onchange="updatePlayerMedicalNotes('${p.id}', this.value)" style="min-height:60px; font-size:12px;">${escapeHTML(p.medicalNotes || '')}</textarea>
+            </div>
+
+            <div class="field" style="margin-bottom:12px; margin-top:12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <label style="margin:0;">${t('pl_pos')}</label>
+                ${safePos ? `<button class="quick-del" style="font-size:9px; border:1px solid var(--line); border-radius:4px; padding:2px 6px;" onclick="clearPlayerPos('${p.id}')">🧹 LIMPAR</button>` : ''}
+              </div>
+              <div style="font-size:11px; color:var(--gold); font-weight:bold; margin-bottom:8px;">${escapeHTML(safePos || 'Nenhuma')}</div>
+              <div class="seg" style="flex-wrap:wrap; gap:4px;">
+                ${['GR','DC','DD','DE','MDC','MC','MOC','EXT','PL'].map(pos => `<div class="seg-btn ${safePos.includes(pos)?'active':''}" style="flex:none; padding:5px 8px; font-size:10px;" onclick="togglePlayerPos('${p.id}', '${pos}')">${pos}</div>`).join('')}
+              </div>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:12px;">
+              <button class="btn btn-gold" style="flex:1;" onclick="editingPlayerId=null; render();">${t('pl_done')}</button>
+              <button class="btn btn-red" style="flex:none; padding:0 12px;" onclick="askConfirm('${t('msg_del_pl')}', ()=>{ removePlayer('${p.id}'); expandedPlayer=null; editingPlayerId=null; render(); })">🗑️</button>
+            </div> 
+          </div>`;
+        } else {
             const playerBars = generatePlayerBarsHTML(st, maxStats, isGK, false);
             const donutChart = generateDonutChartSVG(st.minutosTreinoCumpridos, st.minutosTreinoTotais);
 
@@ -1244,7 +1371,7 @@ window.renderPlantel = function() {
                 <button class="btn btn-gold" style="flex:none; padding:10px 14px; font-size:11px;" onclick="window.exportPlayerPDF('${p.id}')">📄 FICHA PDF</button>
               </div>
             </div>`;
-          }
+        
         }
 
         html += `</div>`;
@@ -1255,9 +1382,12 @@ window.renderPlantel = function() {
     }
   }
 
+  // --- TAB COMPARAR ---
   if (staffSubTab === 'comparar') {
       let opts1 = `<option value="" ${!window.compareP1?'selected':''}>-- ${t('cancel')} --</option><option value="" disabled>${t('comp_p1')}</option>`;
       let opts2 = `<option value="" ${!window.compareP2?'selected':''}>-- ${t('cancel')} --</option><option value="" disabled>${t('comp_p2')}</option>`;
+      
+      // Usar o roster ativo para as opções
       sortPlayerObjs(activeRoster).forEach(p => {
           opts1 += `<option value="${p.id}" ${window.compareP1===p.id?'selected':''}>${playerLabel(p)}</option>`;
           opts2 += `<option value="${p.id}" ${window.compareP2===p.id?'selected':''}>${playerLabel(p)}</option>`;
@@ -1271,8 +1401,9 @@ window.renderPlantel = function() {
           </div>`;
 
       if (window.compareP1 && window.compareP2 && window.compareP1 !== window.compareP2) {
-          const st1 = playerStatsMap[window.compareP1] || calcularEstatisticaJogador(window.compareP1, state.currentSeason); 
-          const st2 = playerStatsMap[window.compareP2] || calcularEstatisticaJogador(window.compareP2, state.currentSeason);
+          // OTIMIZAÇÃO: Usar o mapa se disponível, caso contrário calcular (ex: jogador não elegível)
+          const st1 = playerStatsMap[window.compareP1] || calcularEstatisticaJogador(window.compareP1);
+          const st2 = playerStatsMap[window.compareP2] || calcularEstatisticaJogador(window.compareP2);
 
           const p1Obj = (state.roster || []).find(x => x.id === window.compareP1);
           const p2Obj = (state.roster || []).find(x => x.id === window.compareP2);
@@ -1318,6 +1449,7 @@ window.renderPlantel = function() {
       html += `</div>`;
   }
 
+  // --- TAB STAFF ---
   if (staffSubTab === 'staff') {
     const staffList = state.staff || [];
 
@@ -1463,10 +1595,27 @@ window.exportLeaguePDF = function(lgId) {
         </table>
         
         <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
-            <div style="font-size:10px; color:#666;">• Tabela Classificativa — Coachfolio v3.6</div>
+            <div style="font-size:10px; color:#666;">• Tabela Classificativa — Coachfolio v4.1</div>
         </div>
     </div>`;
 
     document.getElementById('print-area').innerHTML = html;
     if(typeof window.openSafePrintModal === 'function') window.openSafePrintModal();
+};
+
+// ─── FUNÇÕES DE ATUALIZAÇÃO DOS NOVOS CAMPOS ───
+window.updatePlayerFoot = function(id, val) { const p = state.roster.find(x => x.id === id); if(p) { p.foot = val; saveState(); render(); } };
+window.updatePlayerHeight = function(id, val) { const p = state.roster.find(x => x.id === id); if(p) { p.height = parseInt(val, 10) || null; saveState(); } };
+window.updatePlayerWeight = function(id, val) { const p = state.roster.find(x => x.id === id); if(p) { p.weight = parseInt(val, 10) || null; saveState(); } };
+window.updatePlayerPHV = function(id, val) { const p = state.roster.find(x => x.id === id); if(p) { p.phvStatus = val; saveState(); } };
+window.updatePlayerSchoolResult = function(id, val) { const p = state.roster.find(x => x.id === id); if(p) { p.schoolResult = escapeHTML(val.trim()); saveState(); } };
+window.updatePlayerSchoolStatus = function(id, val) { const p = state.roster.find(x => x.id === id); if(p) { p.schoolStatus = val; saveState(); } };
+window.updatePlayerSchoolNotes = function(id, val) { const p = state.roster.find(x => x.id === id); if(p) { p.schoolNotes = escapeHTML(val.trim()); saveState(); } };
+window.updatePlayerSkill = function(id, key, val) {
+  const p = state.roster.find(x => x.id === id);
+  if (p) {
+    if (!p.skills) p.skills = { technique: 3, decision: 3, pace: 3, mentality: 3 };
+    p.skills[key] = parseInt(val, 10) || 3;
+    saveState();
+  }
 };

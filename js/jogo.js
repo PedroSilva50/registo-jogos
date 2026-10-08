@@ -361,7 +361,7 @@ window.exportMatchPDF = function(mId) {
     ` : ''}
 
     <div style="margin-top:24px; display:flex; justify-content:space-between; align-items:flex-end;">
-      <div style="font-size:10px; color:#9CA3AF;">• Documento de registo oficial — Coachfolio v3.6</div>
+      <div style="font-size:10px; color:#9CA3AF;">• Documento de registo oficial — Coachfolio v4.1</div>
       <div style="text-align:center; width:200px; border-top:1.5px solid #111827; padding-top:4px; font-size:11px; font-weight:bold; color:#111827;">A Equipa Técnica</div>
     </div>
   </div>`;

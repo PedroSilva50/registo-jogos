@@ -28,7 +28,7 @@ function saveState() {
       }
       resolve();
     }, 300);
-});
+  });
 }
 
 // 🛡️ 2. PROTEÇÃO DE CARREGAMENTO & DIREITOS ADQUIRIDOS (GRANDFATHERING)
@@ -39,21 +39,22 @@ async function loadState(){
     const res = await storageAdapter.get(STORAGE_KEY);
     if(res && res.value) {
        state = JSON.parse(res.value);
-           // 🛡️ NORMALIZAÇÃO CIRÚRGICA DE DADOS (Garante compatibilidade futura)
-           if (state.trainings && Array.isArray(state.trainings)) {
-             state.trainings.forEach(tr => {
-               if (Array.isArray(tr.absences)) {
-                 const normalized = {};
-                 tr.absences.forEach(id => { normalized[id] = 'injustificada'; });
-                 tr.absences = normalized;
-               } else if (!tr.absences) {
-                 tr.absences = {};
-               }
-       });
-       // Força a gravação da estrutura limpa em segundo plano
-       saveState();
-    }
-       // DIREITOS ADQUIRIDOS: Se o treinador já tem dados na memória, é cliente antigo, ativa automaticamente!
+       
+       // 🛡️ NORMALIZAÇÃO CIRÚRGICA DE DADOS (Garante compatibilidade futura)
+       if (state.trainings && Array.isArray(state.trainings)) {
+         state.trainings.forEach(tr => {
+           if (Array.isArray(tr.absences)) {
+             const normalized = {};
+             tr.absences.forEach(id => { normalized[id] = 'injustificada'; });
+             tr.absences = normalized;
+           } else if (!tr.absences) {
+             tr.absences = {};
+           }
+         });
+         saveState();
+       }
+
+       // DIREITOS ADQUIRIDOS: Se o treinador já tem dados na memória, ativa automaticamente!
        if (!state.isActivated && ((state.matches && state.matches.length > 0) || (state.roster && state.roster.length > 0) || (state.schedule && state.schedule.length > 0))) {
            state.isActivated = true;
        }
@@ -78,7 +79,6 @@ async function loadState(){
        if(!state.teamColor) state.teamColor = '#D9A441';
        if(!state.oppColor) state.oppColor = '#C8493F';
        if(!state.seasonFormat) state.seasonFormat = 'europeu';
-       // Proteção: Se a função defaultSeason não existir ainda, usa fallback
        if(!state.currentSeason) state.currentSeason = typeof defaultSeason === 'function' ? defaultSeason() : '24/25';
        if(!state.theme) state.theme = 'original'; if(!state.lang) state.lang = 'pt'; if(!state.myClubName) state.myClubName = '';
        if(!state.rosterSortBy) state.rosterSortBy = 'posicao';
@@ -91,11 +91,19 @@ async function loadState(){
            if (!p.positions || p.positions === 'null' || p.positions === 'undefined') {
                p.positions = '';
            }
+           // 🛡️ Inicialização segura das novas propriedades de perfil
+           if (!p.foot) p.foot = 'Destro';
+           if (p.height === undefined) p.height = null;
+           if (p.weight === undefined) p.weight = null;
+           if (!p.phvStatus) p.phvStatus = 'Pre-PHV';
+           if (!p.schoolStatus) p.schoolStatus = 'A Correr Bem';
+           if (!p.schoolResult) p.schoolResult = '';
+           if (!p.schoolNotes) p.schoolNotes = '';
+           if (!p.skills) p.skills = { technique: 3, decision: 3, pace: 3, mentality: 3 };
        });
        
     } else { state.currentSeason = typeof defaultSeason === 'function' ? defaultSeason() : '24/25'; }
   } catch(e) {
-    // ⚠️ ECRÃ VERMELHO DE EMERGÊNCIA: Protege os dados se houver falha de leitura
     document.body.innerHTML = `
       <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; background:#0E211A; color:#F3EFE6; text-align:center; padding:20px; font-family:sans-serif;">
         <span style="font-size:50px; margin-bottom:20px;">⚠️</span>
@@ -109,8 +117,8 @@ async function loadState(){
     throw new Error("Falha Crítica ao carregar dados. Execução interrompida.");
   }
   if(typeof applyTheme === 'function') applyTheme(state.theme || 'original'); 
-  // AVISO DE BACKUP ANTIGO (iOS pode limpar dados)
-if (state.lastBackupDate && state.matches.length > 0) {
+  
+  if (state.lastBackupDate && state.matches.length > 0) {
     const daysSince = (Date.now() - state.lastBackupDate) / (1000 * 60 * 60 * 24);
     if (daysSince > 5) {
         setTimeout(() => {
@@ -119,13 +127,12 @@ if (state.lastBackupDate && state.matches.length > 0) {
             }
         }, 2000);
     }
-}
-  checkActivationAndRender(); // Entra no verificador de licença em vez do render direto
+  }
+  checkActivationAndRender();
 }
 
 // 🛡️ 3. SISTEMA DE ATIVAÇÃO POR CHAVE ÚNICA (OFFLINE - OFUSCADO)
 function verifyKey(identifier, key) {
-    // A palavra secreta está ofuscada e dividida. O curioso só vê lixo informático.
     const _p = ['Q09B', 'Q0gy', 'Ng==']; 
     const secret = atob(_p.join('')); 
     
@@ -150,8 +157,8 @@ window.activateApp = function() {
     
     if(verifyKey(idVal, kVal)) {
         state.isActivated = true;
-        saveState(); // Grava a licença no telemóvel
-        if(typeof render === 'function') render(); // Desbloqueia e carrega o Menu Inicial!
+        saveState();
+        if(typeof render === 'function') render();
     } else {
         if(typeof showToast === 'function') showToast('Chave de Ativação Inválida!'); else alert('Chave Inválida!');
     }
@@ -159,16 +166,13 @@ window.activateApp = function() {
 
 function checkActivationAndRender() {
     if (state.isActivated) {
-        if(typeof render === 'function') render(); // Cliente ativado, a vida segue normal.
+        if(typeof render === 'function') render();
     } else {
-        // Esconde a barra de navegação para ficar um ecrã limpo
         const nav = document.getElementById('navbar');
         if (nav) nav.style.display = 'none';
         
-        // Proteção caso o ícone ainda não exista
         const ballIcon = typeof ballIconSvg === 'function' ? ballIconSvg() : '⚽';
         
-        // Ecrã de bloqueio compacto e sem scroll
         document.getElementById('app').innerHTML = `
           <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; padding:20px; box-sizing:border-box; background:var(--bg); color:var(--chalk); text-align:center; font-family:-apple-system, sans-serif; margin-top:-20px;">
             

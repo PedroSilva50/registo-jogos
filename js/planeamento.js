@@ -281,7 +281,7 @@ window.exportScoutingPDF = function(schId) {
     </div>
 
     <div style="margin-top:24px; display:flex; justify-content:space-between; align-items:flex-end;">
-      <div style="font-size:10px; color:#6B7280;">• Análise Tática de Observação — Coachfolio v4.0</div>
+      <div style="font-size:10px; color:#6B7280;">• Análise Tática de Observação — Coachfolio v4.1</div>
       <div style="text-align:center; width:200px; border-top:1.5px solid #111827; padding-top:4px; font-size:11px; font-weight:bold;">O Observador / Treinador</div>
     </div>
   </div>`;
@@ -659,7 +659,7 @@ window.exportTrainingPDF = function(trId, mode) {
     ${absHtml}
     
     <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
-      <div style="font-size:10px; color:#666;">• Ficha de Treino — Coachfolio v4.0</div>
+      <div style="font-size:10px; color:#666;">• Ficha de Treino — Coachfolio v4.1</div>
       <div style="text-align:center; width:200px; border-top:1.5px solid #111827; padding-top:4px; font-size:11px; font-weight:bold;">A Equipa Técnica</div>
     </div>
   </div>
@@ -1124,7 +1124,7 @@ window.exportMicrocyclePDF = function() {
         </div>
         ${daysHtml}
         <div style="margin-top:24px; display:flex; justify-content:space-between; align-items:flex-end;">
-            <div style="font-size:10px; color:#6B7280;">• Planeamento Semanal — Coachfolio v4.0</div>
+            <div style="font-size:10px; color:#6B7280;">• Planeamento Semanal — Coachfolio v4.1</div>
             <div style="text-align:center; width:200px; border-top:1.5px solid #111827; padding-top:4px; font-size:11px; font-weight:bold;">A Equipa Técnica</div>
         </div>
     </div>`;

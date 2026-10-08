@@ -384,7 +384,7 @@ window.exportTacticPDF = function() {
                     <img src="${imgData}" style="max-width:100%; max-height:650px; border:2px solid #000; border-radius:8px;">
                 </div>
                 <div style="margin-top:20px; font-size:11px; color:#666; text-align:center;">
-                    Coachfolio v4.0 — Documento de Análise Tática
+                    Coachfolio v4.1 — Documento de Análise Tática
                 </div>
             </div>`;
         document.getElementById('print-area').innerHTML = html;

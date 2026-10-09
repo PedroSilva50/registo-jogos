@@ -1875,9 +1875,15 @@ window.exportMesocicloPDF = function(start, end, notes, includeTrainings) {
     if (includeTrainings) {
         // GRELHA MISTA: JOGOS E TREINOS LADO A LADO
         let timelineEvents = [];
-        matchesInRange.forEach(m => timelineEvents.push({ date: m.date, type: 'match', data: m }));
-        trainingsInRange.forEach(tr => timelineEvents.push({ date: tr.date, type: 'training', data: tr }));
-        timelineEvents.sort((a, b) => new Date(a.date) - new Date(b.date));
+        matchesInRange.forEach((m, idx) => timelineEvents.push({ date: m.date, type: 'match', data: m, oIdx: idx }));
+        trainingsInRange.forEach((tr, idx) => timelineEvents.push({ date: tr.date, type: 'training', data: tr, oIdx: idx }));
+        
+        timelineEvents.sort((a, b) => {
+            let dateDiff = new Date(a.date) - new Date(b.date);
+            if (dateDiff !== 0) return dateDiff; // Ordena por datas normalmente
+            if (a.type !== b.type) return a.type === 'training' ? -1 : 1; // Treino sempre antes do jogo no mesmo dia
+            return b.oIdx - a.oIdx; // Desempate de torneios no mesmo dia: inverte a ordem de criação!
+        });
 
         let cardsHtml = timelineEvents.length > 0 ? timelineEvents.map(evt => {
             let dateStr = formatData(evt.date);
@@ -1900,8 +1906,16 @@ window.exportMesocicloPDF = function(start, end, notes, includeTrainings) {
         cronologiaFinalHtml = `<h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">📅 Diário de Bordo (Treinos e Jogos)</h3><div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:15px;">${cardsHtml}</div>`;
     
     } else {
-        // LISTA SIMPLES: APENAS JOGOS (O formato clássico que tinhas)
-        let listHtml = matchesInRange.length > 0 ? matchesInRange.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(m => {
+        // LISTA SIMPLES: APENAS JOGOS
+        let listEvents = matchesInRange.map((m, idx) => ({ ...m, oIdx: idx }));
+        
+        listEvents.sort((a,b) => {
+            let dateDiff = new Date(a.date) - new Date(b.date);
+            if (dateDiff !== 0) return dateDiff;
+            return b.oIdx - a.oIdx; // Desempate de jogos no mesmo dia!
+        });
+
+        let listHtml = listEvents.length > 0 ? listEvents.map(m => {
             let sc = m.goals.filter(g=>g.type==='scored').length;
             let co = m.goals.filter(g=>g.type==='conceded').length;
             let mName = m.location === 'casa' ? `<b>${getMyClub()}</b> ${sc} - ${co} ${escapeHTML(m.opponent)}` : `${escapeHTML(m.opponent)} ${co} - ${sc} <b>${getMyClub()}</b>`;

@@ -1739,6 +1739,8 @@ window.calculatePlayerPHV = function(p) {
 
 // ─── RELATÓRIO DE MESOCICLO (MÊS/PERÍODO) ───
 
+// ─── RELATÓRIO DE MESOCICLO (MÊS/PERÍODO) ───
+
 window.openMesocicloModal = function() {
     const overlay = document.createElement('div');
     overlay.id = 'meso-modal';
@@ -1755,8 +1757,16 @@ window.openMesocicloModal = function() {
                 <div style="flex:1;"><label style="font-size:11px; color:var(--muted);">Data de Início</label><br><input type="date" id="meso-start" value="${firstDayStr}" style="width:100%; padding:8px; background:var(--surface-2); border:1px solid var(--line); color:var(--chalk); border-radius:6px;"></div>
                 <div style="flex:1;"><label style="font-size:11px; color:var(--muted);">Data de Fim</label><br><input type="date" id="meso-end" value="${today}" style="width:100%; padding:8px; background:var(--surface-2); border:1px solid var(--line); color:var(--chalk); border-radius:6px;"></div>
             </div>
+            
+            <!-- NOVA OPÇÃO DE ESCOLHA -->
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--chalk); margin-bottom:15px; cursor:pointer; background:var(--surface-2); padding:8px; border-radius:6px; border:1px solid var(--line);">
+                <input type="checkbox" id="meso-include-trainings" checked style="width:16px; height:16px; accent-color:var(--gold);">
+                Incluir exercícios dos treinos na Cronologia
+            </label>
+
             <label style="font-size:11px; color:var(--muted);">Balanço / Notas da Equipa Técnica</label>
-            <textarea id="meso-notes" placeholder="Ex: Mês muito positivo. A equipa assimilou bem a transição defensiva..." style="width:100%; min-height:80px; padding:8px; background:var(--surface-2); border:1px solid var(--line); color:var(--chalk); border-radius:6px; margin-bottom:15px;"></textarea>
+            <textarea id="meso-notes" placeholder="Ex: Mês muito positivo..." style="width:100%; min-height:60px; padding:8px; background:var(--surface-2); border:1px solid var(--line); color:var(--chalk); border-radius:6px; margin-bottom:15px;"></textarea>
+            
             <div style="display:flex; gap:10px;">
                 <button class="btn btn-outline" style="flex:1;" onclick="document.getElementById('meso-modal').remove()">Cancelar</button>
                 <button class="btn btn-gold" style="flex:1;" onclick="generateMesociclo()">Gerar PDF</button>
@@ -1770,12 +1780,14 @@ window.generateMesociclo = function() {
     const start = document.getElementById('meso-start').value;
     const end = document.getElementById('meso-end').value;
     const notes = document.getElementById('meso-notes').value;
+    const includeTrainings = document.getElementById('meso-include-trainings').checked;
+    
     if (!start || !end) { if(typeof showToast==='function') showToast('Escolhe as datas.'); return; }
     document.getElementById('meso-modal').remove();
-    exportMesocicloPDF(start, end, notes);
+    exportMesocicloPDF(start, end, notes, includeTrainings);
 };
 
-window.exportMesocicloPDF = function(start, end, notes) {
+window.exportMesocicloPDF = function(start, end, notes, includeTrainings) {
     const matchesInRange = (state.matches || []).filter(m => m.finished && m.date >= start && m.date <= end);
     const trainingsInRange = (state.trainings || []).filter(tr => (tr.status === undefined || tr.status === 'completed') && tr.date >= start && tr.date <= end);
 
@@ -1794,11 +1806,9 @@ window.exportMesocicloPDF = function(start, end, notes) {
         if (mGm > mGs) v++; else if (mGm === mGs) e++; else d++;
     });
 
-    // Helper to extract a display name, removing numbers if present (e.g., "10 Matias" -> "Matias")
     const getCleanName = (id) => {
         const full = playerName(id);
         const parts = full.split(' ');
-        // If the first part is a number, return the second part, otherwise the first part
         return !isNaN(parts[0]) && parts.length > 1 ? parts[1] : parts[0];
     };
 
@@ -1857,15 +1867,52 @@ window.exportMesocicloPDF = function(start, end, notes) {
         return entries.map(([id, c]) => `${getCleanName(id)} (${c})`).join(', ');
     };
 
-    const unjustList = formatNames(unjust);
-    const justList = formatNames(just);
-    const lateList = formatNames(late);
-    const injuryList = formatNames(injury);
-    const punishList = formatNames(punish);
-    const excusedList = formatNames(excused);
-
     const formatData = (d) => d.split('-').reverse().join('/');
 
+    // ─── LÓGICA CONDICIONAL DA CRONOLOGIA ───
+    let cronologiaFinalHtml = '';
+
+    if (includeTrainings) {
+        // GRELHA MISTA: JOGOS E TREINOS LADO A LADO
+        let timelineEvents = [];
+        matchesInRange.forEach(m => timelineEvents.push({ date: m.date, type: 'match', data: m }));
+        trainingsInRange.forEach(tr => timelineEvents.push({ date: tr.date, type: 'training', data: tr }));
+        timelineEvents.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        let cardsHtml = timelineEvents.length > 0 ? timelineEvents.map(evt => {
+            let dateStr = formatData(evt.date);
+            if (evt.type === 'match') {
+                let m = evt.data;
+                let sc = m.goals.filter(g=>g.type==='scored').length;
+                let co = m.goals.filter(g=>g.type==='conceded').length;
+                let mName = m.location === 'casa' ? `<b>${getMyClub()}</b> ${sc} - ${co} ${escapeHTML(m.opponent)}` : `${escapeHTML(m.opponent)} ${co} - ${sc} <b>${getMyClub()}</b>`;
+                let mType = m.type === 'campeonato' ? 'Campeonato' : (m.type === 'amigavel' ? 'Amigável' : 'Torneio');
+                return `<div style="border:1px solid #BFDBFE; border-radius:8px; padding:10px; background:#EFF6FF; display:flex; flex-direction:column; break-inside:avoid;"><div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #BFDBFE; padding-bottom:6px; margin-bottom:8px;"><span style="color:#1E3A8A; font-size:10px; font-weight:bold;">📅 ${dateStr}</span><span style="color:#1D4ED8; font-size:10px; font-weight:bold;">⚽ JOGO (${mType})</span></div><div style="font-size:12px; color:#111827; text-align:center; padding: 4px 0;">${mName}</div></div>`;
+            } else {
+                let tr = evt.data;
+                let dur = parseInt(tr.duration, 10) || 90;
+                let rawContent = tr.content || tr.description || tr.notes || 'Sem detalhes registados.';
+                let formattedContent = escapeHTML(rawContent).replace(/\n/g, '<br>');
+                return `<div style="border:1px solid #E5E7EB; border-radius:8px; padding:10px; background:#F9FAFB; display:flex; flex-direction:column; break-inside:avoid;"><div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #E5E7EB; padding-bottom:6px; margin-bottom:8px;"><span style="color:#4B5563; font-size:10px; font-weight:bold;">📅 ${dateStr}</span><span style="color:#16A34A; font-size:10px; font-weight:bold;">🏋️ TREINO (${dur}')</span></div><div style="font-size:10px; color:#4B5563; line-height:1.5;">${formattedContent}</div></div>`;
+            }
+        }).join('') : '<div style="font-size:11px; color:#666; grid-column:span 2;">Sem registo de treinos ou jogos neste período.</div>';
+        
+        cronologiaFinalHtml = `<h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">📅 Diário de Bordo (Treinos e Jogos)</h3><div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; margin-bottom:15px;">${cardsHtml}</div>`;
+    
+    } else {
+        // LISTA SIMPLES: APENAS JOGOS (O formato clássico que tinhas)
+        let listHtml = matchesInRange.length > 0 ? matchesInRange.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(m => {
+            let sc = m.goals.filter(g=>g.type==='scored').length;
+            let co = m.goals.filter(g=>g.type==='conceded').length;
+            let mName = m.location === 'casa' ? `<b>${getMyClub()}</b> ${sc} - ${co} ${escapeHTML(m.opponent)}` : `${escapeHTML(m.opponent)} ${co} - ${sc} <b>${getMyClub()}</b>`;
+            let mType = m.type === 'campeonato' ? 'Campeonato' : (m.type === 'amigavel' ? 'Amigável' : 'Torneio');
+            return `<div style="padding:4px 0; border-bottom:1px solid #EEE; font-size:11px; display:flex; justify-content:space-between;"><span style="color:#666; width:80px;">${formatData(m.date)}</span><span style="flex:1;">${mType}: ${mName}</span></div>`;
+        }).join('') : '<div style="font-size:11px; color:#666;">Sem jogos realizados neste período.</div>';
+        
+        cronologiaFinalHtml = `<h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">📅 Cronologia de Resultados (Apenas Jogos)</h3><div style="margin-bottom:15px;">${listHtml}</div>`;
+    }
+
+    // ─── CONSTRUÇÃO DO HTML FINAL DO PDF ───
     let html = `
     <div class="print-card" style="padding:20px; font-family:-apple-system, sans-serif;">
         <div class="print-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:15px;">
@@ -1879,7 +1926,6 @@ window.exportMesocicloPDF = function(start, end, notes) {
 
         <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">📊 Resumo de Competição (${matchesInRange.length} Jogos)</h3>
         
-        <!-- ADJUSTED LAYOUT: Two equal columns -->
         <div style="display:flex; gap:15px; margin-bottom:15px;">
             <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
                 <div style="background:#F3F4F6; border-radius:6px; padding:12px; display:flex; align-items:center; justify-content:space-between; height: 100%;">
@@ -1909,46 +1955,33 @@ window.exportMesocicloPDF = function(start, end, notes) {
                 <span>Aproveitamento Global da Equipa:</span>
                 <span style="font-weight:bold; color:${attendancePct >= 80 ? '#16A34A' : '#DC2626'};">${attendancePct}% de Assiduidade</span>
             </div>
-            
             <div style="display:flex; justify-content:space-between; border-bottom:1px solid #E5E7EB; padding-bottom:6px; margin-bottom:6px;">
                 <span style="color:#DC2626; font-weight:bold;">🔴 Faltas Injustificadas:</span>
-                <span style="font-weight:bold;">${unjustList ? unjustList : 'Nenhuma!'}</span>
+                <span style="font-weight:bold;">${formatNames(unjust) || 'Nenhuma!'}</span>
             </div>
             <div style="display:flex; justify-content:space-between; border-bottom:1px solid #E5E7EB; padding-bottom:6px; margin-bottom:6px;">
                 <span style="color:#D97706; font-weight:bold;">🟡 Faltas Justificadas:</span>
-                <span style="font-weight:bold;">${justList ? justList : 'Nenhuma!'}</span>
+                <span style="font-weight:bold;">${formatNames(just) || 'Nenhuma!'}</span>
             </div>
             <div style="display:flex; justify-content:space-between; border-bottom:1px solid #E5E7EB; padding-bottom:6px; margin-bottom:6px;">
                 <span style="color:#4F46E5; font-weight:bold;">⏱️ Atrasos / Saídas Cedo:</span>
-                <span style="font-weight:bold;">${lateList ? lateList : 'Nenhum registado!'}</span>
+                <span style="font-weight:bold;">${formatNames(late) || 'Nenhum registado!'}</span>
             </div>
             <div style="display:flex; justify-content:space-between; border-bottom:1px solid #E5E7EB; padding-bottom:6px; margin-bottom:6px;">
                 <span style="color:#0284C7; font-weight:bold;">💊 Lesão / Médico:</span>
-                <span style="font-weight:bold;">${injuryList ? injuryList : 'Nenhuma!'}</span>
+                <span style="font-weight:bold;">${formatNames(injury) || 'Nenhuma!'}</span>
             </div>
             <div style="display:flex; justify-content:space-between; border-bottom:1px solid #E5E7EB; padding-bottom:6px; margin-bottom:6px;">
                 <span style="color:#BE123C; font-weight:bold;">🟥 Castigo:</span>
-                <span style="font-weight:bold;">${punishList ? punishList : 'Nenhum!'}</span>
+                <span style="font-weight:bold;">${formatNames(punish) || 'Nenhum!'}</span>
             </div>
             <div style="display:flex; justify-content:space-between;">
                 <span style="color:#6B7280; font-weight:bold;">⚪ Dispensado:</span>
-                <span style="font-weight:bold;">${excusedList ? excusedList : 'Nenhum!'}</span>
+                <span style="font-weight:bold;">${formatNames(excused) || 'Nenhum!'}</span>
             </div>
         </div>
 
-        <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">📅 Cronologia de Resultados no Período</h3>
-        <div style="margin-bottom:15px;">
-            ${matchesInRange.length > 0 ? matchesInRange.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(m => {
-                let sc = m.goals.filter(g=>g.type==='scored').length;
-                let co = m.goals.filter(g=>g.type==='conceded').length;
-                let mName = m.location === 'casa' ? `<b>${getMyClub()}</b>${sc} - ${co}${escapeHTML(m.opponent)}` : `${escapeHTML(m.opponent)}${co} - ${sc} <b>${getMyClub()}</b>`;
-                let mType = m.type === 'campeonato' ? 'Campeonato' : (m.type === 'amigavel' ? 'Amigável' : 'Torneio');
-                return `<div style="padding:4px 0; border-bottom:1px solid #EEE; font-size:11px; display:flex; justify-content:space-between;">
-                    <span style="color:#666; width:80px;">${formatData(m.date)}</span>
-                    <span style="flex:1;">${mType}:${mName}</span>
-                </div>`;
-            }).join('') : '<div style="font-size:11px; color:#666;">Sem jogos realizados neste período.</div>'}
-        </div>
+        ${cronologiaFinalHtml}
 
         <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">📝 Notas e Balanço da Equipa Técnica</h3>
         <div style="border:1px solid #CCC; background:#FFF; border-radius:6px; padding:10px; min-height:80px; font-size:11px; line-height:1.4; color:#333; margin-bottom:20px; white-space:pre-wrap;">${escapeHTML(notes) || 'Sem observações adicionais.'}</div>

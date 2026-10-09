@@ -1736,3 +1736,229 @@ window.calculatePlayerPHV = function(p) {
         p.phvStatus = 'Pre-PHV';
     }
 };
+
+// ─── RELATÓRIO DE MESOCICLO (MÊS/PERÍODO) ───
+
+window.openMesocicloModal = function() {
+    const overlay = document.createElement('div');
+    overlay.id = 'meso-modal';
+    overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;';
+
+    const today = new Date().toISOString().slice(0,10);
+    let firstDay = new Date(); firstDay.setDate(1);
+    const firstDayStr = firstDay.toISOString().slice(0,10);
+
+    overlay.innerHTML = `
+        <div style="background:var(--surface); padding:20px; border-radius:12px; width:100%; max-width:400px; border:1px solid var(--gold);">
+            <h3 style="color:var(--gold); margin-top:0; margin-bottom:15px;">📄 Relatório de Mesociclo</h3>
+            <div style="display:flex; gap:10px; margin-bottom:10px;">
+                <div style="flex:1;"><label style="font-size:11px; color:var(--muted);">Data de Início</label><br><input type="date" id="meso-start" value="${firstDayStr}" style="width:100%; padding:8px; background:var(--surface-2); border:1px solid var(--line); color:var(--chalk); border-radius:6px;"></div>
+                <div style="flex:1;"><label style="font-size:11px; color:var(--muted);">Data de Fim</label><br><input type="date" id="meso-end" value="${today}" style="width:100%; padding:8px; background:var(--surface-2); border:1px solid var(--line); color:var(--chalk); border-radius:6px;"></div>
+            </div>
+            <label style="font-size:11px; color:var(--muted);">Balanço / Notas da Equipa Técnica</label>
+            <textarea id="meso-notes" placeholder="Ex: Mês muito positivo. A equipa assimilou bem a transição defensiva..." style="width:100%; min-height:80px; padding:8px; background:var(--surface-2); border:1px solid var(--line); color:var(--chalk); border-radius:6px; margin-bottom:15px;"></textarea>
+            <div style="display:flex; gap:10px;">
+                <button class="btn btn-outline" style="flex:1;" onclick="document.getElementById('meso-modal').remove()">Cancelar</button>
+                <button class="btn btn-gold" style="flex:1;" onclick="generateMesociclo()">Gerar PDF</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+};
+
+window.generateMesociclo = function() {
+    const start = document.getElementById('meso-start').value;
+    const end = document.getElementById('meso-end').value;
+    const notes = document.getElementById('meso-notes').value;
+    if (!start || !end) { if(typeof showToast==='function') showToast('Escolhe as datas.'); return; }
+    document.getElementById('meso-modal').remove();
+    exportMesocicloPDF(start, end, notes);
+};
+
+window.exportMesocicloPDF = function(start, end, notes) {
+    const matchesInRange = (state.matches || []).filter(m => m.finished && m.date >= start && m.date <= end);
+    const trainingsInRange = (state.trainings || []).filter(tr => (tr.status === undefined || tr.status === 'completed') && tr.date >= start && tr.date <= end);
+
+    let v = 0, e = 0, d = 0, gm = 0, gs = 0;
+    let scorers = {}, assists = {};
+
+    matchesInRange.forEach(m => {
+        let mGm = 0, mGs = 0;
+        (m.goals || []).forEach(g => {
+            if (g.type === 'scored') {
+                mGm++; gm++;
+                if (g.scorerId && g.scorerId !== 'autogolo') scorers[g.scorerId] = (scorers[g.scorerId] || 0) + 1;
+                if (g.assistId && g.assistId !== 'none' && g.assistId !== 'unknown') assists[g.assistId] = (assists[g.assistId] || 0) + 1;
+            } else { mGs++; gs++; }
+        });
+        if (mGm > mGs) v++; else if (mGm === mGs) e++; else d++;
+    });
+
+    // Helper to extract a display name, removing numbers if present (e.g., "10 Matias" -> "Matias")
+    const getCleanName = (id) => {
+        const full = playerName(id);
+        const parts = full.split(' ');
+        // If the first part is a number, return the second part, otherwise the first part
+        return !isNaN(parts[0]) && parts.length > 1 ? parts[1] : parts[0];
+    };
+
+    const topScorers = Object.entries(scorers).map(([id, c]) => ({ name: getCleanName(id), c })).sort((a,b) => b.c - a.c).slice(0,3);
+    const topAssists = Object.entries(assists).map(([id, c]) => ({ name: getCleanName(id), c })).sort((a,b) => b.c - a.c).slice(0,3);
+
+    const topScorersHtml = topScorers.length > 0 ? topScorers.map(x => `<b>${x.name}</b> (${x.c})`).join(' &nbsp;•&nbsp; ') : 'Sem golos marcados';
+    const topAssistsHtml = topAssists.length > 0 ? topAssists.map(x => `<b>${x.name}</b> (${x.c})`).join(' &nbsp;•&nbsp; ') : 'Sem assistências registadas';
+
+    let unjust = {}, just = {}, late = {}, injury = {}, punish = {}, excused = {};
+    let presencasMins = 0, totaisMins = 0;
+
+    trainingsInRange.forEach(tr => {
+        const dur = parseInt(tr.duration, 10) || 90;
+        (state.roster || []).filter(p => p.active !== false).forEach(p => {
+            if (p.joinDate && tr.date < p.joinDate) return;
+            totaisMins += dur;
+
+            let isAbsent = false;
+            let reason = null;
+            
+            if (Array.isArray(tr.absences)) { 
+                if (tr.absences.includes(p.id)) { isAbsent = true; reason = 'injustificada'; }
+            } else if (tr.absences && tr.absences[p.id]) { 
+                isAbsent = true; reason = String(tr.absences[p.id]).toLowerCase(); 
+            }
+
+            if (reason) {
+                if (reason.includes('injustificada')) unjust[p.id] = (unjust[p.id] || 0) + 1;
+                else if (reason.includes('justificada')) just[p.id] = (just[p.id] || 0) + 1;
+                else if (reason.includes('atras')) late[p.id] = (late[p.id] || 0) + 1;
+                else if (reason.includes('les') || reason.includes('médico') || reason.includes('medico')) injury[p.id] = (injury[p.id] || 0) + 1;
+                else if (reason.includes('castigo')) punish[p.id] = (punish[p.id] || 0) + 1;
+                else if (reason.includes('dispensa')) excused[p.id] = (excused[p.id] || 0) + 1;
+                else just[p.id] = (just[p.id] || 0) + 1; 
+            }
+
+            let custom = dur;
+            if (tr.customMinutes && tr.customMinutes[p.id] != null) {
+                custom = parseInt(tr.customMinutes[p.id], 10);
+            }
+            if (!isAbsent || (reason && reason.includes('atras'))) {
+                presencasMins += custom;
+                if (!reason && custom < dur) {
+                    late[p.id] = (late[p.id] || 0) + 1; 
+                }
+            }
+        });
+    });
+
+    const attendancePct = totaisMins > 0 ? Math.round((presencasMins / totaisMins) * 100) : 0;
+    
+    const formatNames = (obj) => {
+        const entries = Object.entries(obj);
+        if (entries.length === 0) return null;
+        return entries.map(([id, c]) => `${getCleanName(id)} (${c})`).join(', ');
+    };
+
+    const unjustList = formatNames(unjust);
+    const justList = formatNames(just);
+    const lateList = formatNames(late);
+    const injuryList = formatNames(injury);
+    const punishList = formatNames(punish);
+    const excusedList = formatNames(excused);
+
+    const formatData = (d) => d.split('-').reverse().join('/');
+
+    let html = `
+    <div class="print-card" style="padding:20px; font-family:-apple-system, sans-serif;">
+        <div class="print-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:15px;">
+            <div>
+                <h1 style="font-size:20px; margin:0; text-transform:uppercase; color:#000;">BALANÇO DE MESOCICLO</h1>
+                <p style="font-size:14px; font-weight:bold; margin:4px 0 0 0; color:#333;">Período: ${formatData(start)} a ${formatData(end)}</p>
+                <p style="font-size:11px; color:#555; margin:3px 0 0 0;">Clube: <b>${getClubAndEscalao()}</b> | Época: <b>${state.currentSeason}</b></p>
+            </div>
+            ${typeof getClubLogoHtml === 'function' ? getClubLogoHtml() : ''}
+        </div>
+
+        <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">📊 Resumo de Competição (${matchesInRange.length} Jogos)</h3>
+        
+        <!-- ADJUSTED LAYOUT: Two equal columns -->
+        <div style="display:flex; gap:15px; margin-bottom:15px;">
+            <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+                <div style="background:#F3F4F6; border-radius:6px; padding:12px; display:flex; align-items:center; justify-content:space-between; height: 100%;">
+                    <div style="font-size:10px; color:#666; text-transform:uppercase; font-weight:bold;">Resultado Global</div>
+                    <div style="font-size:16px; font-weight:bold; color:#166534;">${v}V ${e}E ${d}D</div>
+                </div>
+                <div style="background:#F3F4F6; border-radius:6px; padding:12px; display:flex; align-items:center; justify-content:space-between; height: 100%;">
+                    <div style="font-size:10px; color:#666; text-transform:uppercase; font-weight:bold;">Balanço de Golos</div>
+                    <div style="font-size:15px; font-weight:bold;"><span style="color:#166534;">${gm} GM</span> / <span style="color:#DC2626;">${gs} GS</span></div>
+                </div>
+            </div>
+            <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+                <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:6px; padding:12px; display:flex; flex-direction:column; justify-content:center; height: 100%;">
+                    <div style="font-size:11px; font-weight:bold; color:#B45309; margin-bottom:4px;">⚽ Top 3 Marcadores:</div>
+                    <div style="font-size:12px; color:#111827;">${topScorersHtml}</div>
+                </div>
+                <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:6px; padding:12px; display:flex; flex-direction:column; justify-content:center; height: 100%;">
+                    <div style="font-size:11px; font-weight:bold; color:#1D4ED8; margin-bottom:4px;">🎯 Top 3 Assistências:</div>
+                    <div style="font-size:12px; color:#111827;">${topAssistsHtml}</div>
+                </div>
+            </div>
+        </div>
+
+        <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">🏋️ Resumo de Treino e Disciplina (${trainingsInRange.length} Sessões)</h3>
+        <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:6px; padding:10px; margin-bottom:15px; font-size:11px;">
+            <div style="display:flex; justify-content:space-between; border-bottom:1px solid #E5E7EB; padding-bottom:6px; margin-bottom:6px;">
+                <span>Aproveitamento Global da Equipa:</span>
+                <span style="font-weight:bold; color:${attendancePct >= 80 ? '#16A34A' : '#DC2626'};">${attendancePct}% de Assiduidade</span>
+            </div>
+            
+            <div style="display:flex; justify-content:space-between; border-bottom:1px solid #E5E7EB; padding-bottom:6px; margin-bottom:6px;">
+                <span style="color:#DC2626; font-weight:bold;">🔴 Faltas Injustificadas:</span>
+                <span style="font-weight:bold;">${unjustList ? unjustList : 'Nenhuma!'}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px solid #E5E7EB; padding-bottom:6px; margin-bottom:6px;">
+                <span style="color:#D97706; font-weight:bold;">🟡 Faltas Justificadas:</span>
+                <span style="font-weight:bold;">${justList ? justList : 'Nenhuma!'}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px solid #E5E7EB; padding-bottom:6px; margin-bottom:6px;">
+                <span style="color:#4F46E5; font-weight:bold;">⏱️ Atrasos / Saídas Cedo:</span>
+                <span style="font-weight:bold;">${lateList ? lateList : 'Nenhum registado!'}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px solid #E5E7EB; padding-bottom:6px; margin-bottom:6px;">
+                <span style="color:#0284C7; font-weight:bold;">💊 Lesão / Médico:</span>
+                <span style="font-weight:bold;">${injuryList ? injuryList : 'Nenhuma!'}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; border-bottom:1px solid #E5E7EB; padding-bottom:6px; margin-bottom:6px;">
+                <span style="color:#BE123C; font-weight:bold;">🟥 Castigo:</span>
+                <span style="font-weight:bold;">${punishList ? punishList : 'Nenhum!'}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span style="color:#6B7280; font-weight:bold;">⚪ Dispensado:</span>
+                <span style="font-weight:bold;">${excusedList ? excusedList : 'Nenhum!'}</span>
+            </div>
+        </div>
+
+        <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">📅 Cronologia de Resultados no Período</h3>
+        <div style="margin-bottom:15px;">
+            ${matchesInRange.length > 0 ? matchesInRange.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(m => {
+                let sc = m.goals.filter(g=>g.type==='scored').length;
+                let co = m.goals.filter(g=>g.type==='conceded').length;
+                let mName = m.location === 'casa' ? `<b>${getMyClub()}</b>${sc} - ${co}${escapeHTML(m.opponent)}` : `${escapeHTML(m.opponent)}${co} - ${sc} <b>${getMyClub()}</b>`;
+                let mType = m.type === 'campeonato' ? 'Campeonato' : (m.type === 'amigavel' ? 'Amigável' : 'Torneio');
+                return `<div style="padding:4px 0; border-bottom:1px solid #EEE; font-size:11px; display:flex; justify-content:space-between;">
+                    <span style="color:#666; width:80px;">${formatData(m.date)}</span>
+                    <span style="flex:1;">${mType}:${mName}</span>
+                </div>`;
+            }).join('') : '<div style="font-size:11px; color:#666;">Sem jogos realizados neste período.</div>'}
+        </div>
+
+        <h3 style="font-size:12px; font-weight:bold; margin:0 0 8px 0; border-bottom:1px solid #000; padding-bottom:3px; text-transform:uppercase;">📝 Notas e Balanço da Equipa Técnica</h3>
+        <div style="border:1px solid #CCC; background:#FFF; border-radius:6px; padding:10px; min-height:80px; font-size:11px; line-height:1.4; color:#333; margin-bottom:20px; white-space:pre-wrap;">${escapeHTML(notes) || 'Sem observações adicionais.'}</div>
+
+        <div style="margin-top:30px; display:flex; justify-content:space-between; align-items:flex-end;">
+            <div style="font-size:10px; color:#666;">Relatório de Mesociclo Emitido por Coachfolio v4.1</div>
+            <div style="text-align:center; width:200px; border-top:1px solid #000; padding-top:4px; font-size:11px; font-weight:bold;">O Treinador / Coordenação</div>
+        </div>
+    </div>`;
+
+    document.getElementById('print-area').innerHTML = html;
+    if(typeof window.openSafePrintModal === 'function') window.openSafePrintModal();
+};

@@ -1226,8 +1226,9 @@ window.renderMicrociclo = function() {
 
     html += `
         <div style="display:flex; gap:10px; margin-top:6px;">
-            <button class="btn btn-outline" style="flex:1; padding:10px 4px; font-size:11px;" onclick="window.microcycleDate = new Date(); render();">📅 Semana Atual</button>
-            <button class="btn btn-outline" style="flex:1; padding:10px 4px; font-size:11px; border-style:dashed;" onclick="exportMicrocyclePDF()">📄 Exportar PDF</button>
+            <button class="btn btn-outline" style="flex:1; padding:10px 4px; font-size:11px;" onclick="window.microcycleDate = new Date(); render();">📅 IR Semana Atual</button>
+            <button class="btn btn-outline" style="flex:1; padding:10px 4px; font-size:11px;" onclick="exportMicrocyclePDF()">📄 Exportar SEMANA PDF</button>
+            <button class="btn btn-outline" style="flex:1; padding:10px 4px; font-size:11px;" onclick="openMesocicloModal()">📄 Mesociclo Por Datas</button>
         </div>
     </div>`;
     

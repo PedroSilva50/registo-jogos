@@ -466,15 +466,22 @@ function generatePlayerBarsHTML(stats, maxStats, isGK = false, isPDF = false) {
     return html;
 }
 
-function generateDonutChartSVG(minutosCumpridos, minutosTotais) {
+function generateDonutChartSVG(minutosCumpridos, minutosTotais, isPDF = false) {
     const size = 100; const cx = 50; const cy = 50; const r = 35;
-    if(!minutosTotais || minutosTotais === 0) return `<svg viewBox="0 0 100 100" style="width:100%; height:auto; max-width:100px; margin:0 auto; display:block;"><circle cx="50" cy="50" r="35" fill="none" stroke="var(--surface-2)" stroke-width="12"/></svg>`;
+    
+    // Se for PDF usa cores fixas, se for na app usa as cores do tema
+    const strokeBg = isPDF ? '#E5E7EB' : 'var(--surface-2)';
+    const strokeRed = isPDF ? '#DC2626' : 'var(--red)';
+    const strokeGreen = isPDF ? '#16A34A' : 'var(--green)';
+    const textColor = isPDF ? '#000000' : 'currentColor';
+
+    if(!minutosTotais || minutosTotais === 0) return `<svg viewBox="0 0 100 100" style="width:100%; height:auto; max-width:100px; margin:0 auto; display:block;"><circle cx="50" cy="50" r="35" fill="none" stroke="${strokeBg}" stroke-width="12"/></svg>`;
     
     const pctP = Math.min(1, Math.max(0, minutosCumpridos / minutosTotais)); 
     const dashP = pctP * 2 * Math.PI * r; 
     const dashEmpty = 2 * Math.PI * r;
     
-    return `<svg viewBox="0 0 100 100" style="width:100%; height:auto; max-width:120px; margin:0 auto; display:block; transform:rotate(-90deg);"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--red)" stroke-width="14"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--green)" stroke-width="14" stroke-dasharray="${dashP} ${dashEmpty}" /><text x="${cx}" y="${cy}" fill="currentColor" font-size="14" font-weight="bold" text-anchor="middle" dominant-baseline="central" transform="rotate(90, ${cx}, ${cy})">${Math.round(pctP*100)}%</text></svg>`;
+    return `<svg viewBox="0 0 100 100" style="width:100%; height:auto; max-width:120px; margin:0 auto; display:block; transform:rotate(-90deg);"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${strokeRed}" stroke-width="14"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${strokeGreen}" stroke-width="14" stroke-dasharray="${dashP} ${dashEmpty}" /><text x="${cx}" y="${cy}" fill="${textColor}" font-size="14" font-weight="bold" text-anchor="middle" dominant-baseline="central" transform="rotate(90, ${cx}, ${cy})">${Math.round(pctP*100)}%</text></svg>`;
 }
 
 window.exportStatsPlayersPDF = function() {
@@ -918,13 +925,20 @@ window.exportPlayerPDF = function(pId) {
   const age = p.birthDate ? computeAge(p.birthDate) : null;
 
   const playerBarsHtml = generatePlayerBarsHTML(st, maxStats, isGK, true);
-  const donutChartHtml = generateDonutChartSVG(st.minutosTreinoCumpridos, st.minutosTreinoTotais);
+  const donutChartHtml = generateDonutChartSVG(st.minutosTreinoCumpridos, st.minutosTreinoTotais, true);
 
   // Mapeamento visual das novas variáveis de Biometria, Escola e Atributos
   const footLabel = p.foot || 'Destro';
   const heightVal = p.height ? `${p.height} cm` : 'N/D';
   const weightVal = p.weight ? `${p.weight} kg` : 'N/D';
   
+let imcStr = '';
+  if (p.height && p.weight) {
+    const hM = p.height / 100;
+    const imcVal = (p.weight / (hM * hM)).toFixed(1);
+    imcStr = ` &nbsp;|&nbsp; <b>IMC:</b> ${imcVal}`;
+  }
+
   let phvBadge = 'Pré-Estirão';
   let phvStyle = 'background:#E5E7EB; color:#374151;';
   if (p.phvStatus === 'In-PHV') {
@@ -958,7 +972,7 @@ window.exportPlayerPDF = function(pId) {
       <div><b>Outras Posições:</b> ${escapeHTML(otherPos)}</div>
       <div><b>Data de Nascimento:</b> ${escapeHTML(p.birthDate || 'N/D')} (${age !== null ? `${age} anos` : 'N/D'})</div>
       <div><b>Pé Dominante:</b> ${escapeHTML(footLabel)}</div>
-      <div><b>Biometria:</b> ${heightVal} &nbsp;|&nbsp; ${weightVal}</div>
+      <div><b>Biometria:</b> ${heightVal} &nbsp;|&nbsp; ${weightVal}${imcStr}</div>
       <div style="grid-column:1/-1; padding:4px 8px; border-radius:4px; ${phvStyle}"><b>Maturação Biológica:</b> ${phvBadge}</div>
     </div>
 
@@ -1196,6 +1210,7 @@ window.renderPlantel = function() {
               <label>Pé Dominante</label>
               <div class="seg">
                 <div class="seg-btn ${(!p.foot || p.foot==='Destro')?'active':''}" onclick="updatePlayerFoot('${p.id}', 'Destro')">Destro</div>
+                <div class="seg-btn ${p.foot==='Esquerdino'?'active':''}" onclick="updatePlayerFoot('${p.id}', 'Esquerdino')">Esquerdino</div>
                 <div class="seg-btn ${p.foot==='Ambidestro'?'active':''}" onclick="updatePlayerFoot('${p.id}', 'Ambidestro')">Ambidestro</div>
               </div>
             </div>
@@ -1209,13 +1224,31 @@ window.renderPlantel = function() {
               </div>
               
               <div style="max-height:120px; overflow-y:auto; margin-bottom:10px; padding-right:4px;">
-                ${(p.measurements && p.measurements.length > 0) ? p.measurements.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).map(m => `
-                  <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface); padding:6px 10px; border-radius:6px; margin-bottom:4px; font-size:11px; border:1px solid var(--line);">
+                ${(p.measurements && p.measurements.length > 0) ? p.measurements.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).map((m, i, arr) => {
+                  let imcLabel = '';
+                  let varLabel = '';
+                  
+                  if(m.height && m.weight) {
+                    const mAlt = m.height / 100;
+                    const imc = (m.weight / (mAlt * mAlt)).toFixed(1);
+                    imcLabel = ` | <span style="color:var(--gold);">IMC: ${imc}</span>`;
+                  }
+                  
+                  // Calcular variação em relação à medição anterior
+                  const prev = arr[i + 1];
+                  if (prev && prev.weight && m.weight) {
+                      const diff = (m.weight - prev.weight).toFixed(1);
+                      if (diff > 0) varLabel = ` <span style="color:var(--green); font-size:9px;">(📈 +${diff}kg)</span>`;
+                      else if (diff < 0) varLabel = ` <span style="color:var(--red); font-size:9px;">(📉 ${diff}kg)</span>`;
+                      else varLabel = ` <span style="color:var(--muted); font-size:9px;">(=)</span>`;
+                  }
+
+                  return `<div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface); padding:6px 10px; border-radius:6px; margin-bottom:4px; font-size:11px; border:1px solid var(--line);">
                     <span>📅 ${m.date.split('-').reverse().join('/')}</span>
-                    <span><b>${m.height} cm</b> | ${m.weight} kg</span>
+                    <span><b>${m.height} cm</b> | ${m.weight} kg${varLabel}${imcLabel}</span>
                     <button class="quick-del" style="color:var(--red);" onclick="event.stopPropagation(); deletePlayerMeasurement('${p.id}', '${m.id}')">✕</button>
-                  </div>
-                `).join('') : '<div style="font-size:10px; color:var(--muted);">Adiciona a 1ª medição abaixo. A app fará o cálculo de alerta a partir da 2ª medição.</div>'}
+                  </div>`;
+                }).join('') : '<div style="font-size:10px; color:var(--muted);">Adiciona a 1ª medição abaixo. A app fará o cálculo de alerta a partir da 2ª medição.</div>'}
               </div>
 
               <div style="display:flex; gap:6px; align-items:center; border-top:1px dashed var(--line); padding-top:10px;">

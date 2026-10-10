@@ -599,6 +599,7 @@ window.getGlobalMinuteDisplay = function(m, half, relMin) {
     }
     return plannedHalfMins + relMin;
 };
+
 function calcPlayerMinutes(m, pId) { 
   if (m.ignoreMinutes) return 0; 
   let totalSecs = 0; 
@@ -641,9 +642,47 @@ function calcPlayerMinutes(m, pId) {
     if (onPitch) totalSecs += Math.max(0, durationSecs - timeOnSecs); 
   }); 
 
+  // ==========================================
+  // 🛡️ LÓGICA DE EXPULSÃO (VERMELHO DIRETO OU 2 AMARELOS)
+  // ==========================================
+  let pCards = (m.cards || []).filter(c => c && c.playerId === pId);
+  let redCard = pCards.find(c => c.color === 'Vermelho');
+  let yellowCards = pCards.filter(c => c.color === 'Amarelo');
+  
+  // Deteta se o atleta levou vermelho direto ou o segundo amarelo
+  let expulsoEvent = redCard;
+  if (!expulsoEvent && yellowCards.length >= 2) {
+      expulsoEvent = yellowCards[1];
+  }
+  
+  // Se foi expulso, calculamos a que minuto foi e cortamos o relógio aí!
+  if (expulsoEvent) {
+      let expulsoMin = expulsoEvent.minute;
+      if (expulsoMin == null) {
+          expulsoMin = expulsoEvent.half === 1 ? (m.halfDuration || 30) : ((m.halfDuration || 30) * 2);
+      }
+      
+      let isStarter = (m.lineup || []).includes(pId);
+      let subIn = (m.subs || []).find(s => s && s.inId === pId);
+      
+      let inMin = 0;
+      if (!isStarter && subIn) {
+          inMin = subIn.minute != null ? subIn.minute : (subIn.isHalftime ? (m.halfDuration || 30) : 0);
+      }
+      
+      let minutosReaisSecs = (expulsoMin - inMin) * 60;
+      if (minutosReaisSecs < 0) minutosReaisSecs = 0;
+      
+      // Aplica o corte apenas se o tempo da expulsão for inferior ao que ele teria jogado
+      if (minutosReaisSecs < totalSecs) {
+          totalSecs = minutosReaisSecs;
+      }
+  }
+
   if (totalSecs > 0 && totalSecs < 1) totalSecs = 1;
   return Math.round(totalSecs); 
 }
+
 function formatSecsToMinSec(totalSecs) {
   if (!totalSecs || isNaN(totalSecs) || totalSecs <= 0) return "0m 0s";
   const m = Math.floor(totalSecs / 60);

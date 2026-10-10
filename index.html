@@ -649,31 +649,42 @@ function calcPlayerMinutes(m, pId) {
   let redCard = pCards.find(c => c.color === 'Vermelho');
   let yellowCards = pCards.filter(c => c.color === 'Amarelo');
   
-  // Deteta se o atleta levou vermelho direto ou o segundo amarelo
   let expulsoEvent = redCard;
   if (!expulsoEvent && yellowCards.length >= 2) {
       expulsoEvent = yellowCards[1];
   }
   
-  // Se foi expulso, calculamos a que minuto foi e cortamos o relógio aí!
   if (expulsoEvent) {
-      let expulsoMin = expulsoEvent.minute;
-      if (expulsoMin == null) {
-          expulsoMin = expulsoEvent.half === 1 ? (m.halfDuration || 30) : ((m.halfDuration || 30) * 2);
-      }
+      // 🛠️ CONVERTER MINUTO DA 2ª PARTE EM MINUTO GLOBAL (Ex: 17' na 2ª parte -> 47')
+      const getGlobalMin = (evt) => {
+          let baseMins = m.halfDuration || (typeof state !== 'undefined' ? state.defaultHalfDuration : 30) || 30;
+          if (evt.minute == null) {
+              return evt.half === 1 ? baseMins : (baseMins * 2);
+          }
+          let somaMins = 0;
+          if (evt.half === 2 && !m.singleHalf) {
+              somaMins = m.isNewManualModel ? (m.manualHalf1Duration || baseMins) : baseMins;
+          }
+          return somaMins + evt.minute;
+      };
+
+      let expulsoMin = getGlobalMin(expulsoEvent);
       
       let isStarter = (m.lineup || []).includes(pId);
       let subIn = (m.subs || []).find(s => s && s.inId === pId);
       
       let inMin = 0;
       if (!isStarter && subIn) {
-          inMin = subIn.minute != null ? subIn.minute : (subIn.isHalftime ? (m.halfDuration || 30) : 0);
+          if (subIn.isHalftime) {
+              inMin = m.isNewManualModel ? (m.manualHalf1Duration || 30) : (m.halfDuration || (typeof state !== 'undefined' ? state.defaultHalfDuration : 30) || 30);
+          } else {
+              inMin = getGlobalMin(subIn);
+          }
       }
       
       let minutosReaisSecs = (expulsoMin - inMin) * 60;
       if (minutosReaisSecs < 0) minutosReaisSecs = 0;
       
-      // Aplica o corte apenas se o tempo da expulsão for inferior ao que ele teria jogado
       if (minutosReaisSecs < totalSecs) {
           totalSecs = minutosReaisSecs;
       }

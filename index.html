@@ -795,6 +795,7 @@ window.togglePendingLineup = function(id) {
     else { if(pendingLineupSet.length >= state.tacticFormat) { showToast(`Limite: ${state.tacticFormat} titulares!`); return; } pendingLineupSet.push(id); }
     render(); 
 };
+
 window.confirmLineup = function(mId) { 
   const m = state.matches.find(x => x.id === mId); 
   if (m) { 
@@ -804,11 +805,16 @@ window.confirmLineup = function(mId) {
   } 
   render(); 
 };
+
 window.editLineup = function(mId) {
     const m = state.matches.find(x=>x.id===mId);
     if(m && (!m.timeline || !m.timeline.kickoff)) {
         pendingLineupSet = [...m.lineup];
         m.lineup = [];
+        
+        // NOVO: Limpa as peças táticas geradas anteriormente para forçar a recriação
+        if(m.tacticalSnapshot) m.tacticalSnapshot.pieces = []; 
+        
         saveState(); render();
     }
 };

@@ -1264,6 +1264,7 @@ window.buildExerciseTacticalPitchSVG = function(notebookId) {
         else if (p.kind === 'minigoal') svgContent = `<rect x="-5" y="-3" width="10" height="6" rx="1" fill="none" stroke="#FFFFFF" stroke-width="1.5"/><line x1="-5" y1="-3" x2="5" y2="-3" stroke="#FF3B30" stroke-width="1"/>`;
         else if (p.kind === 'pole') svgContent = `<circle cx="0" cy="0" r="2" fill="${p.color || '#FF2D55'}" stroke="#000" stroke-width="0.5"/><line x1="0" y1="0" x2="0" y2="-6" stroke="${p.color || '#FF2D55'}" stroke-width="1.5"/>`;
         else if (p.kind === 'rope') svgContent = `<line x1="-8" y1="-3" x2="8" y2="-3" stroke="#EAB308" stroke-width="0.8"/><line x1="-8" y1="3" x2="8" y2="3" stroke="#EAB308" stroke-width="0.8"/><line x1="-6" y1="-3" x2="-6" y2="3" stroke="#EAB308" stroke-width="0.8"/><line x1="-2" y1="-3" x2="-2" y2="3" stroke="#EAB308" stroke-width="0.8"/><line x1="2" y1="-3" x2="2" y2="3" stroke="#EAB308" stroke-width="0.8"/><line x1="6" y1="-3" x2="6" y2="3" stroke="#EAB308" stroke-width="0.8"/>`;
+        else if (p.kind === 'hoop') svgContent = `<circle cx="0" cy="0" r="4.5" fill="none" stroke="${p.color || '#0EA5E9'}" stroke-width="1.5"/>`;
         piecesSVG += `<g transform="translate(${cx}, ${svgY}) scale(0.6)">${svgContent}</g>`;
     }
   });

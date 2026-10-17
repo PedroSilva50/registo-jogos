@@ -46,7 +46,10 @@ window.spawnTacticItem = function(kind, playerId) {
         item.color = '#FF2D55';
     } else if (kind === 'rope') {
         item.color = '#EAB308';
+    } else if (kind === 'hoop') {
+        item.color = '#0EA5E9'; 
     }
+
     
     state.tactics.push(item);
     saveState();
@@ -84,6 +87,15 @@ window.getTacticItemSVG = function(item) {
             <line x1="2" y1="-3" x2="2" y2="3" stroke="${color}" stroke-width="0.8"/>
             <line x1="6" y1="-3" x2="6" y2="3" stroke="${color}" stroke-width="0.8"/>
         </g>`;
+    }
+    if (item.kind === 'hoop') {
+        const color = item.color || '#0EA5E9';        
+        return `<g>
+            <circle cx="0" cy="0" r="4.5" fill="none" stroke="${color}" stroke-width="1.5"/>
+        </g>`;
+    }
+    if (item.kind === 'ball') {
+        return `<text x="0" y="4" font-size="12" text-anchor="middle">⚽</text>`;
     }
     return '';
 };
@@ -152,7 +164,7 @@ function renderTatica() {
 
                 <div style="display:flex; gap:8px; margin-bottom:12px;">
                     <button class="btn btn-green" style="flex:1; font-size:12px; padding:12px;" onclick="saveMatchTacticalBoardAndReturn()">💾 GUARDAR NO JOGO & VOLTAR</button>
-                    <button class="btn btn-outline" style="flex:none; padding:12px;" onclick="window.editingMatchTacticsId=null; navigateToHub('jogo'); navigateToTab('jogo');">✕ CANCELAR</button>
+                    <button class="btn btn-outline" style="flex:none; padding:12px;" onclick="window.editingMatchTacticsId=null; state.tactics=[]; state.tacticPaths=[]; saveState(); navigateToHub('jogo'); navigateToTab('jogo');">✕ CANCELAR</button>
                 </div>
 
                 <div id="tactic-pitch" style="position:relative; width:100%; max-width:420px; margin:0 auto 10px; aspect-ratio:4/3; background:#113821; border:2px solid #FFF; border-radius:12px; overflow:hidden; touch-action:none;">
@@ -248,14 +260,15 @@ function renderTatica() {
             let color = p.kind === 'ball' ? '#000' : (p.kind === 'own' ? pieceColor : oppColor);
             let label = p.kind === 'ball' ? '⚽' : escapeHTML(p.label || '?');
             
-            if (['cone', 'minigoal', 'pole', 'rope'].includes(p.kind)) {
+            // ATUALIZAR ESTE BLOCO (adicionada a 'ball' e removida a sombra no style)
+            if (['cone', 'minigoal', 'pole', 'rope', 'hoop', 'ball'].includes(p.kind)) {
                 let svgContent = window.getTacticItemSVG(p);
-                return `<div class="tactic-piece" data-id="${p.id}" ondblclick="removeTacticPiece('${p.id}')" style="left:${p.x}\%; top:${p.y}%; width:24px; height:24px; position:absolute; transform:translate(-50%, -50%); display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:10;">
+                return `<div class="tactic-piece" data-id="${p.id}" ondblclick="removeTacticPiece('${p.id}')" style="left:${p.x}%; top:${p.y}%; width:24px; height:24px; position:absolute; transform:translate(-50%, -50%); display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:10; background:transparent; border:none; box-shadow:none;">
                     <svg viewBox="-10 -10 20 20" style="width:100%; height:100%; pointer-events:none; overflow:visible;">${svgContent}</svg>
                 </div>`;
             }
 
-            return `<div class="tactic-piece" data-id="${p.id}" ondblclick="removeTacticPiece('${p.id}')" style="left:${p.x}\%; top:${p.y}%; background:${bg}; color:${color}; width:26px; height:26px; font-size:11px; position:absolute; transform:translate(-50%, -50%); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; border:2px solid #FFF; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.4); z-index:10;">
+            return `<div class="tactic-piece" data-id="${p.id}" ondblclick="removeTacticPiece('${p.id}')" style="left:${p.x}%; top:${p.y}%; background:${bg}; color:${color}; width:26px; height:26px; font-size:11px; position:absolute; transform:translate(-50%, -50%); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; border:2px solid #FFF; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.4); z-index:10;">
                 ${label}
             </div>`;
         }).join('')}
@@ -290,6 +303,7 @@ function renderTatica() {
             <button class="btn btn-outline" style="font-size:10px; padding:4px 8px;" onclick="spawnTacticItem('minigoal')">🥅 Baliza</button>
             <button class="btn btn-outline" style="font-size:10px; padding:4px 8px;" onclick="spawnTacticItem('pole')">📍 Estaca</button>
             <button class="btn btn-outline" style="font-size:10px; padding:4px 8px;" onclick="spawnTacticItem('rope')">🪜 Escada</button>
+            <button class="btn btn-outline" style="font-size:10px; padding:4px 8px;" onclick="spawnTacticItem('hoop')">⭕ Aro</button>
         </div>
 
         <div style="font-size:10px; color:var(--muted); text-transform:uppercase; font-weight:bold; margin-bottom:6px;">

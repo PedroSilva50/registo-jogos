@@ -490,7 +490,12 @@ window.saveMatchTacticalBoardAndReturn = function() {
     if(typeof showToast === 'function') showToast('Esquema tático guardado no jogo! 💾');
   }
 
+  // A CORREÇÃO: Limpar a memória do quadro geral após gravar no jogo!
   window.editingMatchTacticsId = null;
+  state.tactics = [];
+  state.tacticPaths = [];
+  saveState();
+
   if(typeof navigateToHub === 'function') navigateToHub('jogo');
   if(typeof navigateToTab === 'function') navigateToTab('jogo');
 };

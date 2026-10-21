@@ -891,21 +891,32 @@ function renderJogos(){
         const ratedPlayers = Object.entries(m.ratings).map(([id, r])=>({name: playerName(id), r})).sort((a,b)=>b.r - a.r); 
         ratingsHtml = `<div class="notes-readonly" style="margin-top:10px;"><b>⭐ ${t('match_rate_pls')}:</b><br>${ratedPlayers.map(p => `<span style="color:var(--gold);">${p.r}★</span> - ${p.name}`).join('<br>')}</div>`; 
       } 
+
       let xiHtml = '';
       if(m.lineup && m.lineup.length > 0){
-          // 1. Vai buscar os objetos completos dos jogadores
           const lineupPlayers = m.lineup.map(id => state.roster.find(p => p.id === id)).filter(Boolean);
-          
-          // 2. FORÇA a ordenação (lendo a tua preferência do Plantel)
           const sortedLineup = sortPlayerObjs([...lineupPlayers]);
-          
-          // 3. Monta o texto já ordenado
           const xiNames = sortedLineup
               .map(p => `<span style="color:var(--chalk);">${playerLabel(p)}</span>`)
               .join('<span style="color:var(--muted);"> • </span>');
-              
           xiHtml = `<div class="notes-readonly" style="margin-bottom:10px; padding-bottom:8px; border-bottom:1px dashed var(--line);"><b>⭐ Equipa Inicial (XI):</b><br>${xiNames}</div>`;
       }
+      
+      const isNarrativeOpen = window.expandedNarrative === m.id;
+      const narrativeHtml = `
+        <div style="margin-top:10px; margin-bottom:10px; background:var(--surface-2); border:1px solid var(--line); border-radius:8px; overflow:hidden;">
+          <div style="padding:10px 12px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; background:${isNarrativeOpen ? 'var(--surface)' : 'transparent'}; border-bottom:${isNarrativeOpen ? '1px solid var(--line)' : 'none'};" onclick="event.stopPropagation(); window.expandedNarrative = window.expandedNarrative === '${m.id}' ? null : '${m.id}'; render();">
+              <span style="font-size:11px; color:var(--gold); font-weight:bold; text-transform:uppercase;">⏱️ Cronologia de Eventos</span>
+              <span style="color:var(--gold); font-size:12px; transition:transform 0.2s;">${isNarrativeOpen ? '▼' : '▶'}</span>
+          </div>
+          ${isNarrativeOpen ? `
+          <div style="padding:12px; animation: fadeIn 0.2s ease-in-out;">
+              ${matchNarrativeHtml(m, m.finished)}
+          </div>
+          ` : ''}
+        </div>
+      `;
+      
       return `<div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('textarea')){ expandedMatch=expandedMatch==='${m.id}'?null:'${m.id}'; render(); }">
         <div class="match-head-row">
           <div class="match-head" style="flex:1;">
@@ -919,7 +930,8 @@ function renderJogos(){
         </div>
         ${open ? `<div class="goal-list">
           ${m.capitao ? `<div style="font-size:11px; color:var(--green); margin-bottom:8px; text-transform:uppercase; font-weight:700;">© Capitão: ${playerName(m.capitao)}</div>` : ''}
-          ${xiHtml}${matchNarrativeHtml(m, m.finished)}
+          ${xiHtml}
+          ${narrativeHtml}
           ${ratingsHtml}
           ${m.notes?`<div class="notes-readonly" style="margin-top:10px;">📝 ${m.notes}</div>`:''}
           <div class="btn-row" style="margin-top:12px; flex-wrap:wrap; gap:6px;">

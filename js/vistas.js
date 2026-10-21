@@ -891,7 +891,21 @@ function renderJogos(){
         const ratedPlayers = Object.entries(m.ratings).map(([id, r])=>({name: playerName(id), r})).sort((a,b)=>b.r - a.r); 
         ratingsHtml = `<div class="notes-readonly" style="margin-top:10px;"><b>⭐ ${t('match_rate_pls')}:</b><br>${ratedPlayers.map(p => `<span style="color:var(--gold);">${p.r}★</span> - ${p.name}`).join('<br>')}</div>`; 
       } 
-      
+      let xiHtml = '';
+      if(m.lineup && m.lineup.length > 0){
+          // 1. Vai buscar os objetos completos dos jogadores
+          const lineupPlayers = m.lineup.map(id => state.roster.find(p => p.id === id)).filter(Boolean);
+          
+          // 2. FORÇA a ordenação (lendo a tua preferência do Plantel)
+          const sortedLineup = sortPlayerObjs([...lineupPlayers]);
+          
+          // 3. Monta o texto já ordenado
+          const xiNames = sortedLineup
+              .map(p => `<span style="color:var(--chalk);">${playerLabel(p)}</span>`)
+              .join('<span style="color:var(--muted);"> • </span>');
+              
+          xiHtml = `<div class="notes-readonly" style="margin-bottom:10px; padding-bottom:8px; border-bottom:1px dashed var(--line);"><b>⭐ Equipa Inicial (XI):</b><br>${xiNames}</div>`;
+      }
       return `<div class="card match-item" onclick="if(!event.target.closest('button') && !event.target.closest('textarea')){ expandedMatch=expandedMatch==='${m.id}'?null:'${m.id}'; render(); }">
         <div class="match-head-row">
           <div class="match-head" style="flex:1;">
@@ -905,7 +919,7 @@ function renderJogos(){
         </div>
         ${open ? `<div class="goal-list">
           ${m.capitao ? `<div style="font-size:11px; color:var(--green); margin-bottom:8px; text-transform:uppercase; font-weight:700;">© Capitão: ${playerName(m.capitao)}</div>` : ''}
-          ${matchNarrativeHtml(m, m.finished)}
+          ${xiHtml}${matchNarrativeHtml(m, m.finished)}
           ${ratingsHtml}
           ${m.notes?`<div class="notes-readonly" style="margin-top:10px;">📝 ${m.notes}</div>`:''}
           <div class="btn-row" style="margin-top:12px; flex-wrap:wrap; gap:6px;">

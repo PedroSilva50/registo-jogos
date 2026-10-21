@@ -753,30 +753,40 @@ function renderTreinos(){
       </div>
 
       <div class="card">
-        <div class="panel-title" style="margin-bottom:6px;">Registo de Presenças & Tempo Efetivo</div>
-        <div style="font-size:11px; color:var(--muted); margin-bottom:12px;">Podes ajustar os minutos cumpridos se o jogador foi dispensado/lesionado a meio.</div>
-        ${eligiblePlayers().length ? `<div style="display:flex; flex-direction:column; gap:8px;">${eligiblePlayers().map(p => {
-          const currentReason = (trainingForm.absences && trainingForm.absences[p.id]) || 'presente';
-          const hasCustomMins = currentReason === 'dispensado' || currentReason === 'lesao' || currentReason === 'castigo' || currentReason === 'atrasado';
-          const playerMins = (trainingForm.customMinutes && trainingForm.customMinutes[p.id] != null) ? trainingForm.customMinutes[p.id] : (currentReason === 'presente' ? baseDuration : 0);
-          const minsLabel = currentReason === 'atrasado' ? 'Minutos cumpridos (chegou atrasado):' : 'Minutos cumpridos antes da saída:';
+        <div style="margin-top:14px; margin-bottom:14px; background:var(--surface-2); border:1px solid var(--line); border-radius:8px; overflow:hidden;">
+        <div style="padding:10px 12px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; background:${trainingForm.showAbsences ? 'var(--surface)' : 'transparent'}; border-bottom:${trainingForm.showAbsences ? '1px solid var(--line)' : 'none'};" onclick="trainingForm.showAbsences = !trainingForm.showAbsences; render();">
+            <span style="font-size:11px; color:var(--gold); font-weight:bold; text-transform:uppercase;">🏃 Registo de Presenças & Tempo Efetivo</span>
+            <span style="color:var(--gold); font-size:12px; transition:transform 0.2s;">${trainingForm.showAbsences ? '▼' : '▶'}</span>
+        </div>
+        
+        ${trainingForm.showAbsences ? `
+        <div style="padding:12px; animation: fadeIn 0.2s ease-in-out;">
+            <div style="font-size:11px; color:var(--muted); margin-bottom:12px;">Podes ajustar os minutos cumpridos se o jogador foi dispensado/lesionado a meio. Todos estão presentes por defeito.</div>
+            ${eligiblePlayers().length ? `<div style="display:flex; flex-direction:column; gap:8px;">${eligiblePlayers().map(p => {
+              const currentReason = (trainingForm.absences && trainingForm.absences[p.id]) || 'presente';
+              const hasCustomMins = currentReason === 'dispensado' || currentReason === 'lesao' || currentReason === 'castigo' || currentReason === 'atrasado';
+              const playerMins = (trainingForm.customMinutes && trainingForm.customMinutes[p.id] != null) ? trainingForm.customMinutes[p.id] : (currentReason === 'presente' ? baseDuration : 0);
+              const minsLabel = currentReason === 'atrasado' ? 'Minutos cumpridos (chegou atrasado):' : 'Minutos cumpridos antes da saída:';
 
-          return `<div style="display:flex; flex-direction:column; background:var(--surface-2); padding:10px 12px; border-radius:8px; gap:6px;">
-            <div style="display:flex; align-items:center; justify-content:space-between;">
-              <span style="font-size:13px; font-weight:bold;">${playerLabel(p)}</span>
-              <select style="width:auto; padding:4px 8px; font-size:11px; font-weight:bold; background:var(--surface); border:1px solid var(--line); color:var(--chalk); border-radius:6px;" onchange="setAbsenceReason('${p.id}', this.value)">
-                <option value="presente" ${currentReason==='presente'?'selected':''}>🟢 Presente</option>
-                ${reasons.map(r => `<option value="${r.id}" ${currentReason===r.id?'selected':''}>${r.label}</option>`).join('')}
-              </select>
-            </div>
-            ${hasCustomMins ? `<div style="display:flex; align-items:center; justify-content:flex-end; gap:8px; font-size:11px; color:var(--muted); border-top:1px solid var(--line); padding-top:4px;">
-              <span>${minsLabel}</span>
-              <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="${baseDuration}" value="${playerMins}" style="width:65px; padding:2px 6px; font-size:11px; text-align:center; background:var(--surface); border:1px solid var(--gold); color:var(--gold); font-weight:bold; border-radius:4px;" onclick="this.select()" oninput="setPlayerCustomMinutes('${p.id}', this.value)">
-              <span>/ ${baseDuration}'</span>
-            </div>` : ''}
-          </div>`;
-        }).join('')}</div>` : `<div class="empty">${t('pl_none')}</div>`}
+              return `<div style="display:flex; flex-direction:column; background:var(--surface-2); padding:10px 12px; border-radius:8px; gap:6px; border:1px solid var(--line);">
+                <div style="display:flex; align-items:center; justify-content:space-between;">
+                  <span style="font-size:13px; font-weight:bold;">${playerLabel(p)}</span>
+                  <select style="width:auto; padding:4px 8px; font-size:11px; font-weight:bold; background:var(--surface); border:1px solid var(--line); color:var(--chalk); border-radius:6px;" onchange="setAbsenceReason('${p.id}', this.value)">
+                    <option value="presente" ${currentReason==='presente'?'selected':''}>🟢 Presente</option>
+                    ${reasons.map(r => `<option value="${r.id}" ${currentReason===r.id?'selected':''}>${r.label}</option>`).join('')}
+                  </select>
+                </div>
+                ${hasCustomMins ? `<div style="display:flex; align-items:center; justify-content:flex-end; gap:8px; font-size:11px; color:var(--muted); border-top:1px dashed var(--line); padding-top:8px; margin-top:4px;">
+                  <span>${minsLabel}</span>
+                  <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" max="${baseDuration}" value="${playerMins}" style="width:65px; padding:4px 6px; font-size:11px; text-align:center; background:var(--surface); border:1px solid var(--gold); color:var(--gold); font-weight:bold; border-radius:4px;" onclick="this.select()" oninput="setPlayerCustomMinutes('${p.id}', this.value)">
+                  <span>/ ${baseDuration}'</span>
+                </div>` : ''}
+              </div>`;
+            }).join('')}</div>` : `<div class="empty">${t('pl_none')}</div>`}
+        </div>
+        ` : ''}
       </div>
+
       <button class="btn btn-gold" style="width:100%; margin-bottom:10px;" onclick="uiSaveTraining()">${t('tr_save')}</button>
       <button class="btn btn-outline" style="width:100%;" onclick="trainingForm=null; render()">${t('cancel')}</button>`; 
   }

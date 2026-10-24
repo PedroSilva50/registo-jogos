@@ -676,7 +676,7 @@ function renderJogo(){
      }).join('');
 
      // Apenas ativa o botão Confirmar se o número de saídas for igual às entradas
-     const canConfirm = pendingSub.outIds.length > 0 && pendingSub.outIds.length === pendingSub.inIds.length;
+     const canConfirm = pendingSub.outIds.length > 0 && pendingSub.outIds.length >= pendingSub.inIds.length;
 
      dynamicPanel = `
         <div class="panel" style="border-color:var(--gold);">

@@ -794,10 +794,33 @@ function renderTreinos(){
   const seasons = getPlanSeasons();
   let activeFilter = window.planSeasonFilter === 'todas' ? state.currentSeason : (window.planSeasonFilter || state.currentSeason);
   let filterUI = seasons.length > 1 ? `<div style="margin-bottom:14px; overflow-x:auto; display:flex; gap:6px; padding-bottom:6px;"><div class="seg-btn ${activeFilter==='TUDO'?'active':''}" style="flex:none; padding:8px 12px; font-size:10px;" onclick="window.planSeasonFilter='TUDO'; render()">Todas</div>${seasons.map(s=>`<div class="seg-btn ${activeFilter===s?'active':''}" style="flex:none; padding:8px 12px; font-size:10px;" onclick="window.planSeasonFilter='${s}'; render()">${s}</div>`).join('')}</div>` : '';
-  const filtered = state.trainings.filter(t => activeFilter==='TUDO' || getEntitySeason(t) === activeFilter).sort((a, b) => new Date(b.date) - new Date(a.date));
+  
+  // 1. Iniciar na aba de Agendados por defeito
+  if (window.trainingSubTab === undefined) window.trainingSubTab = 'agendados';
+  
+  // 2. Filtrar primeiro pela Época
+  const allFilteredBySeason = state.trainings.filter(t => activeFilter==='TUDO' || getEntitySeason(t) === activeFilter).sort((a, b) => new Date(b.date) - new Date(a.date));
+  
+  // 3. Contar quantos há em cada lado
+  const countPendentes = allFilteredBySeason.filter(t => t.status === 'pending').length;
+  const countHistorico = allFilteredBySeason.filter(t => t.status === undefined || t.status === 'completed').length;
+  
+  // 4. Filtrar a lista final consoante a aba que o treinador escolheu
+  const filtered = window.trainingSubTab === 'agendados' 
+      ? allFilteredBySeason.filter(t => t.status === 'pending') 
+      : allFilteredBySeason.filter(t => t.status === undefined || t.status === 'completed');
 
-  return `${topbarHtml(t('hub_plan_title'))}${renderPlanSubHeader()}<button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="trainingForm={absences:{}, customMinutes:{}, exercises:[], plan:'', obs:'', notes:'', duration:90, date: new Date().toISOString().slice(0,10)}; render()">${t('tr_new')}</button>${filterUI}
-    ${filtered.length ? filtered.map(tr=>{ 
+  // 5. Criar os botões do sub-separador
+  let subTabsUI = `<div class="seg" style="margin-bottom:14px;">
+      <div class="seg-btn ${window.trainingSubTab==='agendados'?'active':''}" onclick="window.trainingSubTab='agendados'; render();">🟡 Agendados (${countPendentes})</div>
+      <div class="seg-btn ${window.trainingSubTab==='historico'?'active':''}" onclick="window.trainingSubTab='historico'; render();">🟢 Histórico (${countHistorico})</div>
+  </div>`;
+
+  return `${topbarHtml(t('hub_plan_title'))}${renderPlanSubHeader()}
+    <button class="btn btn-gold" style="width:100%; margin-bottom:14px;" onclick="trainingForm={absences:{}, customMinutes:{}, exercises:[], plan:'', obs:'', notes:'', duration:90, date: new Date().toISOString().slice(0,10)}; window.trainingSubTab='agendados'; render()">${t('tr_new')}</button>
+    ${subTabsUI}
+    ${filterUI}
+    ${filtered.length ? filtered.map(tr=>{
       const open = expandedTraining === tr.id; 
       const duration = tr.duration || 90;
       const isCompleted = tr.status === undefined || tr.status === 'completed';

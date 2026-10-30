@@ -480,7 +480,7 @@ function renderHome(){
           <span style="font-size:10px; color:var(--muted);">${dateStr} às ${nm.time}</span>
         </div>
         <div style="font-size:14px; font-weight:bold; color:var(--chalk); margin-bottom:4px;">
-          ${nm.location === 'casa' ? `${getMyClub()} vs${nm.opponent}` : `${nm.opponent} vs${getMyClub()}`}
+          ${nm.location === 'casa' ? `${getMyClub()} vs ${nm.opponent}` : `${nm.opponent} vs ${getMyClub()}`}
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
           <span style="font-size:11px; color:var(--muted);">📍 Comparência: <b>${meetTime}</b></span>

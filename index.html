@@ -390,10 +390,21 @@ let wakeLock = null;
 
 async function manageWakeLock() {
     if (!('wakeLock' in navigator)) return; 
+    
     if (state.keepScreenAwake && currentHub === 'jogo' && currentTab === 'jogo') {
+        
+        // Se a app está visível e a variável está (agora corretamente) vazia
         if (wakeLock === null && document.visibilityState === 'visible') {
             try { 
                 wakeLock = await navigator.wakeLock.request('screen'); 
+                
+                // --- A MAGIA PARA O IPHONE ACONTECE AQUI ---
+                // Deteta o momento exato em que o telemóvel força a paragem do ecrã
+                wakeLock.addEventListener('release', () => {
+                    wakeLock = null; // Limpa a variável para permitir pedir outra vez
+                });
+                // -------------------------------------------
+                
             } catch (err) { console.log('Wake Lock negado:', err); }
         }
     } else {
@@ -405,10 +416,6 @@ async function manageWakeLock() {
         }
     }
 }
-
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') manageWakeLock();
-});
 
 let statsSortCol = 'minutos'; 
 let statsSortAsc = false;
@@ -1345,14 +1352,22 @@ setInterval(()=>{
 }, 1000);
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && currentTab === 'jogo') {
-    const m = getActiveMatch();
-    if (m && m.timer && m.timer.isRunning) {
-      const el = document.getElementById('live-timer');
-      if (el) el.textContent = formatMatchTime(window.getMatchDisplayTimeMs(m));
+  if (document.visibilityState === 'visible') {
+    
+    // 1. Tenta religar o ecrã sempre que a app volta a ficar visível
+    manageWakeLock();
+
+    // 2. Atualiza o cronómetro visualmente se estiveres no jogo ativo
+    if (currentTab === 'jogo') {
+      const m = getActiveMatch();
+      if (m && m.timer && m.timer.isRunning) {
+        const el = document.getElementById('live-timer');
+        if (el) el.textContent = formatMatchTime(window.getMatchDisplayTimeMs(m));
+      }
     }
   }
 });
+
 window.history.pushState({ page: 1 }, "", "");
 window.addEventListener('popstate', function(event) {
     if(currentHub !== 'home' || currentTab !== 'home') {
